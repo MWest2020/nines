@@ -1,0 +1,21 @@
+# A battle quest, the first Medior design interview. Medior City has no map yet, so until it
+# does, Ingrid (Medior City's staff engineer, who guards the gate in Junior Village) gives it
+# once her gate interview is won: talking to her starts it (trigger: npc), where she stands
+# (her spawn slot gate-medior). When the Medior City map lands, move giver and start there.
+schema: 1
+id: url-shortener
+author: {name: "Nines team"}
+title: title
+summary: summary
+stage: medior
+branch: design
+track: any
+roadmap_node: design-url-shortener
+requires: [rate-limiter-interview]
+giver: ingrid
+start: {map: junior-village, object: gate-medior}
+reward: {money: 400, xp: 50}
+dialogue:
+  offer: [offer.1, offer.2]
+  active: [active.1]
+  done: [done.1]

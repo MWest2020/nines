@@ -59,7 +59,7 @@ describe('quest rewards', () => {
     expect(r.game.money).toBe(200);
     expect(r.game.xp).toEqual({ cicd: 25 });
     expect(r.game.quests['broken-pipeline']).toBe('done');
-    expect(r.reward).toMatchObject({ money: 200, income: 0, xp: 25, branch: 'cicd', node: 'cicd-pipeline', unlocked: ['friday-scope'] });
+    expect(r.reward).toMatchObject({ money: 200, income: 0, xp: 25, branch: 'cicd', node: 'cicd-pipeline', unlocked: ['friday-scope', 'nearby-places'] });
   });
 
   it('are applied once only', () => {
@@ -331,7 +331,7 @@ describe('the Career Trail', () => {
     const g = done(fresh(), 'disk-full', 'service-down', 'broken-pipeline');
     const view = trail(g, rules());
     expect(view.nodes.filter((n) => n.state === 'done').map((n) => n.id)).toEqual(['linux-disk', 'cicd-pipeline', 'incident-first']);
-    expect(view.towns.find((t) => t.id === 'junior')).toMatchObject({ open: true, done: 3, total: 9 });
+    expect(view.towns.find((t) => t.id === 'junior')).toMatchObject({ open: true, done: 3, total: 10 });
     expect(view.xp).toMatchObject({ linux: 20, cicd: 25, incident: 25, git: 0 });
     // the next nodes on those routes open
     expect(nodeState(g, rules(), 'incident-pager')).toBe('open');

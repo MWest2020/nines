@@ -1,0 +1,95 @@
+# Design interview: nearby places search ("cafés near me"), Junior. Ravi plays the interviewer.
+# Facts checked: why two B-tree indexes on lat and lon do not help; geohash cells (5 characters
+# about 4.9 x 4.9 km, 6 about 1.2 x 0.6 km at the equator) and why the 8 neighbours must be read;
+# the radius vs precision trade-off; geohash vs quadtree vs a database geo index (debatable, and
+# the explanations say so); ranking by exact distance after the coarse filter; how many places
+# one query reads. Cell sizes: east-west shrinks with cos(latitude), north-south does not.
+schema: 1
+kind: design
+attacker: attacker
+intro: [intro.1, intro.2]
+trigger: {kind: npc}
+rounds:
+  - id: clarify
+    type: clarify
+    prompt: [clarify.prompt.1]
+    stakes: 15
+    pick: 2
+    options:
+      - {id: radius, grade: best, text: clarify.radius.text, why: clarify.radius.why}
+      - {id: scale, grade: best, text: clarify.scale.text, why: clarify.scale.why}
+      - {id: travel, grade: fair, text: clarify.travel.text, why: clarify.travel.why}
+      - {id: tiles, grade: weak, text: clarify.tiles.text, why: clarify.tiles.why}
+      - {id: floats, grade: weak, text: clarify.floats.text, why: clarify.floats.why}
+  - id: btree
+    type: flaw
+    prompt: [btree.prompt.1, btree.prompt.2]
+    stakes: 15
+    proposal: [btree.proposal.1, btree.proposal.2, btree.proposal.3]
+    options:
+      - {id: band, grade: best, text: btree.band.text, why: btree.band.why}
+      - {id: cos, grade: weak, text: btree.cos.text, why: btree.cos.why}
+      - {id: corners, grade: weak, text: btree.corners.text, why: btree.corners.why}
+      - {id: floats, grade: weak, text: btree.floats.text, why: btree.floats.why}
+  - id: index
+    type: tradeoff
+    prompt: [index.prompt.1]
+    stakes: 15
+    options:
+      - {id: postgis, grade: best, text: index.postgis.text, why: index.postgis.why}
+      - {id: geohash, grade: best, text: index.geohash.text, why: index.geohash.why}
+      - {id: quadtree, grade: fair, text: index.quadtree.text, why: index.quadtree.why}
+      - {id: noedges, grade: weak, text: index.noedges.text, why: index.noedges.why}
+      - {id: prefix, grade: weak, text: index.prefix.text, why: index.prefix.why}
+  - id: precision
+    type: tradeoff
+    prompt: [precision.prompt.1, precision.prompt.2]
+    stakes: 20
+    options:
+      - {id: five, grade: best, text: precision.five.text, why: precision.five.why}
+      - {id: six-wide, grade: best, text: precision.six-wide.text, why: precision.six-wide.why}
+      - {id: six, grade: weak, text: precision.six.text, why: precision.six.why}
+      - {id: four, grade: fair, text: precision.four.text, why: precision.four.why}
+      - {id: seven, grade: weak, text: precision.seven.text, why: precision.seven.why}
+  - id: ranking
+    type: flaw
+    prompt: [ranking.prompt.1]
+    stakes: 20
+    proposal: [ranking.proposal.1, ranking.proposal.2, ranking.proposal.3]
+    options:
+      - {id: prefix, grade: best, text: ranking.prefix.text, why: ranking.prefix.why}
+      - {id: cutoff, grade: fair, text: ranking.cutoff.text, why: ranking.cutoff.why}
+      - {id: slow, grade: weak, text: ranking.slow.text, why: ranking.slow.why}
+      - {id: twelve, grade: weak, text: ranking.twelve.text, why: ranking.twelve.why}
+  - id: steps
+    type: order
+    prompt: [steps.prompt.1]
+    stakes: 15
+    items:
+      - {id: cell, text: steps.cell.text, why: steps.cell.why}
+      - {id: neighbours, text: steps.neighbours.text, why: steps.neighbours.why}
+      - {id: fetch, text: steps.fetch.text, why: steps.fetch.why}
+      - {id: distance, text: steps.distance.text, why: steps.distance.why}
+      - {id: top, text: steps.top.text, why: steps.top.why}
+      - {id: details, text: steps.details.text, why: steps.details.why}
+  - id: touch
+    type: estimate
+    prompt: [touch.prompt.1, touch.prompt.2]
+    stakes: 20
+    value: 65000
+    working: touch.working
+    options:
+      - {id: lt1k, grade: weak, min: 0, max: 1000, text: touch.lt1k.text, why: touch.lt1k.why}
+      - {id: circle, grade: fair, min: 1000, max: 10000, text: touch.circle.text, why: touch.circle.why}
+      - {id: cells, grade: best, min: 10000, max: 100000, text: touch.cells.text, why: touch.cells.why}
+      - {id: wide, grade: weak, min: 100000, max: 1000000, text: touch.wide.text, why: touch.wide.why}
+      - {id: huge, grade: weak, min: 1000000, text: touch.huge.text, why: touch.huge.why}
+hints:
+  - {id: index, round: index, when: 'attempts >= 1', text: hint.index}
+  - {id: precision, round: precision, when: 'attempts >= 1', text: hint.precision}
+  - {id: ranking, round: ranking, when: 'attempts >= 1', text: hint.ranking}
+  - {id: touch, round: touch, when: 'attempts >= 1 || misses >= 3', text: hint.touch}
+  - {id: breathe, when: 'confidence <= 40', text: hint.breathe}
+outro:
+  won: [won.1]
+  lost: [lost.1]

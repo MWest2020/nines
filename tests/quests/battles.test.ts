@@ -8,7 +8,13 @@ import { questKey } from '../../src/content/types';
 import { answerRound, type BattleState, compileBattle, presentRound, retryBattle, startBattle } from '../../src/battle/engine';
 import { explanations, perfectAnswer, quality, worstAnswer } from '../../src/battle/score';
 import { shuffle } from '../../src/battle/seed';
+import { questState } from '../../src/core/progress';
+import { conversation } from '../../src/core/talk';
+import { newGame } from '../../src/core/save';
 import { content } from '../helpers';
+
+/** A fresh save with these quest states. */
+const save = (quests: Record<string, 'active' | 'done'>) => ({ ...newGame('en'), quests });
 
 const battles = () => content().quests.flatMap((q) => (q.battle ? [{ id: q.id, spec: q.battle, quest: q.quest }] : []));
 
@@ -51,12 +57,44 @@ function play(id: string, spec: BattleSpec, pick: (r: BattleRound) => string[], 
 describe('the battles in content', () => {
   it('cover the three encounter kinds and the three ways to start', () => {
     const bs = battles();
-    expect(bs.map((b) => [b.id, b.spec.kind, b.spec.trigger.kind])).toEqual([
-      ['friday-scope', 'stakeholder', 'npc'],
-      ['night-pager', 'incident', 'pager'],
-      ['rate-limiter-interview', 'design', 'gate'],
+    expect(bs.map((b) => [b.id, b.spec.kind, b.spec.trigger.kind, b.quest.stage])).toEqual([
+      ['friday-scope', 'stakeholder', 'npc', 'junior'],
+      ['nearby-places', 'design', 'npc', 'junior'],
+      ['night-pager', 'incident', 'pager', 'junior'],
+      ['rate-limiter-interview', 'design', 'gate', 'junior'],
+      ['url-shortener', 'design', 'npc', 'medior'],
     ]);
-    expect(bs.every((b) => b.quest.stage === 'junior')).toBe(true);
+  });
+  it('can each be reached: a giver who stands somewhere, and a start where that giver stands or at an object', () => {
+    const { quests } = content();
+    const npcs = quests.flatMap((q) => (q.npc ? [q.npc] : []));
+    for (const b of battles()) {
+      const giver = npcs.find((n) => n.id === b.quest.giver);
+      expect(giver, `${b.id}: giver ${b.quest.giver}`).toBeDefined();
+      // A talk-started battle opens where its giver stands, or at a battle object of its own.
+      if (b.spec.trigger.kind === 'npc' && b.quest.start.object.startsWith('npc-')) {
+        expect(b.quest.start, b.id).toEqual({ map: giver!.spawn.map, object: giver!.spawn.slot });
+      }
+    }
+  });
+  it('nearby places: Ravi asks it once his pipeline is fixed, in Junior Village', () => {
+    const q = content().quests.find((x) => x.id === 'nearby-places')!.quest;
+    expect([q.giver, q.requires, q.start]).toEqual(['ravi', ['broken-pipeline'], { map: 'junior-village', object: 'npc-2' }]);
+    expect(questState(save({}), content().quests.map((x) => x.quest), 'nearby-places')).toBe('locked');
+    expect(questState(save({ 'broken-pipeline': 'done' }), content().quests.map((x) => x.quest), 'nearby-places')).toBe('available');
+    expect(conversation(save({ 'broken-pipeline': 'done' }), content(), 'ravi')).toMatchObject({ offer: 'nearby-places', battle: 'nearby-places' });
+    expect(conversation(save({ 'broken-pipeline': 'active' }), content(), 'ravi')?.battle).toBeUndefined();
+  });
+  it('URL shortener: Medior, asked by Ingrid at the gate once her gate interview is won (Medior City has no map yet)', () => {
+    const q = content().quests.find((x) => x.id === 'url-shortener')!.quest;
+    expect([q.stage, q.giver, q.requires, q.start]).toEqual(['medior', 'ingrid', ['rate-limiter-interview'], { map: 'junior-village', object: 'gate-medior' }]);
+    const specs = content().quests.map((x) => x.quest);
+    expect(questState(save({ 'disk-full': 'done', 'service-down': 'done', 'broken-pipeline': 'done' }), specs, 'url-shortener')).toBe('locked');
+    expect(questState(save({ 'rate-limiter-interview': 'done' }), specs, 'url-shortener')).toBe('available');
+    // Talking to Ingrid offers it once the gate is won, and the talk opens the battle.
+    expect(conversation(save({ 'rate-limiter-interview': 'done' }), content(), 'ingrid')).toMatchObject({ offer: 'url-shortener', battle: 'url-shortener' });
+    const node = content().roadmap.nodes.find((n) => n.id === q.roadmap_node)!;
+    expect([node.stage, node.branch]).toEqual(['medior', 'design']);
   });
   it('use every question type', () => {
     const types = new Set(battles().flatMap((b) => b.spec.rounds.map((r) => r.type)));

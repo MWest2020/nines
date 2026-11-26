@@ -23,8 +23,8 @@ phases:
     name: "More battles"
     summary: "the system-design battles still to write (nearby places for Junior Village, a URL shortener for Medior City, ticket booking and a collaborative editor for Senior Summit), from docs/content-backlog.md (Mark, 26 Nov 2026)"
     done_means:
-      - {item: "Battle: nearby places search (Junior): geohash with neighbour cells, quadtree, ranking by exact distance", status: open, evidence: "https://github.com/MWest2020/nines/blob/main/docs/content-backlog.md"}
-      - {item: "Battle: URL shortener (Medior): ID generation, base62, caching, 301 vs 302", status: open, evidence: "https://github.com/MWest2020/nines/blob/main/docs/content-backlog.md"}
+      - {item: "Battle: nearby places search (Junior): geohash with neighbour cells, quadtree, ranking by exact distance", status: done, evidence: "https://github.com/MWest2020/nines/pull/11"}
+      - {item: "Battle: URL shortener (Medior): ID generation, base62, caching, 301 vs 302", status: done, evidence: "https://github.com/MWest2020/nines/pull/11"}
       - {item: "Battle: ticket booking (Senior): holds with a TTL, conditional writes or row locks, idempotency", status: open, evidence: "https://github.com/MWest2020/nines/blob/main/docs/content-backlog.md"}
       - {item: "Battle: collaborative editor (Senior): OT vs CRDT, offline merge", status: open, evidence: "https://github.com/MWest2020/nines/blob/main/docs/content-backlog.md"}
 done_means:
