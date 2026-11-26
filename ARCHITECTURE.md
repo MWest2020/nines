@@ -2,8 +2,8 @@
 
 Nines is a static browser game that later ships as an Android app. The player walks a career
 trail in a top-down pixel world and fixes simulated machines in an in-game terminal. This
-document is the Architect's part of the brief: the modules, the terminal simulator, the
-condition language, the content schemas, saves, i18n, offline loading and the Android build.
+document is the Architect's part of the brief: the modules, the terminal simulator, battles,
+the condition language, the content schemas, saves, i18n, offline loading and the Android build.
 
 Principles, in priority order:
 
@@ -34,6 +34,11 @@ src/
     shell/parse.ts  command line and flag parser
     shell/commands.ts  the commands
     session.ts      run a line, save a file, evaluate events, hints, objectives
+  battle/         battles: someone questions the player (pure)
+    engine.ts       BattleState, rounds, meters, retry, hints
+    score.ts        scoring per question type, perfect and worst answers, explanations
+    seed.ts         seeded hash, PRNG and shuffle (no Math.random)
+    triggers.ts     pager rolls and town gates
   core/           game rules without rendering (pure)
     i18n.ts         t(key, params), locale choice
     save.ts         save format, versioning, migrations
@@ -43,7 +48,8 @@ src/
     types.ts        TypeScript mirror of the schemas; the bundle's shape
   game/           Phaser and DOM (thin)
     BootScene.ts    placeholder in phase 1
-    (MVP) WorldScene, HudScene, RoadmapScene, ShopScene, TerminalOverlay (DOM + xterm.js)
+    (MVP) WorldScene, HudScene, RoadmapScene, ShopScene, TerminalOverlay (DOM + xterm.js),
+          BattleOverlay (DOM)
 tools/
   content/load.ts         load + validate + bundle /content (Node, build time only)
   vite-plugin-content.ts  exposes the bundle as `virtual:nines-content`
@@ -52,8 +58,9 @@ content/          the game's data
 tests/            Vitest: rules, sim, quests played end to end, content, guards
 ```
 
-Dependencies point one way: `game → core, sim, rules, content/types`; `sim → rules`;
-`tools → sim, rules` (to validate content with the same code the game runs). Nothing in
+Dependencies point one way: `game → battle, core, sim, rules, content/types`; `sim → rules`;
+`battle → core, rules`; `tools → battle, sim, rules` (to validate content with the same code
+the game runs). Nothing in
 `rules`, `sim` or `core` imports Phaser or touches `window`, `document` or `localStorage`
 directly (`save.ts` takes a storage object).
 
@@ -169,6 +176,88 @@ player (commands, units, deployments, registry entries, git paths, locale keys) 
 `own()`/`has()` (`src/rules/own.ts`), so `constructor` or `__proto__` is just an unknown name.
 Tests cover it.
 
+## Battles
+
+A battle is the other kind of quest: instead of a machine, a person questions the player.
+Mark's brief (26 Nov 2026): "someone attacks you with questions about design choices or a
+production incident", at the level of a software-engineering interview. A quest folder holds
+`battle.yaml` instead of `scenario.yaml`; the rest of the folder (quest.yaml, npc.yaml,
+locales) is the same, so XP goes to the quest's branch, money comes from its `reward`, its
+`roadmap_node` lights up, and `requires` and `quest("id")` work as for any quest.
+
+**Kinds.** `design` (a system-design interview), `incident` (triage under pressure) and
+`stakeholder` (a demanding colleague: scope, trade-offs, saying no well). The kind picks the
+screen's framing and the name of the attacker's meter (DESIGN.md, Battles); the engine treats
+them alike.
+
+**Rounds.** Each round is one question with a prompt, `stakes` (pressure a perfect answer
+removes) and `cost` (confidence a fully wrong answer costs; default = stakes). The answer is a
+list of ids, and every type turns it into a quality from 0 to 1 (`src/battle/score.ts`):
+
+| Type | The player | Quality |
+| ---- | ---------- | ------- |
+| `tradeoff` | picks one option; each option is a choice *with its reason*, so the right choice with the wrong reason is a distractor | grade of the pick: best 1, fair 0.5, weak 0 |
+| `flaw` | reads a proposal on the whiteboard and picks its flaw | as tradeoff |
+| `clarify` | picks the `pick` questions to ask the interviewer first | sum of the picks' grades / the best sum that many picks can reach |
+| `order` | puts all steps in order; equal `rank`s are interchangeable (for steps that really run in parallel) | share of pairs with different ranks in the right order, rescaled `max(0, 2·share − 1)`: a random order scores about 0, one adjacent swap of six about 0.87 |
+| `estimate` | picks a range for a back-of-envelope number; ranges ascend and touch, and `value` (the reference answer) must lie in the range graded best | grade of the range |
+
+**Meters.** The player's *Confidence* and the attacker's *Pressure* both start at 100 (a
+battle may set other maxima). An answer of quality q lowers Pressure by `round(stakes·q)`
+and Confidence by `round(cost·(1−q))`; both are clamped to `[0, max]`. Every round is played,
+so the player meets every question and its explanation, unless Confidence reaches 0, which
+loses at once. After the last round the battle is **won when Pressure is 0** and lost
+otherwise. Stakes may add up to more than the maximum, which leaves room for a slip: the three
+battles add up to 120.
+
+**Explanations, every time.** Every option, step and range has a `why` (locale key, both
+languages, enforced by the schema and the validator). After each answer the engine returns the
+explanations of what was picked, then of the best answer when it was not picked, and for an
+estimate the `working`; for an order round, every step's reason in the right order. The
+debrief after the battle shows them all again.
+
+**Losing never blocks.** `retryBattle` starts a fresh try from any state: meters refilled,
+`attempt` + 1, wins kept, no money lost. Even the gate battle only waits for a win, with
+unlimited tries and hints that grow with each attempt.
+
+**Hints** reuse the condition language with the `BATTLE_FACTS` registry: `attempts` (tries
+before this one), `misses` (answers in this try that were not the best), `round` (1-based),
+`confidence`, `pressure`. A hint may name a `round`, then it shows only while that round is on
+screen. Hints are computed from the state, not stored: all that apply are shown. The homelab's
+`hint_boost` is added to `attempts` and `misses` for hints only, which makes the Raspberry Pi's
+"hints come one try sooner" literally true here as well.
+
+**Determinism.** No clock and no `Math.random` (`tests/guards.test.ts` checks the pure
+modules). Cards are shown in a seeded shuffle of (battle, game seed, attempt, round): the same
+save sees the same order, a retry sees a new one, and an order round is never shown already
+solved. Estimate ranges stay ascending.
+
+**Where battles come from** (`trigger` in battle.yaml, `src/battle/triggers.ts`):
+
+- `npc`: talking to the quest's giver starts it; the giver is the one asking.
+- `pager`: a random event, "the 3 AM pager". Once its progress condition `when` holds and its
+  quest is not done, every tick the game counts (a map change, say) pages the player with
+  `chance` percent, decided by a seeded roll on (battle id, tick). After that the quest's
+  `start` object replays it.
+- `gate`: the boss between career stages. The road to `town` stays closed until the battle is
+  won; the quest must be of the stage before that town, and a town has at most one gate.
+
+**API** (`src/battle/engine.ts`, all pure): `compileBattle(id, spec)`, `startBattle(b, {seed,
+hintBoost})`, `presentRound(b, s)` → round, cards in display order, how many to pick, hints;
+`answerRound(b, s, ids)` → new state and a `RoundResult` (quality, grade, meter changes,
+explanations, the best answer, status); `retryBattle(b, s)`. An answer of the wrong shape or an
+answer to a finished battle throws `BattleError`: the UI builds answers, so that is a bug.
+Battle sessions are not saved, like terminal sessions; the quest's state is.
+
+**Validation** of a battle, besides its schema: every locale key exists in both languages;
+ids are unique; a pick round has an option graded best and `pick` below the number of options;
+an order round lists its steps in the right order (ranks never go down) and has at least two
+ranks; an estimate has exactly one best range, ranges ascend and touch, and `value` lies in the
+best one; hint rounds exist and hint conditions type-check against `BATTLE_FACTS`; a pager's
+condition type-checks against `PROGRESS_FACTS` and names real quests; a gate's town exists.
+Finally the validator **plays the battle twice**: the perfect answers must win and the worst
+answers must lose.
+
 ## The condition language
 
 Win conditions, hints, events, restart rules and NPC dialogue all use one small expression
@@ -233,8 +322,13 @@ with the state they read:
 | `xp(branch)`, `money`, `tech_debt` | numbers |
 | `has_item(id)`, `flag(name)` | booleans |
 
+| Battle facts (`battle/engine.ts`) | Type |
+| --------------------------------- | ---- |
+| `attempts`, `misses`, `round`, `confidence`, `pressure` | numbers (battle hints only) |
+
 Adding a fact is one line in a registry, its implementation and a test. The validator picks
-the registry by field: scenario fields use scenario facts, NPC dialogue uses progress facts.
+the registry by field: scenario fields use scenario facts, NPC dialogue and pager triggers use
+progress facts, battle hints use battle facts.
 
 ## Content
 
@@ -250,7 +344,8 @@ content/
     npc.yaml, <sprite>.png, locales/en.yaml, nl.yaml
   quests/<id>/                    one quest = one folder = one cameo pull request
     quest.yaml                    who gives it, where it starts, the reward, quest dialogue
-    scenario.yaml                 the machine and its conditions
+    scenario.yaml                 the machine and its conditions (a terminal quest), or
+    battle.yaml                   the rounds of questions (a battle quest); never both
     npc.yaml                      optional: the quest giver
     <sprite>.png                  optional: the giver's sheet (16x16 or 32x32 frames)
     locales/en.yaml, nl.yaml      every string the folder uses
@@ -263,7 +358,7 @@ NPC keys become `npc.<id>.<key>`.
 ### Schemas
 
 `/schemas` holds JSON Schema (draft 2020-12) files, all strict (`additionalProperties:
-false`): `quest`, `scenario`, `npc`, `locale`, `roadmap`, `shop`, plus `common` for shared
+false`): `quest`, `scenario`, `battle`, `npc`, `locale`, `roadmap`, `shop`, plus `common` for shared
 definitions (ids, locale keys, conditions, absolute paths, sizes, authors). The `$id`s use
 the reserved `.invalid` host: they are names, never fetched.
 
@@ -343,9 +438,12 @@ file and then what a schema cannot express:
   and the same `{placeholders}`, and a folder has no unused keys;
 - paths are absolute and normalised, a `/` mount exists, a pipeline file has content, nothing
   lies below a file, `home` and `cwd` are directories;
-- the scenario actually starts (`createSession`);
+- the scenario actually starts (`createSession`); a battle is won by its perfect answers and
+  lost by its worst (see Battles);
 - sprites are real PNGs whose size is 3 x 4 frames;
-- no file and no path in content uses a denylisted name (Pokémon, Nintendo and friends).
+- no file and no path in content uses a denylisted name (Pokémon, Nintendo and friends), nor
+  that franchise's battle language in English or Dutch: its "a wild ... appeared" catchphrase,
+  its effectiveness and fainting lines, its town leaders and its battle-menu words.
 
 Maps join the allowlist in the MVP build together with their checks: tilesets embedded in the
 map JSON, image paths relative and inside the repository, every image listed in ASSETS.md, the
@@ -426,7 +524,7 @@ uses (no dependencies of its own); it never sees content files.
   wrong type falls back to a new game's value, so a hand-edited or partly broken save still
   loads. An unreadable save is copied to the next free `nines.save.unreadable.<n>` (never
   overwriting an earlier backup) before a new game starts, and the player is told.
-- **What is not saved.** Terminal sessions. Opening a quest's terminal again starts its machine
+- **What is not saved.** Terminal sessions and battle sessions. Opening a quest's terminal again starts its machine
   fresh, so content changes can never strand a save in a half-finished scenario. Quest ids are
   stable; a save that mentions a quest the content no longer has keeps the entry and ignores it.
 - **When.** After a quest completes, after a purchase, on a locale change, when entering a map,
@@ -469,6 +567,10 @@ uses (no dependencies of its own); it never sees content files.
   `enterkeyhint=send`): xterm's hidden-textarea input is unreliable with Android IMEs. A strip
   of quick-command buttons fills the input; Tab completes commands and paths; ↑/↓ walk the
   history. The editor is a `<textarea>` with a line-number gutter that marks lines with tabs.
+- **BattleOverlay**: DOM, like the terminal, over the dimmed world: the transcript, the
+  whiteboard, the two meters, the answer cards (DESIGN.md, Battles). Map objects add
+  `gate-<town>` (where a gate battle's giver stands and the road is blocked) and the `start`
+  objects of battle quests.
 - **RoadmapScene**, **ShopScene**, **CreditsScene**: canvas, driven by `roadmap.yaml`,
   `shop.yaml` and the bundle's `credits`.
 - **Economy** (`core/game.ts`, pure): completing a quest adds its money and XP (to its branch),
@@ -520,7 +622,9 @@ Pinned exactly, each version published at least two weeks before it was added (c
 
 - Vitest, in Node: the condition language, the parser, every command, the CI validator, saves,
   i18n, progress facts, the content validator (including that it rejects broken content), the
-  guards, and the three MVP quests played end to end on the real content files.
+  guards, the three MVP quests played end to end on the real content files, the battle engine
+  (every question type, meters in bounds, retry, hints, seeded cards, triggers) and every
+  battle in content played perfectly, all wrong and at random.
 - `.github/workflows/ci.yml` on every pull request and every push to `main`: `npm ci`, content
   validation, `npm test`, `npm run build`, `npm run check:dist`. Actions pinned to commit SHAs,
   read-only token.

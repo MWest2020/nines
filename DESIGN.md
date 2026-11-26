@@ -14,6 +14,10 @@ sound effects that imitate theirs. Progress is a career: XP per skill branch, mo
 gear, a Career Trail. The trail is our own idea of a skill map; roadmap.sh inspired the concept
 of nodes lighting up, and we copy none of its content, layout or branding.
 
+Battles (below) are conversations with colleagues about engineering, not creature fights; this
+section's rules apply to them in full, and the content validator also refuses that franchise's
+battle language.
+
 ## Tileset (CC0)
 
 All from Kenney (kenney.nl), all CC0 1.0. Nothing is downloaded into the repository in phase
@@ -209,6 +213,104 @@ that unlocks them.
 │ └────────┘                                               │
 ├──────────────────────────────────────────────── [Close] ─┤
 └──────────────────────────────────────────────────────────┘
+```
+
+### Battles: the war room
+
+Mark asked for battles (26 Nov 2026): "someone attacks you with questions about design choices
+or a production incident". Three kinds: a whiteboard interview, a production incident and a
+demanding product manager. The engine is in ARCHITECTURE.md, Battles.
+
+**Framing, and why.** The best-known battle screen in games belongs to the franchise we stay
+away from: a "wild ..." announcement, two sprites facing each other with an HP bar over each,
+and a four-item command menu at the bottom right. All three are recognisable on sight, so we use
+none of them. Engineers already have their own pressure-cooker screen: the incident channel and
+the whiteboard. Our battles take that shape.
+
+- **Announcement.** A battle opens with how it reaches you at work: `PAGER 03:07 ·
+  checkout-api · 5xx error rate 18%` for an incident, `Incoming: Daan, product manager` for a
+  stakeholder, `Whiteboard interview · Topic: a rate limiter` for a design interview. Never the
+  catchphrase; the validator refuses it in English and Dutch.
+- **Layout.** A chat transcript, not an arena: the attacker's messages on the left with a small
+  portrait (the NPC's own sprite, head only, never full figures facing off), the player's
+  answers on the right, explanations as indented notes under each answer. Design interviews
+  add a whiteboard panel above the transcript that holds the requirements so far and, in a
+  "spot the flaw" round, the proposal being judged.
+- **Meters.** Two labelled gauges in the side panel, with words and numbers, never bars over
+  sprites. The player's is **Confidence**. The attacker's is **Pressure**, labelled by kind:
+  **Doubt** for the interviewer, **Impact** for the incident, **Pressure** for the product
+  manager. A good answer lowers it; a weak one costs Confidence.
+- **Answers.** Cards that span the width under the transcript, picked by tap or click and
+  sent with one Send button. An order round shows the cards as a list with ↑/↓ handles
+  (dragging works too). No command menu, no cursor triangle, no letters on buttons.
+- **Colours.** The panel is ink (`#101820`) with paper text. Confidence is grass (`#58a058`)
+  above 50 and orange (`#e89858`) at or below; the attacker's meter is clay (`#c86848`). A
+  graded answer gets a mark and a word, never colour alone: ✓ "Spot on", ½ "Half right",
+  ✗ "Not quite".
+- **Losing.** "Not this time" and the debrief, with Try again right under it. No money is
+  taken, nothing is locked; hints appear on the next try.
+
+Desktop (an incident):
+
+```
+┌─ Incident · PAGER · checkout-api ────────────────────── Round 3/7 ─┬────────────────────┐
+│ PAGER 03:07 · checkout-api · 5xx error rate 18% (alert at 1%)      │ Confidence     100 │
+│                                                                    │ ██████████████████ │
+│ ▣ Bas   18% of checkouts are failing. What's your first move?      │                    │
+│              Acknowledge the page, then open the dashboard. ◂ you  │ Impact          70 │
+│              ✓ Spot on: acknowledging is taking ownership...       │ ██████████████░░░░ │
+│ ▣ Bas   Errors jumped at 02:41. Where do you look next?            │                    │
+│               At what changed: v2.14 rolled out at 02:40. ◂ you    │ Hint               │
+│              ✓ Spot on: a sudden step at an exact minute...        │ Stop the bleeding  │
+│ ▣ Bas   OK, the deploy it is. Put the next steps in order.         │ before you study   │
+├────────────────────────────────────────────────────────────────────┤ the wound.         │
+│  ↑↓  Roll checkout-api back to v2.13                               │                    │
+│  ↑↓  Find the root cause in v2.14                                  │                    │
+│  ↑↓  Declare an incident and say who leads it                      │                    │
+│  ↑↓  Check that the error rate is back to normal                   │                    │
+│  ...                                                     [ Send ]  │                    │
+└────────────────────────────────────────────────────────────────────┴────────────────────┘
+```
+
+Desktop (a design interview, "spot the flaw"):
+
+```
+┌─ Whiteboard interview · Ingrid, staff engineer ──────── Round 4/8 ─┬────────────────────┐
+│ ┌─ whiteboard ───────────────────────────────────────────────────┐ │ Confidence     100 │
+│ │ 20 API instances behind a round-robin load balancer            │ │ ██████████████████ │
+│ │ each instance: a token bucket per API key, in its own memory   │ │                    │
+│ │ each bucket allows the full 100 requests per minute            │ │ Doubt           55 │
+│ └────────────────────────────────────────────────────────────────┘ │ ██████████░░░░░░░░ │
+│ ▣ Ingrid  What is wrong with this?                                 │                    │
+├────────────────────────────────────────────────────────────────────┤                    │
+│ ( ) In-memory counters are too slow to check on every request      │                    │
+│ (•) A client is spread over 20 instances: up to 2,000 per minute   │                    │
+│ ( ) A restarted instance hands out a fresh burst                   │                    │
+│ ( ) Round-robin is the wrong algorithm for an API balancer         │                    │
+│                                                         [ Send ]   │                    │
+└────────────────────────────────────────────────────────────────────┴────────────────────┘
+```
+
+Phone, portrait: the side panel becomes two thin gauges under the header; hints collapse into
+a count in the header (`? 1`) that opens them over the transcript.
+
+```
+┌──────────────────────────────┐
+│ Meeting · Daan   ? 1  3/6  ✕ │
+│ Confidence ████████████░  90 │
+│ Pressure   █████████░░░░  70 │
+├──────────────────────────────┤
+│ ▣ Daan  And the full version │
+│ with refunds? How long?      │
+│ Discount codes took 6 days   │
+│ plus 2 days of testing.      │
+├──────────────────────────────┤
+│ ( ) a few hours              │
+│ ( ) 1 to 3 working days      │
+│ (•) 4 to 15 working days     │
+│ ( ) more than 15 days        │
+│                     [ Send ] │
+└──────────────────────────────┘
 ```
 
 ### Mobile controls
