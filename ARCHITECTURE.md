@@ -43,13 +43,18 @@ src/
     i18n.ts         t(key, params), locale choice
     save.ts         save format, versioning, migrations
     progress.ts     PROGRESS_FACTS implemented over the saved game
-    (MVP) game.ts   money, XP, quest completion, shop purchases
+    game.ts         money, XP, quest completion, shop purchases, the Career Trail's state
+    persist.ts      the save slot over a key-value storage; never writes over a newer save
+    talk.ts         what an NPC says, from the save
   content/
     types.ts        TypeScript mirror of the schemas; the bundle's shape
   game/           Phaser and DOM (thin)
     BootScene.ts    placeholder in phase 1
-    (MVP) WorldScene, HudScene, RoadmapScene, ShopScene, TerminalOverlay (DOM + xterm.js),
-          BattleOverlay (DOM)
+    store.ts        GameStore: the live GameState behind core/game.ts, saves, change events
+    api.ts          GameApi: what the world, terminal and battle code call (see below)
+    storage.ts      localStorage, or memory when the browser blocks it
+    ui/             HudScene + DialogueBox, TrailScene, ShopScene, CreditsScene, the pixel font
+    (MVP) WorldScene, TerminalOverlay (DOM + xterm.js), BattleOverlay (DOM)
 tools/
   content/load.ts         load + validate + bundle /content (Node, build time only)
   vite-plugin-content.ts  exposes the bundle as `virtual:nines-content`
@@ -507,7 +512,7 @@ uses (no dependencies of its own); it never sees content files.
 ```json
 {
   "format": "nines-save",
-  "version": 1,
+  "version": 2,
   "game": {
     "locale": "nl",
     "money": 350,
@@ -516,15 +521,25 @@ uses (no dependencies of its own); it never sees content files.
     "items": ["raspberry-pi"],
     "flags": {},
     "tech_debt": 0,
+    "seed": 2840192763,
+    "ticks": 4,
+    "claimed": [],
     "player": {"map": "junior-village", "x": 7, "y": 6, "facing": "down"}
   }
 }
 ```
 
+`seed` is chosen once for a new game by the game layer (the pure core has no randomness) and
+fixes card orders and pager rolls; `ticks` counts pager ticks (map changes); `claimed` lists
+the one-off event bonuses already paid (`<quest>/<event>`).
+
 - **Versioning.** `version` is the save format, not the game version. A format change bumps
   `SAVE_VERSION` and adds `MIGRATIONS[n]`, a pure function from version n to n+1; loading runs
-  the chain. A save from a newer version loads as `{kind: 'newer'}`: the game tells the player
-  to update and does not autosave, so the newer save is never overwritten.
+  the chain. Version 2 (MVP build) added `seed`, `ticks` and `claimed`; `MIGRATIONS[1]` fills
+  them in. A save from a newer version loads as `{kind: 'newer'}`: the game tells the player
+  to update and does not autosave, so the newer save is never overwritten. `core/persist.ts`
+  also checks before every write, so a newer version saving from another tab stops this one
+  writing. When the browser refuses storage, the game plays on in memory.
 - **Robust loading.** After migration every field is checked and anything missing or of the
   wrong type falls back to a new game's value, so a hand-edited or partly broken save still
   loads. An unreadable save is copied to the next free `nines.save.unreadable.<n>` (never
@@ -576,12 +591,45 @@ uses (no dependencies of its own); it never sees content files.
   whiteboard, the two meters, the answer cards (DESIGN.md, Battles). Map objects add
   `gate-<town>` (where a gate battle's giver stands and the road is blocked) and the `start`
   objects of battle quests.
-- **RoadmapScene**, **ShopScene**, **CreditsScene**: canvas, driven by `roadmap.yaml`,
-  `shop.yaml` and the bundle's `credits`.
+- **TrailScene**, **ShopScene**, **CreditsScene**: canvas, driven by `roadmap.yaml`,
+  `shop.yaml` and the bundle's `credits`. Canvas text uses our own pixel font, drawn from glyph
+  rows in `src/game/ui/font.ts` (no font file); a character it lacks shows as `?`, and a test
+  checks every locale string is covered.
 - **Economy** (`core/game.ts`, pure): completing a quest adds its money and XP (to its branch),
   plus `income_per_quest` from owned items; events add or subtract money, never below zero; a
-  purchase subtracts the price. `tech_debt` from meme side-quests is stored for later world
-  events, which will use progress conditions (`tech_debt >= 3`).
+  purchase subtracts the price and is refused without the money. Every reward is paid once: a
+  done quest stays done (a battle won again pays nothing), and a positive event pays once per
+  quest and event however often the terminal is replayed; penalties cost every time.
+  `tech_debt` from meme side-quests is stored for later world events, which will use progress
+  conditions (`tech_debt >= 3`).
+- **The Career Trail's state** (`core/game.ts` `trail`): a node is done when a quest that names
+  it is done; open when every node it requires is done and its town is open; locked otherwise.
+  Towns lie on one road in roadmap order: a town is open when its gate battle is won and every
+  town before it is open. XP is kept per branch and shown on the trail; content can gate on it
+  with the `xp(branch)` progress fact (for example in NPC dialogue).
+
+### The game API
+
+Phaser code reaches the game state only through `GameApi` (`src/game/api.ts`), installed on
+the game registry by `main.ts`; get it with `getGameApi(scene)`:
+
+| Call | For | Does |
+| ---- | --- | ---- |
+| `talk(npcId)` | world | shows the NPC's lines (offer, reminder or own dialogue), accepts an offered quest; returns the conversation, whose `battle` names a battle quest to open |
+| `showDialogue(lines)` | all | the dialogue box; lines are locale keys `{speaker?, text, params?}`; resolves when dismissed |
+| `openShop()`, `openTrail()`, `openCredits()` | world, HUD | the screens; resolve when closed |
+| `toast(key, params)` | all | a short line under the HUD |
+| `startQuest(id)` | world | available becomes active |
+| `completeQuest(id)` | terminal | pays once, shows the reward and the giver's done lines; `null` if refused |
+| `applyTerminalEvents(questId, events)` | terminal | money and flags from `RunResult.events` |
+| `hintBoost()` | terminal, battle | pass to `createSession` and `startBattle` |
+| `recordBattle(id, 'won' \| 'lost')` | battle | won pays like `completeQuest`; lost costs nothing |
+| `enterMap(player)` | world | stores the position, counts a pager tick, saves; returns a pager battle to open or `null` |
+| `setLocale(locale)`, `isBusy()`, `store`, `t` | all | language; whether a dialogue or screen is open (also the `nines-ui` event on `game.events`); the state; strings |
+
+Keyboard input reaches every scene, so the world checks `isBusy()` before moving the player.
+Phaser may deliver one DOM key event to a listener twice when keys arrive within one frame, and
+to a listener added meanwhile; UI listeners are wrapped in `freshKeys` (`ui/widgets.ts`).
 
 ## Android (Capacitor)
 
