@@ -470,8 +470,12 @@ export function loadContent(contentDir: string, schemaDir: string, options: Load
     return file;
   };
 
+  // A town's map that content/maps does not have yet is planned: content written ahead of its
+  // map (Senior Summit's interviews, say) may name it. Everything else about that content is
+  // checked; only the map objects wait until the map lands, and the game cannot reach it before.
+  const plannedMaps = new Set((roadmap?.towns ?? []).flatMap((t) => (t.map !== undefined && !mapIds.includes(t.map) ? [t.map] : [])));
   const checkMap = (file: string, map: string) => {
-    if (!mapIds.includes(map)) err(file, `unknown map "${map}"`);
+    if (!mapIds.includes(map) && !plannedMaps.has(map)) err(file, `unknown map "${map}" (neither in content/maps nor planned for a town in roadmap.yaml)`);
   };
   /** The object `name` in `map` must exist and have one of the types. Skipped when the map itself is broken. */
   const checkObject = (file: string, what: string, map: string, name: string, types: readonly string[]) => {

@@ -258,6 +258,24 @@ describe('the validator checks maps', () => {
     expect(errorsAfterMap('server-room', (m) => (obj(m, 'rack-web-01').type = 'battle'))).toMatch(/start: "rack-web-01" in server-room is a battle, expected terminal/);
     expect(errorsAfterMap('server-room', (m) => (obj(m, 'rack-web-01').name = 'rack-db-01'))).toMatch(/map server-room has no object "rack-web-01"/);
   });
+  it('a town\'s map that does not exist yet is planned: content may name it, any other unknown map is refused', () => {
+    const errorsAfterFiles = (edits: Record<string, (s: string) => string>) => {
+      copy();
+      for (const [file, fn] of Object.entries(edits)) writeFileSync(join(dir, file), fn(readFileSync(join(dir, file), 'utf8')));
+      return loadContent(dir, SCHEMA_DIR, { root: ROOT }).errors.join('\n');
+    };
+    const toSummit = (s: string) => s.replace('map: junior-village', 'map: senior-summit').replace('slot: npc-1', 'slot: npc-9');
+    // roadmap.yaml plans senior-summit for Senior Summit, so an NPC may already stand there
+    expect(errorsAfterFiles({ 'quests/disk-full/npc.yaml': toSummit })).toBe('');
+    expect(errorsAfterFiles({ 'quests/disk-full/npc.yaml': (s) => s.replace('map: junior-village', 'map: senior-sumit') })).toMatch(
+      /npc.yaml: unknown map "senior-sumit" \(neither in content\/maps nor planned/,
+    );
+    expect(errorsAfterFiles({ 'quests/disk-full/npc.yaml': toSummit, 'roadmap.yaml': (s) => s.replace(/, map: senior-summit/, '') })).toMatch(
+      /disk-full\/npc.yaml: unknown map "senior-summit"/,
+    );
+    // a planned map is no door target: a door needs a real spawn point
+    expect(errorsAfterMap('server-room', (m) => (obj(m, 'exit').properties[0].value = 'senior-summit'))).toMatch(/leads to unknown map "senior-summit"/);
+  });
   it('every terminal starts a quest, and a gate battle has its gate', () => {
     expect(errorsAfterMap('server-room', (m) => (layer(m, 'objects').objects as Json[]).push({ name: 'rack-db-01', type: 'terminal', x: 88, y: 88 }))).toMatch(/terminal "rack-db-01" starts no quest/);
     expect(errorsAfterMap('junior-village', (m) => (obj(m, 'gate-medior').name = 'gate-medior-city'))).toMatch(/no map has the object "gate-medior"/);

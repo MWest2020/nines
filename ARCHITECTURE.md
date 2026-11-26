@@ -227,8 +227,8 @@ battle may set other maxima). An answer of quality q lowers Pressure by `round(s
 and Confidence by `round(cost·(1−q))`; both are clamped to `[0, max]`. Every round is played,
 so the player meets every question and its explanation, unless Confidence reaches 0, which
 loses at once. After the last round the battle is **won when Pressure is 0** and lost
-otherwise. Stakes may add up to more than the maximum, which leaves room for a slip: the three
-battles add up to 120.
+otherwise. Stakes may add up to more than the maximum, which leaves room for a slip: the battles
+in content add up to 120.
 
 **Explanations, every time.** Every option, step and range has a `why` (locale key, both
 languages, enforced by the schema and the validator). After each answer the engine returns the
@@ -359,7 +359,7 @@ progress facts, battle hints use battle facts.
 ```
 content/
   locales/en.yaml, nl.yaml        UI, roadmap, shop and terminal strings
-  roadmap.yaml                    towns, branches, nodes (the Career Trail)
+  roadmap.yaml                    towns (and their maps), branches, nodes (the Career Trail)
   shop.yaml                       homelab items
   maps/<id>.json                  Tiled maps (JSON, tilesets embedded; schemas/map.schema.json)
   npcs/<id>/                      world NPCs that give no quest (optional)
@@ -490,6 +490,15 @@ Maps (`content/maps/<id>.json`, schema `map`) are checked too:
 - on foot: from `player-start` and every door's arrival point, every spawn and door can be
   walked to, and every NPC slot, terminal, battle and shop has a reachable neighbour (NPC slots
   count as occupied).
+
+**Content ahead of its map.** A town in `roadmap.yaml` names its map (`map: senior-summit`).
+While `content/maps` has no file of that name the map is *planned*: quests and NPCs may already
+use it in `start.map` and `spawn.map`, and everything else about them is checked as usual
+(schema, locales, the battle played both ways, slots unique). The checks against map objects
+wait until the map lands and then apply in full; until then the game cannot reach that content,
+because no map shows the giver. Doors may not lead to a planned map. Any other unknown map is an
+error. The two Senior Summit interviews (`ticket-booking-interview`, `collab-editor-interview`)
+wait this way for the Senior Summit map.
 
 **Content sprites and ASSETS.md.** A guest sprite records its source and licence in its
 `npc.yaml`, not in ASSETS.md, so a cameo stays one folder; the credits screen lists it.

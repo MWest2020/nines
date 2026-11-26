@@ -18,7 +18,8 @@
         "properties": {
           "id": { "$ref": "common.schema.json#/$defs/id" },
           "stage": { "$ref": "common.schema.json#/$defs/stage" },
-          "title": { "$ref": "common.schema.json#/$defs/localeKey" }
+          "title": { "$ref": "common.schema.json#/$defs/localeKey" },
+          "map": { "$ref": "common.schema.json#/$defs/id", "description": "the town's map in content/maps; until that file exists the map is planned: quests and NPCs may name it, and they stay out of reach until it lands" }
         }
       }
     },
