@@ -20,6 +20,8 @@ const ROWS_Y = P.y + 48;
 const ROW_H = 13;
 const LABEL_W = 100;
 const STONE_X = P.x + 116;
+/** at most; stones close up when a branch has more. The screen fits five branch rows of five
+ *  stones per town, and tests/game/ui.test.ts holds the roadmap to that. */
 const STONE_DX = 20;
 const FOOT_Y = P.y + P.h - 43;
 
@@ -99,9 +101,11 @@ export class TrailScene extends Screen {
       out.push(pixelText(this, P.x + 6, y - 4, ellipsize(t(b.title), LABEL_W), C.paper));
       const xp = t('ui.roadmap.xp', { xp: view.xp[b.id] ?? 0 });
       out.push(pixelText(this, P.x + P.w - 6 - measure(xp), y - 4, xp, (view.xp[b.id] ?? 0) > 0 ? C.leaf : C.grey));
-      g.fillStyle(hex(C.slate), 1).fillRect(P.x + 6 + LABEL_W + 4, y, STONE_X - (P.x + 10 + LABEL_W) + STONE_DX * (mine.length - 1), 1);
+      // stones share the room between the label and the XP column
+      const dx = mine.length > 1 ? Math.min(STONE_DX, Math.floor((P.x + P.w - 10 - measure(xp) - 8 - STONE_X) / (mine.length - 1))) : STONE_DX;
+      g.fillStyle(hex(C.slate), 1).fillRect(P.x + 6 + LABEL_W + 4, y, STONE_X - (P.x + 10 + LABEL_W) + dx * (mine.length - 1), 1);
       mine.forEach((nd, j) => {
-        const cx = STONE_X + j * STONE_DX;
+        const cx = STONE_X + j * dx;
         stone(g, cx, y, nd.state);
         this.items.push({ kind: 'node', node: nd });
         this.focusable(this.ring(out, cx - 6, y - 6, 13, 13, () => this.setFocus(this.items.findIndex((it) => it.kind === 'node' && it.node.id === nd.id))));
@@ -178,7 +182,7 @@ export class TrailScene extends Screen {
       lines[2] =
         nd.litBy.length > 0
           ? t('ui.roadmap.lit_by', {
-              quest: nd.litBy.map((l) => t(questKey(l.quest, 'title'))).join(', '),
+              quest: nd.litBy.map((l) => t(questKey(l.quest, 'title'))).join(t('ui.list_sep')),
               state: t(`ui.roadmap.quest.${nd.litBy[0]!.state}`),
             })
           : t('ui.roadmap.no_quest');

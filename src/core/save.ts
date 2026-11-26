@@ -55,10 +55,18 @@ export function newGame(locale: LocaleId, seed = 0): GameState {
 
 /** Migrations: MIGRATIONS[n] turns a version-n game into version n+1. */
 export const MIGRATIONS: Record<number, (game: Record<string, unknown>) => Record<string, unknown>> = {
-  // 2 (MVP build): a seed for battles and pager rolls, a pager tick count and the one-off
-  // rewards already paid. A version-1 save never paid an event reward, so the list starts empty.
-  1: (game) => ({ ...game, seed: 0, ticks: 0, claimed: [] }),
+  // 2 (MVP build): a seed for battles and pager rolls (derived from the old save, so each save
+  // keeps its own), a pager tick count and the one-off rewards already paid. A version-1 save
+  // never paid an event reward, so the list starts empty.
+  1: (game) => ({ ...game, seed: seedFrom(JSON.stringify(game)), ticks: 0, claimed: [] }),
 };
+
+/** A seed derived from text (FNV-1a), for saves that predate the seed: pure and repeatable. */
+export function seedFrom(text: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193) >>> 0;
+  return h >>> 0;
+}
 
 export function serialize(game: GameState): string {
   const file: SaveFile = { format: 'nines-save', version: SAVE_VERSION, game };
@@ -88,12 +96,14 @@ export function deserialize(raw: string | null, fallbackLocale: LocaleId): LoadO
   } catch {
     return { kind: 'unreadable', reason: 'not JSON' };
   }
-  if (!isObj(data) || data['format'] !== 'nines-save' || typeof data['version'] !== 'number' || !isObj(data['game'])) {
+  if (!isObj(data) || data['format'] !== 'nines-save' || typeof data['version'] !== 'number') {
     return { kind: 'unreadable', reason: 'not a Nines save' };
   }
   let version = data['version'];
   if (!Number.isInteger(version) || version < 1) return { kind: 'unreadable', reason: 'bad version' };
+  // Before the shape check: a newer format may shape its game differently, and must be kept.
   if (version > SAVE_VERSION) return { kind: 'newer', version };
+  if (!isObj(data['game'])) return { kind: 'unreadable', reason: 'not a Nines save' };
   let game = data['game'];
   while (version < SAVE_VERSION) {
     const step = MIGRATIONS[version];
@@ -122,7 +132,7 @@ export function deserialize(raw: string | null, fallbackLocale: LocaleId): LoadO
       items: strings(game['items']),
       flags: rec(game['flags'], (x): x is boolean => typeof x === 'boolean'),
       tech_debt: num(game['tech_debt'], 0),
-      seed: Number.isInteger(game['seed']) ? (game['seed'] as number) >>> 0 : base.seed,
+      seed: Number.isInteger(game['seed']) ? (game['seed'] as number) >>> 0 : seedFrom(raw),
       ticks: Number.isInteger(game['ticks']) && (game['ticks'] as number) >= 0 ? (game['ticks'] as number) : 0,
       claimed: strings(game['claimed']),
       player: {

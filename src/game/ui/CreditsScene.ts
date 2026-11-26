@@ -39,7 +39,7 @@ export class CreditsScene extends Screen {
     add(t('ui.credits.intro'), C.mist);
     for (const c of store.content.credits) {
       out.push({ text: '', color: C.paper });
-      add(c.handle ? `${c.name} (${c.handle})` : c.name, C.gold);
+      add(c.handle ? t('ui.credits.handle', { name: c.name, handle: c.handle }) : c.name, C.gold);
       if (c.url) add(c.url, C.grey);
       const quests = c.for.filter((f) => f.startsWith('quest:')).map((f) => t(questKey(f.slice(6), 'title')));
       const npcs = c.for
@@ -48,8 +48,8 @@ export class CreditsScene extends Screen {
           const npc = findNpc(store.content, f.slice(4));
           return npc ? t(npc.key(npc.spec.name)) : t(npcKey(f.slice(4), 'npc.name'));
         });
-      if (quests.length > 0) add(t('ui.credits.quests', { list: quests.join(', ') }), C.paper);
-      if (npcs.length > 0) add(t('ui.credits.npcs', { list: npcs.join(', ') }), C.paper);
+      if (quests.length > 0) add(t('ui.credits.quests', { list: quests.join(t('ui.list_sep')) }), C.paper);
+      if (npcs.length > 0) add(t('ui.credits.npcs', { list: npcs.join(t('ui.list_sep')) }), C.paper);
       // a character's sprite sheet, with where it came from and its licence (ASSETS.md)
       for (const f of c.for.filter((x) => x.startsWith('npc:'))) {
         const npc = findNpc(store.content, f.slice(4));
@@ -71,7 +71,7 @@ export class CreditsScene extends Screen {
     this.scroll = Math.max(0, Math.min(this.scroll, lines.length - VISIBLE));
     lines.slice(this.scroll, this.scroll + VISIBLE).forEach((l, i) => out.push(pixelText(this, P.x + 6, TOP + i * 10, l.text, l.color)));
     if (lines.length > VISIBLE) {
-      const marker = `${this.scroll + 1}-${Math.min(lines.length, this.scroll + VISIBLE)}/${lines.length}`;
+      const marker = t('ui.credits.lines', { from: this.scroll + 1, to: Math.min(lines.length, this.scroll + VISIBLE), total: lines.length });
       out.push(pixelText(this, P.x + 6, P.y + P.h - 14, marker, C.grey));
     }
     const close = t('ui.close');

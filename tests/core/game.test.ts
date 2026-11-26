@@ -21,7 +21,7 @@ import {
 } from '../../src/core/game';
 import { memoryStorage, openSave } from '../../src/core/persist';
 import { progressEnv } from '../../src/core/progress';
-import { BACKUP_PREFIX, deserialize, type GameState, MIGRATIONS, newGame, SAVE_KEY, SAVE_VERSION, serialize } from '../../src/core/save';
+import { BACKUP_PREFIX, deserialize, type GameState, MIGRATIONS, newGame, SAVE_KEY, SAVE_VERSION, seedFrom, serialize } from '../../src/core/save';
 import { conversation } from '../../src/core/talk';
 import { compile, test } from '../../src/rules/expr';
 import { PROGRESS_FACTS } from '../../src/rules/registries';
@@ -155,6 +155,13 @@ describe('scenario events', () => {
     expect([b.game.money, b.money]).toEqual([50, 0]);
     expect(applyEvent(frozen(a.game), 'service-down', { id: 'tidy', money: 50 }).game.money).toBe(100);
   });
+
+  it('a penalty right after spending everything leaves exactly zero', () => {
+    const spent = frozen(buy(fresh(200), rules(), 'raspberry-pi').game);
+    const r = applyEvent(spent, 'disk-full', { id: 'db', money: -150 });
+    expect(Object.is(r.game.money, 0)).toBe(true);
+    expect(Object.is(r.money, 0)).toBe(true);
+  });
 });
 
 describe('the shop', () => {
@@ -218,7 +225,42 @@ describe('saves', () => {
       game: { locale: 'nl', money: 350, xp: { linux: 20 }, quests: { 'disk-full': 'done' }, items: [], flags: {}, tech_debt: 0, player: { map: 'junior-village', x: 3, y: 4, facing: 'up' } },
     };
     const out = deserialize(JSON.stringify(v1), 'en');
-    expect(out).toEqual({ kind: 'ok', game: { ...v1.game, seed: 0, ticks: 0, claimed: [] } });
+    expect(out).toEqual({ kind: 'ok', game: { ...v1.game, seed: seedFrom(JSON.stringify(v1.game)), ticks: 0, claimed: [] } });
+    // each old save keeps its own seed
+    const other = deserialize(JSON.stringify({ ...v1, game: { ...v1.game, money: 1 } }), 'en');
+    expect(other.kind === 'ok' && out.kind === 'ok' && other.game.seed !== out.game.seed).toBe(true);
+  });
+
+  it('open a stored version-1 save, write it back as version 2, and read the same game', () => {
+    const v1 = { format: 'nines-save', version: 1, game: { locale: 'nl', money: 150, xp: { linux: 20 }, quests: { 'disk-full': 'done' } } };
+    const st = memoryStorage({ [SAVE_KEY]: JSON.stringify(v1) });
+    const first = openSave(st, 'en', 3);
+    expect(first.slot.status).toBe('loaded');
+    expect(first.game).toMatchObject({ locale: 'nl', money: 150, quests: { 'disk-full': 'done' }, ticks: 0, claimed: [] });
+    expect(first.slot.save(first.game)).toBe(true);
+    expect(JSON.parse(st.data.get(SAVE_KEY)!).version).toBe(SAVE_VERSION);
+    expect(openSave(st, 'en', 4).game).toEqual(first.game);
+  });
+
+  it('report a newer save as newer even when its game has another shape', () => {
+    expect(deserialize(JSON.stringify({ format: 'nines-save', version: SAVE_VERSION + 1, game: [1, 2] }), 'en')).toEqual({ kind: 'newer', version: SAVE_VERSION + 1 });
+    expect(deserialize(JSON.stringify({ format: 'nines-save', version: SAVE_VERSION, game: [1, 2] }), 'en').kind).toBe('unreadable');
+  });
+
+  it('never write over an unreadable save whose backup could not be written', () => {
+    const st = memoryStorage({ [SAVE_KEY]: '{oops' });
+    const full = {
+      getItem: st.getItem,
+      setItem: (k: string, v: string) => {
+        if (k.startsWith(BACKUP_PREFIX)) throw new Error('QuotaExceededError');
+        st.setItem(k, v);
+      },
+    };
+    const { game, slot } = openSave(full, 'en', 1);
+    expect(slot.status).toBe('recovered');
+    expect(slot.writable).toBe(false);
+    expect(slot.save(game)).toBe(false);
+    expect(st.data.get(SAVE_KEY)).toBe('{oops');
   });
 
   it('never overwrite a save from a newer version', () => {
@@ -269,7 +311,7 @@ describe('saves', () => {
 
   it('repair a hand-edited save: negative money, a bad seed, duplicate items', () => {
     const raw = JSON.stringify({ format: 'nines-save', version: 2, game: { money: -5, seed: 'x', ticks: -1, items: ['a', 'a', 3], claimed: 'no' } });
-    expect(deserialize(raw, 'en')).toMatchObject({ kind: 'ok', game: { money: 0, seed: 0, ticks: 0, items: ['a'], claimed: [] } });
+    expect(deserialize(raw, 'en')).toMatchObject({ kind: 'ok', game: { money: 0, seed: seedFrom(raw), ticks: 0, items: ['a'], claimed: [] } });
   });
 });
 

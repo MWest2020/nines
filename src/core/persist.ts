@@ -50,13 +50,22 @@ function storedVersion(storage: KeyValueStorage): number | null {
 
 export function openSave(storage: KeyValueStorage, fallbackLocale: LocaleId, seed: number): { game: GameState; slot: SaveSlot } {
   let outcome: ReturnType<typeof loadFrom>;
+  let writable = true;
   try {
     outcome = loadFrom(storage, fallbackLocale);
   } catch {
-    // The storage itself failed (blocked, private mode): play on in memory.
-    outcome = { kind: 'empty' };
+    // The storage failed: blocked or private mode (play on in memory), or full while backing up
+    // an unreadable save. Then the save is still there without its backup, so never write over it.
+    let present = false;
+    try {
+      present = storage.getItem(SAVE_KEY) !== null;
+    } catch {
+      present = false;
+    }
+    outcome = present ? { kind: 'unreadable', reason: 'backup failed' } : { kind: 'empty' };
+    writable = !present;
   }
-  let writable = outcome.kind !== 'newer';
+  if (outcome.kind === 'newer') writable = false;
   const status: SaveStatus =
     outcome.kind === 'ok' ? 'loaded' : outcome.kind === 'unreadable' ? 'recovered' : outcome.kind === 'newer' ? 'newer' : 'new';
   const game = outcome.kind === 'ok' ? outcome.game : newGame(fallbackLocale, seed);

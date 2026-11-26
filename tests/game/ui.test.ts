@@ -62,6 +62,21 @@ describe('the pixel font', () => {
   });
 });
 
+describe('the screens fit the content', () => {
+  // The Career Trail screen (src/game/ui/TrailScene.ts) draws five branch rows of up to five
+  // stones per town; content beyond that would run off the panel.
+  const LIMITS = { branchesPerStage: 5, nodesPerBranch: 5 };
+  it('every town has at most five branches, each with at most five stones', () => {
+    const { roadmap } = content();
+    for (const town of roadmap.towns) {
+      const nodes = roadmap.nodes.filter((n) => n.stage === town.stage);
+      const branches = new Set(nodes.map((n) => n.branch));
+      expect(branches.size, `${town.id} has too many branches for the Career Trail screen`).toBeLessThanOrEqual(LIMITS.branchesPerStage);
+      for (const b of branches) expect(nodes.filter((n) => n.branch === b).length, `${town.id}/${b}`).toBeLessThanOrEqual(LIMITS.nodesPerBranch);
+    }
+  });
+});
+
 describe('keyboard focus', () => {
   const grid = [
     { x: 0, y: 0, w: 10, h: 10 },
@@ -105,6 +120,15 @@ describe('the game store', () => {
     expect(store.game.flags).toEqual({ oops: true });
     expect(changes.at(-1)).toEqual({ kind: 'money', delta: -100 });
     expect(JSON.parse(st.data.get(SAVE_KEY)!).game.money).toBe(50);
+  });
+
+  it('pays a terminal bonus once however often the terminal is replayed, and saves it', () => {
+    const { st, store } = make();
+    const bonus = [{ id: 'tidy', say: 'x', scope: 'quest' as const, money: 40, reset: false }];
+    expect(store.applyEvents('disk-full', bonus)).toBe(40);
+    expect(store.applyEvents('disk-full', bonus)).toBe(0);
+    expect(store.game.money).toBe(40);
+    expect(JSON.parse(st.data.get(SAVE_KEY)!).game).toMatchObject({ money: 40, claimed: ['disk-full/tidy'] });
   });
 
   it('buys through the rules, and the Pi raises the hint boost', () => {

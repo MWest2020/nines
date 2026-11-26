@@ -149,7 +149,7 @@ export function applyEvent(game: GameState, questId: string, ev: EventOutcome): 
   let next = game;
   let delta = 0;
   if (ev.money < 0) {
-    delta = -Math.min(game.money, -ev.money);
+    delta = -Math.min(game.money, -ev.money) || 0; // never -0
     next = { ...next, money: game.money + delta };
   } else if (ev.money > 0) {
     const key = `${questId}/${ev.id}`;

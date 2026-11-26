@@ -5,7 +5,7 @@
 import Phaser from 'phaser';
 import { questKey } from '../../content/types';
 import type { LocaleId } from '../../content/types';
-import type { Reward } from '../../core/game';
+import type { QuestRefusal, Reward } from '../../core/game';
 import type { Params } from '../../core/i18n';
 import type { GameState } from '../../core/save';
 import { type Conversation, findNpc } from '../../core/talk';
@@ -35,7 +35,11 @@ export class GameUi implements GameApi {
     return this.busy > 0;
   }
 
-  /** Mark the UI busy until the returned function is called (once). */
+  /**
+   * Mark the UI busy until the returned function is called (once). The release lands after the
+   * next game step, so a world that polls JustDown(Enter) never sees the Enter that closed a
+   * dialogue or screen as a fresh press.
+   */
   hold(): () => void {
     this.busy++;
     if (this.busy === 1) this.game.events.emit('nines-ui', true);
@@ -43,8 +47,10 @@ export class GameUi implements GameApi {
     return () => {
       if (released) return;
       released = true;
-      this.busy--;
-      if (this.busy === 0) this.game.events.emit('nines-ui', false);
+      this.game.events.once(Phaser.Core.Events.POST_STEP, () => {
+        this.busy--;
+        if (this.busy === 0) this.game.events.emit('nines-ui', false);
+      });
     };
   }
 
@@ -77,23 +83,29 @@ export class GameUi implements GameApi {
     const c = this.store.conversation(npcId);
     if (!c) return null;
     await this.showDialogue(c.lines.map((text) => ({ speaker: c.speaker, text })));
-    if (c.offer && this.startQuest(c.offer)) (await this.hud()).toast(this.t('ui.toast.quest', { title: this.t(questKey(c.offer, 'title')) }));
+    if (c.offer && this.startQuest(c.offer) === 'started') (await this.hud()).toast(this.t('ui.toast.quest', { title: this.t(questKey(c.offer, 'title')) }));
     return c;
   }
 
+  private open = new Map<string, Promise<void>>();
+
   private openScreen(key: string): Promise<void> {
+    const pending = this.open.get(key);
+    if (pending) return pending;
     const mgr = this.game.scene;
-    if (mgr.isActive(key)) return Promise.resolve();
     const release = this.hold();
-    return new Promise((resolve) => {
+    const p = new Promise<void>((resolve) => {
       mgr.run(key, {
         done: () => {
+          this.open.delete(key);
           release();
           resolve();
         },
       });
       mgr.bringToTop(key);
     });
+    this.open.set(key, p);
+    return p;
   }
 
   openShop(): Promise<void> {
@@ -112,30 +124,29 @@ export class GameUi implements GameApi {
     void this.hud().then((h) => h.toast(this.t(key, params)));
   }
 
-  startQuest(id: string): boolean {
+  startQuest(id: string): 'started' | 'active' | QuestRefusal {
     const before = this.store.questState(id);
     const r = this.store.startQuest(id);
-    return r.ok && before !== 'active';
+    if (!r.ok) return r.reason;
+    return before === 'active' ? 'active' : 'started';
   }
 
-  /** After a reward: the giver says the quest's "done" lines. */
-  private async doneLines(reward: Reward): Promise<Reward> {
+  async showQuestDone(reward: Reward): Promise<void> {
     const entry = this.store.content.quests.find((q) => q.id === reward.quest);
-    if (!entry) return reward;
+    if (!entry) return;
     const npc = findNpc(this.store.content, entry.quest.giver);
     const speaker = npc ? npc.key(npc.spec.name) : undefined;
     await this.showDialogue(entry.quest.dialogue.done.map((k) => ({ text: questKey(entry.id, k), ...(speaker ? { speaker } : {}) })));
-    return reward;
   }
 
-  async completeQuest(id: string): Promise<Reward | null> {
+  completeQuest(id: string): Reward | null {
     const r = this.store.completeQuest(id);
-    return r.ok ? this.doneLines(r.reward) : null;
+    return r.ok ? r.reward : null;
   }
 
-  async recordBattle(id: string, outcome: 'won' | 'lost'): Promise<Reward | null> {
+  recordBattle(id: string, outcome: 'won' | 'lost'): Reward | null {
     const r = this.store.recordBattle(id, outcome);
-    return r.ok ? this.doneLines(r.reward) : null;
+    return r.ok ? r.reward : null;
   }
 
   applyTerminalEvents(questId: string, events: readonly FiredEvent[]): void {

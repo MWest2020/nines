@@ -3,7 +3,7 @@
 // for controller buttons (DESIGN.md, What we never do).
 
 import Phaser from 'phaser';
-import { measure } from './font';
+import { measure, sanitize } from './font';
 import { pixelFont } from './pixelfont';
 import { C, hex } from './theme';
 import type { Dir, Focusable } from './nav';
@@ -26,7 +26,7 @@ export function button(scene: Phaser.Scene, x: number, y: number, label: string,
   const w = opts.w ?? buttonWidth(label);
   const h = 13;
   const g = scene.add.graphics();
-  const text = scene.add.bitmapText(x + 5, y + 2, pixelFont(scene, opts.color ?? C.paper), label);
+  const text = scene.add.bitmapText(x + 5, y + 2, pixelFont(scene, opts.color ?? C.paper), sanitize(label));
   const zone = scene.add.zone(x, y, w, h).setOrigin(0).setInteractive({ useHandCursor: true });
   const draw = (focus: boolean) => {
     g.clear();
@@ -44,7 +44,7 @@ export function button(scene: Phaser.Scene, x: number, y: number, label: string,
     setFocus: draw,
     setLabel(t, color) {
       text.setFont(pixelFont(scene, color ?? opts.color ?? C.paper));
-      text.setText(t);
+      text.setText(sanitize(t));
     },
     activate() {
       if (b.enabled) onPress();
@@ -59,13 +59,19 @@ export function button(scene: Phaser.Scene, x: number, y: number, label: string,
  * within one frame (it re-reads its queue), and a listener added while that happens also gets
  * the earlier keys. Wrap a listener with this: it sees each event once, and only events that
  * happened after it was set up (so the Enter that opened a screen does not also press its
- * first button).
+ * first button). Keys typed into a DOM field (the terminal, the editor) are left alone.
  */
+/** True while the player types in a DOM field (the terminal's input, the editor): keys are theirs. */
+function typingInDom(): boolean {
+  const el = typeof document === 'undefined' ? null : document.activeElement;
+  return el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || (el instanceof HTMLElement && el.isContentEditable);
+}
+
 export function freshKeys(fn: (e: KeyboardEvent) => void): (e: KeyboardEvent) => void {
   const since = performance.now();
   const seen = new WeakSet<KeyboardEvent>();
   return (e) => {
-    if (e.timeStamp < since || seen.has(e)) return;
+    if (e.timeStamp < since || seen.has(e) || typingInDom()) return;
     seen.add(e);
     fn(e);
   };

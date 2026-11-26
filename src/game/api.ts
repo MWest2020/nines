@@ -9,7 +9,7 @@
 
 import type Phaser from 'phaser';
 import type { LocaleId } from '../content/types';
-import type { Reward } from '../core/game';
+import type { QuestRefusal, Reward } from '../core/game';
 import type { Params, Translate } from '../core/i18n';
 import type { GameState } from '../core/save';
 import type { Conversation } from '../core/talk';
@@ -27,14 +27,19 @@ export interface DialogueLine {
 export interface GameApi {
   readonly store: GameStore;
   readonly t: Translate;
-  /** a dialogue or a screen is open */
+  /** a dialogue, a screen or an overlay is open */
   isBusy(): boolean;
+  /** Mark the UI busy (the terminal and battle overlays do, while open); call the returned
+   *  function once to release. Release lands a frame later, so the key that closed something
+   *  does not also act in the world. */
+  hold(): () => void;
 
   // ---- dialogue and screens (each promise settles when the player closes it)
   showDialogue(lines: readonly DialogueLine[]): Promise<void>;
   /** Talk to an NPC: offers, reminders or their own lines. An offered quest is accepted after
    *  the lines; a returned `battle` is a battle quest the battle overlay should open now. */
   talk(npcId: string): Promise<Conversation | null>;
+  /** Open a screen; resolves when it closes (also when it was already open). */
   openShop(): Promise<void>;
   openTrail(): Promise<void>;
   openCredits(): Promise<void>;
@@ -42,12 +47,16 @@ export interface GameApi {
   toast(key: string, params?: Params): void;
 
   // ---- quests, terminal and battles
-  startQuest(id: string): boolean;
-  /** Finish a quest: pays once, shows the reward and the giver's "done" lines. Null when the
-   *  quest was already done, locked or unknown (nothing changes then). */
-  completeQuest(id: string): Promise<Reward | null>;
+  /** Accept a quest: 'started', 'active' when it already was, or why it was refused. */
+  startQuest(id: string): 'started' | 'active' | QuestRefusal;
+  /** Finish a quest: pays at once (once only), saves and shows a reward toast. Null when the
+   *  quest was already done, locked or unknown (nothing changes then). The giver's "done" lines
+   *  are a separate step, showQuestDone, for after a DOM overlay has closed. */
+  completeQuest(id: string): Reward | null;
   /** A battle ended. Won pays like completeQuest; lost keeps the quest active and costs nothing. */
-  recordBattle(id: string, outcome: 'won' | 'lost'): Promise<Reward | null>;
+  recordBattle(id: string, outcome: 'won' | 'lost'): Reward | null;
+  /** The quest giver's "done" lines in the dialogue box; resolves when read. */
+  showQuestDone(reward: Reward): Promise<void>;
   /** Apply what a terminal step fired (RunResult.events): money and flags. */
   applyTerminalEvents(questId: string, events: readonly FiredEvent[]): void;
   /** hintBoost to pass to createSession and startBattle. */

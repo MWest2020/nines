@@ -591,7 +591,7 @@ the one-off event bonuses already paid (`<quest>/<event>`).
   whiteboard, the two meters, the answer cards (DESIGN.md, Battles). Map objects add
   `gate-<town>` (where a gate battle's giver stands and the road is blocked) and the `start`
   objects of battle quests.
-- **TrailScene**, **ShopScene**, **CreditsScene**: canvas, driven by `roadmap.yaml`,
+- **TrailScene**, **ShopScene** (one item per page, ‹ › to page), **CreditsScene**: canvas, driven by `roadmap.yaml`,
   `shop.yaml` and the bundle's `credits`. Canvas text uses our own pixel font, drawn from glyph
   rows in `src/game/ui/font.ts` (no font file); a character it lacks shows as `?`, and a test
   checks every locale string is covered.
@@ -619,15 +619,19 @@ the game registry by `main.ts`; get it with `getGameApi(scene)`:
 | `showDialogue(lines)` | all | the dialogue box; lines are locale keys `{speaker?, text, params?}`; resolves when dismissed |
 | `openShop()`, `openTrail()`, `openCredits()` | world, HUD | the screens; resolve when closed |
 | `toast(key, params)` | all | a short line under the HUD |
-| `startQuest(id)` | world | available becomes active |
-| `completeQuest(id)` | terminal | pays once, shows the reward and the giver's done lines; `null` if refused |
+| `startQuest(id)` | world | available becomes active; returns `started`, `active` or why it was refused |
+| `completeQuest(id)` | terminal | pays at once (once only), saves, shows a reward toast; returns the `Reward`, or `null` if refused |
+| `showQuestDone(reward)` | terminal, battle | the giver's done lines in the dialogue box, after the overlay has closed |
 | `applyTerminalEvents(questId, events)` | terminal | money and flags from `RunResult.events` |
 | `hintBoost()` | terminal, battle | pass to `createSession` and `startBattle` |
 | `recordBattle(id, 'won' \| 'lost')` | battle | won pays like `completeQuest`; lost costs nothing |
+| `hold()` | terminal, battle | marks the UI busy while a DOM overlay is open; call the returned function to release |
 | `enterMap(player)` | world | stores the position, counts a pager tick, saves; returns a pager battle to open or `null` |
 | `setLocale(locale)`, `isBusy()`, `store`, `t` | all | language; whether a dialogue or screen is open (also the `nines-ui` event on `game.events`); the state; strings |
 
-Keyboard input reaches every scene, so the world checks `isBusy()` before moving the player.
+Keyboard input reaches every scene, so the world checks `isBusy()` before moving the player. A
+release lands one game step late, so the Enter that closed a dialogue is not a fresh press for a
+world that polls `JustDown`. UI key handlers ignore keys typed into a DOM field (the terminal).
 Phaser may deliver one DOM key event to a listener twice when keys arrive within one frame, and
 to a listener added meanwhile; UI listeners are wrapped in `freshKeys` (`ui/widgets.ts`).
 

@@ -136,7 +136,7 @@ export class HudScene extends Phaser.Scene {
     const x = (VIEW.width - w) / 2;
     const items: [string, () => void][] = [
       [t('ui.roadmap.title'), () => this.fromMenu(() => this.ui.openTrail())],
-      [`${t('ui.language')}: ${t(`ui.locale.${store.game.locale}`)}`, () => this.ui.setLocale(store.game.locale === 'nl' ? 'en' : 'nl')],
+      [t('ui.menu.option', { label: t('ui.language'), value: t(`ui.locale.${store.game.locale}`) }), () => this.ui.setLocale(store.game.locale === 'nl' ? 'en' : 'nl')],
       [t('ui.credits.title'), () => this.fromMenu(() => this.ui.openCredits())],
       [t('ui.close'), () => this.closeMenu()],
     ];

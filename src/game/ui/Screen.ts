@@ -33,9 +33,11 @@ export abstract class Screen extends Phaser.Scene {
       back: () => this.close(),
     });
     const offStore = this.api.store.subscribe(() => this.redraw());
+    // However the screen ends (close(), or another scene stopping it), its caller is told.
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       offKeys();
       offStore();
+      this.finish();
     });
     this.redraw();
   }
@@ -80,9 +82,13 @@ export abstract class Screen extends Phaser.Scene {
   protected onFocus(_i: number): void {}
 
   close(): void {
+    this.scene.stop();
+    this.finish();
+  }
+
+  private finish(): void {
     const done = this.onDone;
     this.onDone = undefined;
-    this.scene.stop();
     done?.();
   }
 }
