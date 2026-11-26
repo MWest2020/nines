@@ -389,6 +389,13 @@ describe('events, hints and flags', () => {
     expect(run(s, 'rm -r /var/lib/db').events.map((e) => e.id)).toEqual(['db']);
     expect(run(s, 'rm -r /var/lib/db').events.map((e) => e.id)).toEqual(['db']);
   });
+  it('a reset event whose condition survives the reset fires once, not on every command', () => {
+    const s = session({ ...FIXTURE, events: [{ id: 'sloppy', when: 'fails >= 2', say: 'event.sloppy', money: -50, reset: true }] });
+    run(s, 'nope');
+    expect(run(s, 'nope').events.map((e) => e.id)).toEqual(['sloppy']);
+    expect(run(s, 'ls').events).toEqual([]);
+    expect(run(s, 'nope').events).toEqual([]);
+  });
   it('the hint boost counts for hints only, never for events', () => {
     const s = session(spec, 3);
     expect(run(s, 'pwd').events).toEqual([]);

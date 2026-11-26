@@ -135,7 +135,8 @@ Destructive commands are allowed and have effects:
 - A scenario adds its own **events**: a condition, a message, an optional money change, an
   optional reset, an optional flag. An event fires once per session, except one that resets
   the machine: the reset makes its condition false again, so it stays armed and doing the same
-  damage twice costs twice. Example: deleting the database in "Disk full" costs €150 and
+  damage twice costs twice. (If its condition is still true after the reset, because it reads
+  something the reset keeps such as `fails`, it counts as fired for good.) Example: deleting the database in "Disk full" costs €150 and
   restores the machine. A flag set by an event comes back in the result (`setFlag`); the game
   stores it in the save, where progress conditions read it with `flag()`.
 

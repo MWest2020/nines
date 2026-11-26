@@ -153,7 +153,12 @@ function settle(session: Session, work: SimState, out: string[], exit: number, u
     if (!e.reset) work.firedEvents.push(e.id);
     if (e.setFlag) work.flags[e.setFlag] = true;
     events.push({ id: e.id, say: e.say, scope: 'quest', money: e.money, reset: e.reset, ...(e.setFlag ? { setFlag: e.setFlag } : {}) });
-    if (e.reset) work = resetMachine(session, work);
+    if (e.reset) {
+      work = resetMachine(session, work);
+      // If the condition reads something the reset keeps (fails, ran(), flags), it would fire
+      // on every command from now on. Then it has fired for good.
+      if (test(e.when, env)) work.firedEvents.push(e.id);
+    }
   }
   const hints: string[] = [];
   for (const h of session.compiled.hints) {

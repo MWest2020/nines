@@ -417,7 +417,7 @@ export function loadContent(contentDir: string, schemaDir: string): LoadResult {
     }
     // the machine must make sense: nothing below a file, home and cwd are directories
     const filePaths = new Set(Object.keys(scenario.files ?? {}));
-    for (const p of [...filePaths, ...(scenario.dirs ?? []), scenario.home, scenario.cwd ?? scenario.home]) {
+    for (const p of [...filePaths, ...(scenario.dirs ?? []), ...scenario.mounts.map((m) => m.path), ...(scenario.git ? [scenario.git.root] : []), scenario.home, scenario.cwd ?? scenario.home]) {
       for (let a = dirnameOf(p); a !== '/'; a = dirnameOf(a)) {
         if (filePaths.has(a)) err(sFile, `"${p}" lies below the file "${a}"`);
       }
