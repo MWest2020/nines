@@ -90,7 +90,7 @@ rounds:
     options:
       - {id: layers, grade: best, text: abuse.layers.text, why: abuse.layers.why}
       - {id: accounts, grade: fair, text: abuse.accounts.text, why: abuse.accounts.why}
-      - {id: longer, grade: weak, text: abuse.longer.text, why: abuse.longer.why}
+      - {id: captcha, grade: weak, text: abuse.captcha.text, why: abuse.captcha.why}
       - {id: once, grade: weak, text: abuse.once.text, why: abuse.once.why}
       - {id: permanent, grade: weak, text: abuse.permanent.text, why: abuse.permanent.why}
 hints:

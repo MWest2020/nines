@@ -76,7 +76,7 @@ rounds:
     type: estimate
     prompt: [touch.prompt.1, touch.prompt.2]
     stakes: 20
-    value: 66000
+    value: 65000
     working: touch.working
     options:
       - {id: lt1k, grade: weak, min: 0, max: 1000, text: touch.lt1k.text, why: touch.lt1k.why}
