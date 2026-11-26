@@ -34,7 +34,11 @@ interview, a production incident or a demanding stakeholder (`kind`). Write roun
 types: `tradeoff` (a choice with its reason), `flaw` (spot the flaw in a proposal), `clarify`
 (what to ask first), `order` (put steps in order) and `estimate` (pick the range of a
 back-of-envelope number). Every option needs a `why` in both languages, because the
-explanation is the point; say so when something is debatable. Use `trigger: {kind: npc}` so
+explanation is the point; say so when something is debatable. The first `intro` line is how the
+battle reaches the player and opens the screen: `PAGER 03:07 · ...` for an incident,
+`Incoming: ...` for a stakeholder, `Whiteboard interview · Topic: ...` for an interview. In a
+round's `prompt`, the lines before the last are context (an interview writes them on the
+whiteboard) and the last line is the question. Use `trigger: {kind: npc}` so
 talking to your character starts it. The validator plays your battle twice: perfect answers
 must win, the worst answers must lose. `content/quests/friday-scope/` is a short example,
 `docs/content-backlog.md` lists topics that still need a battle, and ARCHITECTURE.md
