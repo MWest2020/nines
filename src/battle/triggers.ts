@@ -23,3 +23,14 @@ export function pagerFires(id: string, trigger: BattleTrigger, tick: number, env
 export function gateOpen(town: string, quests: readonly QuestEntry[], game: GameState): boolean {
   return gateWon(game, { quests: [...quests] }, town);
 }
+
+/**
+ * The town a gate battle leads to, when the game has no map for that town yet: the world then
+ * says "<town> opens later" instead of opening a road to nowhere. A map belongs to a town when
+ * its id is the town's id or starts with it (`medior-city` for `medior`). Null for other battles.
+ */
+export function townNotBuilt(trigger: BattleTrigger | undefined, maps: readonly { id: string }[]): string | null {
+  if (trigger?.kind !== 'gate') return null;
+  const town = trigger.town;
+  return maps.some((m) => m.id === town || m.id.startsWith(`${town}-`)) ? null : town;
+}
