@@ -2,6 +2,7 @@
 // here, at build time; an invalid content folder fails the build. The game receives plain JSON
 // (plus same-origin URLs for sprite sheets) and never fetches content at runtime.
 
+import { readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import type { Plugin } from 'vite';
@@ -21,7 +22,12 @@ export function ninesContent(): Plugin {
     },
     load(id) {
       if (id !== RESOLVED_ID) return null;
-      this.addWatchFile(contentDir);
+      // Watch every file, not the folder: `vite dev` turns watched paths into imports, and a
+      // folder cannot be imported.
+      for (const f of readdirSync(contentDir, { recursive: true, encoding: 'utf8' })) {
+        const p = join(contentDir, f);
+        if (statSync(p).isFile()) this.addWatchFile(p);
+      }
       const { bundle, errors, sprites, tilesets } = loadContent(contentDir, schemaDir, { root });
       if (!bundle) {
         this.error(`content is invalid:\n  ${errors.join('\n  ')}`);

@@ -29,3 +29,9 @@ The sheets of Femke, Ravi and Bas (`content/quests/*/<name>.png`) are own work b
 script and are recorded in their `npc.yaml` (source and `CC0-1.0`), as for any content sprite.
 Run `node tools/art/draw-art.mjs --check` to confirm the committed PNGs match the script
 (`npm test` does).
+
+Drawn in code rather than shipped as files, all own work for Nines, released CC0 1.0: the pixel
+font (`src/game/ui/font.ts`, glyphs as text rows), the UI panels, Career Trail stones and HUD icons
+(`src/game/ui/`), and the shop's Raspberry Pi icon (`src/game/ui/ShopScene.ts`). The real
+dialogue box (`src/game/ui/DialogueBox.ts`) replaces the world's placeholder once the game API
+answers the world's events.

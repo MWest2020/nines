@@ -30,7 +30,7 @@ to ASSETS.md.
 | Tiny Town | https://kenney.nl/assets/tiny-town | 16 x 16 | grass, trees, paths and village details to soften the urban set |
 | Roguelike Indoors | https://kenney.nl/assets/roguelike-indoors | 16 x 16 (verify on download) | interiors: floors, walls, desks and furniture for the server room and the shop |
 | Pixel UI Pack | https://kenney.nl/assets/pixel-ui-pack | 9-slice panels | only as raw material for our own panels, recoloured to the palette |
-| Kenney Fonts | https://kenney.nl/assets/kenney-fonts | bitmap/pixel fonts | the in-canvas font, if it has €, ë, é and ï; otherwise we draw a 5x7 font ourselves |
+| Kenney Fonts | https://kenney.nl/assets/kenney-fonts | bitmap/pixel fonts | not used: the in-canvas font is our own (below) |
 
 Checked on 26 Nov 2026: each page lists "Creative Commons CC0"; the RPG Urban Pack and Tiny
 Town pages list 16 x 16 tiles. Roguelike Modern City (https://kenney.nl/assets/roguelike-modern-city)
@@ -40,6 +40,10 @@ is the fallback if the Urban Pack misses something.
 player and NPC walk cycles (Kenney's character sprites have no four-direction walk cycles), the
 server racks, blinking LEDs, laptops and the Raspberry Pi, the Career Trail markers, the
 dialogue and terminal frames, and the placeholder NPC that is tinted per `npc.yaml`.
+
+The in-canvas font is our own proportional pixel font, drawn in code (`src/game/ui/font.ts`):
+capitals and digits 7 px tall, lower case with a 5 px x-height and 2 px descenders, 10 px line
+height, with €, é, ë, ï, ö and the other accents the Dutch text needs.
 
 The terminal uses the device's monospace font (`ui-monospace, monospace`): crisp at any size,
 nothing to download or license.
