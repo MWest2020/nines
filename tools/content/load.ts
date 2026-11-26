@@ -13,6 +13,7 @@ import { join, relative } from 'node:path';
 import Ajv2020Import from 'ajv/dist/2020.js';
 import { parse as parseYaml } from 'yaml';
 import {
+  type BattleSpec,
   type ContentBundle,
   type Credit,
   type LocaleId,
@@ -30,9 +31,11 @@ import {
 import { compile, type Node, type Registry } from '../../src/rules/expr';
 import { has } from '../../src/rules/own';
 import { COMMANDS } from '../../src/sim/shell/commands';
-import { PROGRESS_FACTS, SCENARIO_FACTS } from '../../src/rules/registries';
+import { BATTLE_FACTS, PROGRESS_FACTS, SCENARIO_FACTS } from '../../src/rules/registries';
 import { normalize } from '../../src/sim/path';
 import { createSession } from '../../src/sim/session';
+import { answerRound, compileBattle, startBattle } from '../../src/battle/engine';
+import { perfectAnswer, worstAnswer } from '../../src/battle/score';
 
 // ajv is CommonJS; depending on the loader the class is the default export or its .default.
 type AjvClass = typeof Ajv2020Import;
@@ -102,11 +105,24 @@ function findCycle(edges: Record<string, readonly string[]>): string[] {
   return [];
 }
 
-const SCHEMA_FILES = ['common', 'quest', 'scenario', 'npc', 'locale', 'roadmap', 'shop'];
+const SCHEMA_FILES = ['common', 'quest', 'scenario', 'battle', 'npc', 'locale', 'roadmap', 'shop'];
 const SCHEMA_BASE = 'https://nines.invalid/schemas/';
 
-/** Words that would point at someone else's IP. Content must never need them. */
-const DENYLIST = /pok[eé]\s?mon|pikachu|pok[eé]\s?dex|pok[eé]\s?ball|nintendo|game\s?freak|game\s?boy/i;
+/**
+ * Words that would point at someone else's IP. Content must never need them. The second half
+ * is the franchise's battle language, in English and Dutch: its "a wild ... appeared!"
+ * catchphrase, its effectiveness and fainting lines, its town leaders and its battle menu.
+ * Battles say "PAGER: ..." or "Incoming: ..." instead (DESIGN.md, Battles).
+ */
+export const DENYLIST = new RegExp(
+  [
+    'pok[eé]\\s?mon', 'pikachu', 'pok[eé]\\s?dex', 'pok[eé]\\s?ball', 'nintendo', 'game\\s?freak', 'game\\s?boy',
+    '\\bwild\\b[^.!?\\n]{0,40}\\bappear', '\\bwilde?\\b[^.!?\\n]{0,40}\\bversch(ijnt|een|enen)',
+    'super[\\s-]?effecti(ve|ef)', 'not very effective', 'niet erg effectief', '\\bfainted\\b', 'flauwgevallen',
+    '\\bgym\\s?leader', '\\belite\\s?four\\b', '\\btrainer\\s+battle', '\\bfight\\b[^\\n]{0,40}\\bbag\\b[^\\n]{0,40}\\brun\\b',
+  ].join('|'),
+  'i',
+);
 
 const dirnameOf = (p: string): string => (p.lastIndexOf('/') <= 0 ? '/' : p.slice(0, p.lastIndexOf('/')));
 
@@ -119,7 +135,7 @@ export function loadContent(contentDir: string, schemaDir: string): LoadResult {
   const rel = (p: string) => relative(join(contentDir, '..'), p);
   const err = (file: string, msg: string) => errors.push(`${rel(file)}: ${msg}`);
 
-  const ajv = new Ajv2020({ allErrors: true, strict: true });
+  const ajv = new Ajv2020({ allErrors: true, strict: true, discriminator: true });
   for (const name of SCHEMA_FILES) {
     ajv.addSchema(JSON.parse(readFileSync(join(schemaDir, `${name}.schema.json`), 'utf8')) as object);
   }
@@ -158,7 +174,7 @@ export function loadContent(contentDir: string, schemaDir: string): LoadResult {
   const allowed = [
     /^locales\/(en|nl)\.yaml$/,
     /^(roadmap|shop)\.yaml$/,
-    /^(quests|npcs)\/[^/]+\/(quest|scenario|npc)\.yaml$/,
+    /^(quests|npcs)\/[^/]+\/(quest|scenario|battle|npc)\.yaml$/,
     /^(quests|npcs)\/[^/]+\/locales\/(en|nl)\.yaml$/,
     /^(quests|npcs)\/[^/]+\/[a-z0-9-]+\.png$/,
     // maps/<id>.json (Tiled) is allowed once the MVP build adds its schema and checks.
@@ -329,6 +345,78 @@ export function loadContent(contentDir: string, schemaDir: string): LoadResult {
     }
   }
 
+  // ---- battles: shape, references, and that the battle can be won and lost
+  const STAGES = ['junior', 'medior', 'senior'];
+  const gates = new Map<string, string>();
+  const checkBattle = (file: string, id: string, quest: QuestSpec, b: BattleSpec, need: (file: string, key: string) => void): void => {
+    [b.attacker, ...b.intro, ...b.outro.won, ...b.outro.lost].forEach((k) => need(file, k));
+    const roundIds = b.rounds.map((r) => r.id);
+    if (new Set(roundIds).size !== roundIds.length) err(file, 'round ids must be unique');
+    for (const r of b.rounds) {
+      const at = `round "${r.id}"`;
+      r.prompt.forEach((k) => need(file, k));
+      if (r.type === 'order') {
+        const ids = r.items.map((i) => i.id);
+        if (new Set(ids).size !== ids.length) err(file, `${at}: item ids must be unique`);
+        r.items.forEach((i) => (need(file, i.text), need(file, i.why)));
+        const ranks = r.items.map((i, n) => i.rank ?? n + 1);
+        if (ranks.some((x, n) => n > 0 && x < ranks[n - 1]!)) err(file, `${at}: list the items in the right order (ranks must not go down)`);
+        if (new Set(ranks).size === 1) err(file, `${at}: all items have the same rank, so there is nothing to order`);
+        continue;
+      }
+      const ids = r.options.map((o) => o.id);
+      if (new Set(ids).size !== ids.length) err(file, `${at}: option ids must be unique`);
+      r.options.forEach((o) => (need(file, o.text), need(file, o.why)));
+      const bests = r.options.filter((o) => o.grade === 'best').length;
+      if (bests === 0) err(file, `${at}: needs an option graded best`);
+      if (r.type === 'flaw') r.proposal.forEach((k) => need(file, k));
+      if (r.type === 'clarify' && (r.pick ?? 1) >= r.options.length) err(file, `${at}: pick must be smaller than the number of options`);
+      if (r.type === 'estimate') {
+        need(file, r.working);
+        if (bests !== 1) err(file, `${at}: exactly one range is graded best`);
+        r.options.forEach((o, n) => {
+          const last = n === r.options.length - 1;
+          if (o.max === undefined && !last) err(file, `${at}: only the last range may leave out max`);
+          if (o.max !== undefined && o.max <= o.min) err(file, `${at}: range "${o.id}" must have max above min`);
+          const next = r.options[n + 1];
+          if (next && o.max !== next.min) err(file, `${at}: range "${o.id}" must end where "${next.id}" starts (ranges ascend and touch)`);
+        });
+        const best = r.options.find((o) => o.grade === 'best');
+        if (best && (r.value < best.min || (best.max !== undefined && r.value >= best.max))) err(file, `${at}: value ${r.value} is not in the range graded best`);
+      }
+    }
+    const hintIds = (b.hints ?? []).map((h) => h.id);
+    if (new Set(hintIds).size !== hintIds.length) err(file, 'hint ids must be unique');
+    (b.hints ?? []).forEach((h, i) => {
+      need(file, h.text);
+      if (h.round !== undefined && !roundIds.includes(h.round)) err(file, `hints[${i}]: no round "${h.round}"`);
+      checkExpr(file, `hints[${i}].when`, h.when, BATTLE_FACTS);
+    });
+    const t = b.trigger;
+    if (t.kind === 'pager') {
+      checkExpr(file, 'trigger.when', t.when, PROGRESS_FACTS);
+      progressExprs.push({ file, src: t.when });
+    }
+    if (t.kind === 'gate' && roadmap) {
+      const town = roadmap.towns.find((x) => x.id === t.town);
+      if (!town) err(file, `trigger: unknown town "${t.town}"`);
+      else if (STAGES.indexOf(town.stage) !== STAGES.indexOf(quest.stage) + 1) err(file, `trigger: the gate to ${town.id} (${town.stage}) must be a quest of the stage before it, not ${quest.stage}`);
+      if (gates.has(t.town)) err(file, `trigger: ${gates.get(t.town)} already guards the road to ${t.town}`);
+      gates.set(t.town, id);
+    }
+    // Play it both ways: a perfect play must win, the worst play must lose.
+    try {
+      const c = compileBattle(id, b);
+      for (const [how, pick, want] of [['a perfect play', perfectAnswer, 'won'], ['the worst play', worstAnswer, 'lost']] as const) {
+        let st = startBattle(c);
+        for (let n = 0; n < b.rounds.length && st.status === 'active'; n++) st = answerRound(c, st, pick(b.rounds[st.round]!)).state;
+        if (st.status !== want) err(file, `${how} ends ${st.status}; raise or lower the rounds' stakes (pressure ${c.max.pressure}, stakes add up to ${b.rounds.reduce((x, r) => x + r.stakes, 0)})`);
+      }
+    } catch (e) {
+      err(file, `cannot start: ${(e as Error).message}`);
+    }
+  };
+
   const quests: QuestEntry[] = [];
   const questLocales: Record<LocaleId, LocaleMap> = { en: {}, nl: {} };
   const questsDir = join(contentDir, 'quests');
@@ -337,11 +425,16 @@ export function loadContent(contentDir: string, schemaDir: string): LoadResult {
     const dir = join(questsDir, id);
     const qFile = join(dir, 'quest.yaml');
     const sFile = join(dir, 'scenario.yaml');
+    const bFile = join(dir, 'battle.yaml');
     const quest = read<QuestSpec>(qFile, 'quest');
-    const scenario = read<ScenarioSpec>(sFile, 'scenario');
+    const hasScenario = existsSync(sFile);
+    const hasBattle = existsSync(bFile);
+    if (hasScenario && hasBattle) err(bFile, 'a quest folder has scenario.yaml (a terminal quest) or battle.yaml (a battle), not both');
+    const scenario = hasScenario || !hasBattle ? read<ScenarioSpec>(sFile, 'scenario') : null;
+    const battle = hasBattle && !hasScenario ? read<BattleSpec>(bFile, 'battle') : null;
     const npc = existsSync(join(dir, 'npc.yaml')) ? read<NpcSpec>(join(dir, 'npc.yaml'), 'npc') : null;
     const loc = readLocales(join(dir, 'locales'));
-    if (!quest || !scenario || !loc) continue;
+    if (!quest || !loc || (!scenario && !battle)) continue;
 
     const used = new Set<string>();
     const need = (file: string, key: string) => {
@@ -361,74 +454,77 @@ export function loadContent(contentDir: string, schemaDir: string): LoadResult {
     if (node && node.branch !== quest.branch) err(qFile, `roadmap_node "${node.id}" is on branch ${node.branch}, the quest on ${quest.branch}`);
     checkMap(qFile, quest.start.map);
 
-    // scenario: paths, references, conditions
-    const paths = [scenario.home, scenario.cwd, ...(scenario.dirs ?? []), ...Object.keys(scenario.files ?? {}), ...scenario.mounts.map((m) => m.path)];
-    for (const p of paths) if (p !== undefined && normalize(p) !== p) err(sFile, `path "${p}" is not normalised (no trailing /, . or ..)`);
-    if (!scenario.mounts.some((m) => m.path === '/')) err(sFile, 'a mount for "/" is required');
-    if (new Set(scenario.mounts.map((m) => m.path)).size !== scenario.mounts.length) err(sFile, 'mount paths must be unique');
-    need(sFile, scenario.motd);
-    scenario.objectives.forEach((o, i) => {
-      need(sFile, o.text);
-      checkExpr(sFile, `objectives[${i}].done_when`, o.done_when, SCENARIO_FACTS);
-    });
-    (scenario.hints ?? []).forEach((h, i) => {
-      need(sFile, h.text);
-      checkExpr(sFile, `hints[${i}].when`, h.when, SCENARIO_FACTS);
-    });
-    (scenario.events ?? []).forEach((e, i) => {
-      need(sFile, e.say);
-      checkExpr(sFile, `events[${i}].when`, e.when, SCENARIO_FACTS);
-    });
-    if (scenario.outage?.say) need(sFile, scenario.outage.say);
-    for (const [name, s] of Object.entries(scenario.services ?? {})) {
-      if (s.restart?.succeeds_if) checkExpr(sFile, `services.${name}.restart.succeeds_if`, s.restart.succeeds_if, SCENARIO_FACTS);
-    }
-    for (const [name, d] of Object.entries(scenario.deployments ?? {})) {
-      if (d.restart?.succeeds_if) checkExpr(sFile, `deployments.${name}.restart.succeeds_if`, d.restart.succeeds_if, SCENARIO_FACTS);
-    }
-    const ids = [...scenario.objectives, ...(scenario.hints ?? []), ...(scenario.events ?? [])].map((x) => x.id);
-    if (new Set(ids).size !== ids.length) err(sFile, 'objective, hint and event ids must be unique');
-    if (scenario.git?.pipeline) {
-      const pf = normalize(`${scenario.git.root}/${scenario.git.pipeline.file}`);
-      const f = scenario.files?.[pf];
-      if (f === undefined || (typeof f !== 'string' && f.content === undefined)) err(sFile, `pipeline file ${pf} must be listed under files with content`);
-    }
-    // names used in conditions must exist in this scenario
-    const allExprs = [
-      ...scenario.objectives.map((o) => o.done_when),
-      ...(scenario.hints ?? []).map((h) => h.when),
-      ...(scenario.events ?? []).map((e) => e.when),
-      ...Object.values(scenario.services ?? {}).flatMap((s) => (s.restart?.succeeds_if ? [s.restart.succeeds_if] : [])),
-      ...Object.values(scenario.deployments ?? {}).flatMap((d) => (d.restart?.succeeds_if ? [d.restart.succeeds_if] : [])),
-    ];
-    const services = Object.keys(scenario.services ?? {});
-    const deployments = Object.keys(scenario.deployments ?? {});
-    const flags = (scenario.events ?? []).flatMap((e) => (e.set_flag ? [e.set_flag] : []));
-    flags.forEach((f) => progressFlags.add(f));
-    for (const src of allExprs) {
-      checkNames(sFile, src, SCENARIO_FACTS, (name, arg) => {
-        if (name === 'service' && !services.includes(arg)) return `no such service in this scenario`;
-        if (name === 'pods_running' && !deployments.includes(arg)) return `no such deployment in this scenario`;
-        if (name === 'restarted' && !services.includes(arg) && !deployments.includes(arg)) return `no such service or deployment`;
-        if (name === 'flag' && !flags.includes(arg)) return `no event in this scenario sets that flag`;
-        if (name === 'ran' && !has(COMMANDS, arg.split(' ')[0] ?? '')) return `not a command of this terminal`;
-        return null;
+    if (scenario) {
+      // scenario: paths, references, conditions
+      const paths = [scenario.home, scenario.cwd, ...(scenario.dirs ?? []), ...Object.keys(scenario.files ?? {}), ...scenario.mounts.map((m) => m.path)];
+      for (const p of paths) if (p !== undefined && normalize(p) !== p) err(sFile, `path "${p}" is not normalised (no trailing /, . or ..)`);
+      if (!scenario.mounts.some((m) => m.path === '/')) err(sFile, 'a mount for "/" is required');
+      if (new Set(scenario.mounts.map((m) => m.path)).size !== scenario.mounts.length) err(sFile, 'mount paths must be unique');
+      need(sFile, scenario.motd);
+      scenario.objectives.forEach((o, i) => {
+        need(sFile, o.text);
+        checkExpr(sFile, `objectives[${i}].done_when`, o.done_when, SCENARIO_FACTS);
       });
-    }
-    // the machine must make sense: nothing below a file, home and cwd are directories
-    const filePaths = new Set(Object.keys(scenario.files ?? {}));
-    for (const p of [...filePaths, ...(scenario.dirs ?? []), ...scenario.mounts.map((m) => m.path), ...(scenario.git ? [scenario.git.root] : []), scenario.home, scenario.cwd ?? scenario.home]) {
-      for (let a = dirnameOf(p); a !== '/'; a = dirnameOf(a)) {
-        if (filePaths.has(a)) err(sFile, `"${p}" lies below the file "${a}"`);
+      (scenario.hints ?? []).forEach((h, i) => {
+        need(sFile, h.text);
+        checkExpr(sFile, `hints[${i}].when`, h.when, SCENARIO_FACTS);
+      });
+      (scenario.events ?? []).forEach((e, i) => {
+        need(sFile, e.say);
+        checkExpr(sFile, `events[${i}].when`, e.when, SCENARIO_FACTS);
+      });
+      if (scenario.outage?.say) need(sFile, scenario.outage.say);
+      for (const [name, s] of Object.entries(scenario.services ?? {})) {
+        if (s.restart?.succeeds_if) checkExpr(sFile, `services.${name}.restart.succeeds_if`, s.restart.succeeds_if, SCENARIO_FACTS);
+      }
+      for (const [name, d] of Object.entries(scenario.deployments ?? {})) {
+        if (d.restart?.succeeds_if) checkExpr(sFile, `deployments.${name}.restart.succeeds_if`, d.restart.succeeds_if, SCENARIO_FACTS);
+      }
+      const ids = [...scenario.objectives, ...(scenario.hints ?? []), ...(scenario.events ?? [])].map((x) => x.id);
+      if (new Set(ids).size !== ids.length) err(sFile, 'objective, hint and event ids must be unique');
+      if (scenario.git?.pipeline) {
+        const pf = normalize(`${scenario.git.root}/${scenario.git.pipeline.file}`);
+        const f = scenario.files?.[pf];
+        if (f === undefined || (typeof f !== 'string' && f.content === undefined)) err(sFile, `pipeline file ${pf} must be listed under files with content`);
+      }
+      // names used in conditions must exist in this scenario
+      const allExprs = [
+        ...scenario.objectives.map((o) => o.done_when),
+        ...(scenario.hints ?? []).map((h) => h.when),
+        ...(scenario.events ?? []).map((e) => e.when),
+        ...Object.values(scenario.services ?? {}).flatMap((s) => (s.restart?.succeeds_if ? [s.restart.succeeds_if] : [])),
+        ...Object.values(scenario.deployments ?? {}).flatMap((d) => (d.restart?.succeeds_if ? [d.restart.succeeds_if] : [])),
+      ];
+      const services = Object.keys(scenario.services ?? {});
+      const deployments = Object.keys(scenario.deployments ?? {});
+      const flags = (scenario.events ?? []).flatMap((e) => (e.set_flag ? [e.set_flag] : []));
+      flags.forEach((f) => progressFlags.add(f));
+      for (const src of allExprs) {
+        checkNames(sFile, src, SCENARIO_FACTS, (name, arg) => {
+          if (name === 'service' && !services.includes(arg)) return `no such service in this scenario`;
+          if (name === 'pods_running' && !deployments.includes(arg)) return `no such deployment in this scenario`;
+          if (name === 'restarted' && !services.includes(arg) && !deployments.includes(arg)) return `no such service or deployment`;
+          if (name === 'flag' && !flags.includes(arg)) return `no event in this scenario sets that flag`;
+          if (name === 'ran' && !has(COMMANDS, arg.split(' ')[0] ?? '')) return `not a command of this terminal`;
+          return null;
+        });
+      }
+      // the machine must make sense: nothing below a file, home and cwd are directories
+      const filePaths = new Set(Object.keys(scenario.files ?? {}));
+      for (const p of [...filePaths, ...(scenario.dirs ?? []), ...scenario.mounts.map((m) => m.path), ...(scenario.git ? [scenario.git.root] : []), scenario.home, scenario.cwd ?? scenario.home]) {
+        for (let a = dirnameOf(p); a !== '/'; a = dirnameOf(a)) {
+          if (filePaths.has(a)) err(sFile, `"${p}" lies below the file "${a}"`);
+        }
+      }
+      for (const p of [scenario.home, scenario.cwd]) if (p !== undefined && filePaths.has(p)) err(sFile, `"${p}" must be a directory, it is a file`);
+      // the whole thing must start
+      try {
+        createSession(scenario, { t: (k) => k });
+      } catch (e) {
+        err(sFile, `cannot start: ${(e as Error).message}`);
       }
     }
-    for (const p of [scenario.home, scenario.cwd]) if (p !== undefined && filePaths.has(p)) err(sFile, `"${p}" must be a directory, it is a file`);
-    // the whole thing must start
-    try {
-      createSession(scenario, { t: (k) => k });
-    } catch (e) {
-      err(sFile, `cannot start: ${(e as Error).message}`);
-    }
+    if (battle) checkBattle(bFile, id, quest, battle, need);
 
     if (npc) {
       if (npc.id !== quest.giver) err(join(dir, 'npc.yaml'), `a quest folder's npc must be its giver ("${quest.giver}")`);
@@ -437,7 +533,7 @@ export function loadContent(contentDir: string, schemaDir: string): LoadResult {
 
     for (const k of Object.keys(loc.en)) if (!used.has(k)) err(join(dir, 'locales', 'en.yaml'), `unused key "${k}"`);
     for (const l of LOCALES) for (const [k, v] of Object.entries(loc[l])) questLocales[l][questKey(id, k)] = v;
-    quests.push({ id, quest, scenario, ...(npc ? { npc } : {}) });
+    quests.push({ id, quest, ...(scenario ? { scenario } : {}), ...(battle ? { battle } : {}), ...(npc ? { npc } : {}) });
   }
 
   // ---- every PNG is a sprite some npc.yaml declares (with its source and licence)

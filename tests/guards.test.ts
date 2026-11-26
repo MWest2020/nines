@@ -32,6 +32,12 @@ describe('no network at runtime', () => {
     const hits = srcFiles.filter((f) => banned.test(readFileSync(f, 'utf8'))).map((f) => relative(ROOT, f));
     expect(hits).toEqual([]);
   });
+  it('the pure core has no clock and no unseeded randomness', () => {
+    const banned = /Math\.random|Date\.now|new Date\b|performance\.now|crypto\.getRandomValues/;
+    const pure = srcFiles.filter((f) => /[/\\]src[/\\](rules|sim|core|battle)[/\\]/.test(f));
+    expect(pure.length).toBeGreaterThan(10);
+    expect(pure.filter((f) => banned.test(readFileSync(f, 'utf8'))).map((f) => relative(ROOT, f))).toEqual([]);
+  });
   it('index.html has a CSP that keeps requests on the origin', () => {
     const html = readFileSync(join(ROOT, 'index.html'), 'utf8');
     expect(html).toMatch(/default-src 'self'/);
