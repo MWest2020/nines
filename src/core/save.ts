@@ -7,7 +7,7 @@ import type { LocaleId } from '../content/types';
 export const SAVE_KEY = 'nines.save';
 /** Unreadable saves are kept as nines.save.unreadable.1, .2, ...: never overwritten. */
 export const BACKUP_PREFIX = 'nines.save.unreadable.';
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
 export type QuestState = 'active' | 'done';
 
@@ -21,6 +21,12 @@ export interface GameState {
   items: string[];
   flags: Record<string, boolean>;
   tech_debt: number;
+  /** fixes this save's card orders and pager rolls (battle/seed.ts); chosen once, at a new game */
+  seed: number;
+  /** pager ticks counted so far (map changes); with the seed it makes pager rolls repeatable */
+  ticks: number;
+  /** one-off rewards already paid, as "<quest>/<event>", so replaying a terminal never pays twice */
+  claimed: string[];
   player: { map: string; x: number; y: number; facing: 'up' | 'down' | 'left' | 'right' };
 }
 
@@ -30,7 +36,8 @@ export interface SaveFile {
   game: GameState;
 }
 
-export function newGame(locale: LocaleId): GameState {
+/** `seed` comes from the game layer (the pure core has no randomness); tests pass a fixed one. */
+export function newGame(locale: LocaleId, seed = 0): GameState {
   return {
     locale,
     money: 0,
@@ -39,12 +46,19 @@ export function newGame(locale: LocaleId): GameState {
     items: [],
     flags: {},
     tech_debt: 0,
+    seed,
+    ticks: 0,
+    claimed: [],
     player: { map: 'junior-village', x: 7, y: 6, facing: 'down' },
   };
 }
 
-/** Migrations: MIGRATIONS[n] turns a version-n game into version n+1. None yet. */
-const MIGRATIONS: Record<number, (game: Record<string, unknown>) => Record<string, unknown>> = {};
+/** Migrations: MIGRATIONS[n] turns a version-n game into version n+1. */
+export const MIGRATIONS: Record<number, (game: Record<string, unknown>) => Record<string, unknown>> = {
+  // 2 (MVP build): a seed for battles and pager rolls, a pager tick count and the one-off
+  // rewards already paid. A version-1 save never paid an event reward, so the list starts empty.
+  1: (game) => ({ ...game, seed: 0, ticks: 0, claimed: [] }),
+};
 
 export function serialize(game: GameState): string {
   const file: SaveFile = { format: 'nines-save', version: SAVE_VERSION, game };
@@ -92,6 +106,8 @@ export function deserialize(raw: string | null, fallbackLocale: LocaleId): LoadO
   const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
   const rec = <T>(v: unknown, ok: (x: unknown) => x is T): Record<string, T> =>
     isObj(v) ? Object.fromEntries(Object.entries(v).filter(([, x]) => ok(x))) as Record<string, T> : {};
+  const strings = (v: unknown): string[] =>
+    Array.isArray(v) ? [...new Set(v.filter((x): x is string => typeof x === 'string'))] : [];
   const player = isObj(game['player']) ? game['player'] : {};
   const facing = ['up', 'down', 'left', 'right'].includes(player['facing'] as string)
     ? (player['facing'] as GameState['player']['facing'])
@@ -100,12 +116,15 @@ export function deserialize(raw: string | null, fallbackLocale: LocaleId): LoadO
     kind: 'ok',
     game: {
       locale: game['locale'] === 'nl' || game['locale'] === 'en' ? game['locale'] : base.locale,
-      money: num(game['money'], 0),
+      money: Math.max(0, num(game['money'], 0)),
       xp: rec(game['xp'], (x): x is number => typeof x === 'number'),
       quests: rec(game['quests'], (x): x is QuestState => x === 'active' || x === 'done'),
-      items: Array.isArray(game['items']) ? game['items'].filter((x): x is string => typeof x === 'string') : [],
+      items: strings(game['items']),
       flags: rec(game['flags'], (x): x is boolean => typeof x === 'boolean'),
       tech_debt: num(game['tech_debt'], 0),
+      seed: Number.isInteger(game['seed']) ? (game['seed'] as number) >>> 0 : base.seed,
+      ticks: Number.isInteger(game['ticks']) && (game['ticks'] as number) >= 0 ? (game['ticks'] as number) : 0,
+      claimed: strings(game['claimed']),
       player: {
         map: typeof player['map'] === 'string' ? player['map'] : base.player.map,
         x: num(player['x'], base.player.x),

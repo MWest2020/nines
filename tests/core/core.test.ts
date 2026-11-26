@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createTranslator, defaultLocale, interpolate } from '../../src/core/i18n';
 import { progressEnv, questState } from '../../src/core/progress';
-import { BACKUP_PREFIX, deserialize, loadFrom, newGame, SAVE_KEY, saveTo, serialize } from '../../src/core/save';
+import { BACKUP_PREFIX, deserialize, loadFrom, newGame, SAVE_KEY, SAVE_VERSION, saveTo, serialize } from '../../src/core/save';
 import { compile, test } from '../../src/rules/expr';
 import { PROGRESS_FACTS } from '../../src/rules/registries';
 
@@ -30,7 +30,7 @@ describe('save', () => {
     expect(deserialize(serialize(g), 'en')).toEqual({ kind: 'ok', game: g });
     const st = memory();
     saveTo(st, g);
-    expect(JSON.parse(st.m.get(SAVE_KEY)!)).toMatchObject({ format: 'nines-save', version: 1 });
+    expect(JSON.parse(st.m.get(SAVE_KEY)!)).toMatchObject({ format: 'nines-save', version: SAVE_VERSION });
     expect(loadFrom(st, 'en')).toEqual({ kind: 'ok', game: g });
   });
   it('an empty store is a new game; garbage is backed up, never thrown away', () => {
