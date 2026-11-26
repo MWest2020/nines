@@ -1,0 +1,20 @@
+# A Senior battle quest: a system-design interview on Senior Summit. Talking to Joris starts it.
+# Senior Summit has no map yet; senior-summit is the map roadmap.yaml plans for the town, so
+# the quest validates now and becomes reachable when that map lands (ARCHITECTURE.md, Content).
+schema: 1
+id: collab-editor-interview
+author: {name: "Nines team"}
+title: title
+summary: summary
+stage: senior
+branch: design
+track: any
+roadmap_node: design-collab-editor
+requires: [rate-limiter-interview]
+giver: joris
+start: {map: senior-summit, object: npc-2}
+reward: {money: 600, xp: 80}
+dialogue:
+  offer: [offer.1, offer.2]
+  active: [active.1]
+  done: [done.1]

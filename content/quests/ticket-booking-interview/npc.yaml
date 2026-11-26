@@ -1,0 +1,10 @@
+schema: 1
+id: noor
+author: {name: "Nines team"}
+name: npc.name
+tint: "#5878a8"
+spawn: {map: senior-summit, slot: npc-1, facing: down}
+dialogue:
+  - when: 'quest("ticket-booking-interview") == "done"'
+    lines: [npc.after]
+  - lines: [npc.idle]
