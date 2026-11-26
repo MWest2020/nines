@@ -76,6 +76,18 @@ describe('parser', () => {
     const deep = '('.repeat(LIMITS.maxDepth + 1) + 'ok' + ')'.repeat(LIMITS.maxDepth + 1);
     expect(() => parse(deep)).toThrow(/nested too deeply/);
   });
+  it('cannot name anything through Object.prototype', () => {
+    for (const src of ['constructor == toString', 'valueOf != hasOwnProperty', '__proto__ == __proto__', 'toString == toString', 'constructor("x") == 1', 'hasOwnProperty("n")']) {
+      expect(() => compile(src, REG), src).toThrow(ExprError);
+    }
+    const env0: Env = { vars: {}, funcs: {} };
+    expect(() => evaluate(parse('toString'), env0)).toThrow(/no value/);
+    expect(() => evaluate(parse('constructor("x")'), env0)).toThrow(/no function/);
+  });
+  it('rejects numbers that overflow', () => {
+    expect(() => tokenize('9'.repeat(400))).toThrow(/too large/);
+    expect(() => tokenize('1' + '0'.repeat(305) + 'T')).toThrow(/too large/);
+  });
   it('has no way to reach JavaScript', () => {
     for (const src of ['constructor', 'ok.constructor', 'this', 'globalThis["x"]', 'n[0]', 'x => x', 'a = 1', '`x`']) {
       expect(() => compile(src, REG), src).toThrow(ExprError);
@@ -108,8 +120,12 @@ describe('type checker', () => {
     expect(() => compile('service("x") == "actve"', SCENARIO_FACTS)).toThrow(/never a value/);
   });
   it('wants absolute paths where a path is expected', () => {
-    expect(() => compile('p("var/log")', REG)).toThrow(/absolute path/);
-    expect(() => compile('disk_usage("var") < 80', SCENARIO_FACTS)).toThrow(/absolute path/);
+    expect(() => compile('p("var/log")', REG)).toThrow(/absolute/);
+    expect(() => compile('disk_usage("var") < 80', SCENARIO_FACTS)).toThrow(/absolute/);
+    for (const p of ['/var/', '/var//log', '/var/./log', '/var/../etc', '']) {
+      expect(() => compile(`exists("${p}")`, SCENARIO_FACTS), p).toThrow(/normalised/);
+    }
+    expect(() => compile('exists("/") && exists("/var/log")', SCENARIO_FACTS)).not.toThrow();
   });
   it('accepts the examples from the brief', () => {
     for (const src of ['disk_usage("/var") < 80', 'service("nginx") == "active"', 'pipeline_valid == true']) {

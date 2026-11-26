@@ -5,6 +5,7 @@
 import type { Translate } from '../core/i18n';
 import type { ScenarioSpec } from '../content/types';
 import { type Compiled, compile, test } from '../rules/expr';
+import { own } from '../rules/own';
 import { SCENARIO_FACTS } from '../rules/registries';
 import { scenarioEnv } from './facts';
 import { normalize, resolve } from './path';
@@ -20,6 +21,8 @@ export interface FiredEvent {
   scope: 'quest' | 'global';
   money: number;
   reset: boolean;
+  /** a progress flag the game stores in its save (progress flag() reads it) */
+  setFlag?: string;
 }
 
 export interface RunResult {
@@ -112,6 +115,20 @@ function resetMachine(session: Session, work: SimState): SimState {
   return fresh;
 }
 
+/** Flags that take a value before the subcommand, e.g. kubectl -n default get pods. */
+const LEADING_VALUE_FLAGS: Record<string, string[]> = { kubectl: ['-n', '--namespace', '-o', '--output'] };
+
+function subcommandOf(name: string, args: string[]): string | undefined {
+  if (!SUBCOMMANDS.has(name)) return undefined;
+  const valueFlags = own(LEADING_VALUE_FLAGS, name) ?? [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i]!;
+    if (valueFlags.includes(a)) i++;
+    else if (!a.startsWith('-')) return a;
+  }
+  return undefined;
+}
+
 function expandWord(work: SimState, text: string, glob: boolean): string[] {
   if (!glob) return [text];
   const absPattern = resolve(work.cwd, work.home, text);
@@ -123,18 +140,24 @@ function expandWord(work: SimState, text: string, glob: boolean): string[] {
 }
 
 function settle(session: Session, work: SimState, out: string[], exit: number, ui: Ui | undefined, pre: FiredEvent[]): RunResult {
-  const env = scenarioEnv({ state: () => work, initial: session.initial, spec: session.spec, hintBoost: session.hintBoost });
+  // The homelab's hint boost counts as extra failed attempts for hints only, never for
+  // events or objectives.
+  const source = { state: () => work, initial: session.initial, spec: session.spec };
+  const env = scenarioEnv({ ...source, hintBoost: 0 });
+  const hintEnv = scenarioEnv({ ...source, hintBoost: session.hintBoost });
   const events = [...pre];
   for (const e of session.compiled.events) {
     if (work.firedEvents.includes(e.id) || !test(e.when, env)) continue;
-    work.firedEvents.push(e.id);
+    // An event that resets the machine stays armed: the reset makes its condition false
+    // again, and doing the same damage twice should cost twice.
+    if (!e.reset) work.firedEvents.push(e.id);
     if (e.setFlag) work.flags[e.setFlag] = true;
-    events.push({ id: e.id, say: e.say, scope: 'quest', money: e.money, reset: e.reset });
+    events.push({ id: e.id, say: e.say, scope: 'quest', money: e.money, reset: e.reset, ...(e.setFlag ? { setFlag: e.setFlag } : {}) });
     if (e.reset) work = resetMachine(session, work);
   }
   const hints: string[] = [];
   for (const h of session.compiled.hints) {
-    if (work.shownHints.includes(h.id) || !test(h.when, env)) continue;
+    if (work.shownHints.includes(h.id) || !test(h.when, hintEnv)) continue;
     work.shownHints.push(h.id);
     hints.push(h.text);
     break;
@@ -147,11 +170,16 @@ function settle(session: Session, work: SimState, out: string[], exit: number, u
   return { out, exit, ...(ui ? { ui } : {}), events, hints, objectives, won, justWon };
 }
 
-export function run(session: Session, line: string): RunResult {
+/** Control characters other than tab and newline: player input never carries escape sequences into xterm. */
+const CONTROL = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F]/g;
+export const stripControl = (text: string): string => text.replace(CONTROL, '');
+
+export function run(session: Session, rawLine: string): RunResult {
+  const line = stripControl(rawLine);
   let work = structuredClone(session.state);
   if (line.trim() === '') return settle(session, work, [], 0, undefined, []);
   const t = session.t;
-  const env = scenarioEnv({ state: () => work, initial: session.initial, spec: session.spec, hintBoost: session.hintBoost });
+  const env = scenarioEnv({ state: () => work, initial: session.initial, spec: session.spec, hintBoost: 0 });
   const ctx: Ctx = {
     s: work,
     spec: session.spec,
@@ -182,7 +210,7 @@ export function run(session: Session, line: string): RunResult {
         stdin = [];
         continue;
       }
-      const cmd = COMMANDS[name];
+      const cmd = own(COMMANDS, name);
       if (!cmd) {
         out.length = 0;
         out.push(t('sh.not_found', { cmd: name }));
@@ -194,8 +222,8 @@ export function run(session: Session, line: string): RunResult {
         if (!work.ran.includes(n)) work.ran.push(n);
       };
       record(name);
-      const sub = args.slice(1).find((a) => !a.startsWith('-'));
-      if (SUBCOMMANDS.has(name) && sub) record(`${name} ${sub}`);
+      const sub = subcommandOf(name, args.slice(1));
+      if (sub) record(`${name} ${sub}`);
 
       const res = cmd(ctx, args.slice(1), stdin);
       exit = res.exit;
@@ -232,7 +260,7 @@ export function run(session: Session, line: string): RunResult {
 /** The editor's Save. The path comes from the editor ui returned by `edit`. */
 export function saveFile(session: Session, path: string, content: string): RunResult {
   const work = structuredClone(session.state);
-  writeFile(work.fs, normalize(path), content);
+  writeFile(work.fs, normalize(path), stripControl(content.replace(/\r\n?/g, '\n')));
   if (!work.ran.includes('edit')) work.ran.push('edit');
   return settle(session, work, [], 0, undefined, []);
 }

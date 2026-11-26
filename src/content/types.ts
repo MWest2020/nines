@@ -106,6 +106,8 @@ export interface NpcSpec {
   tint?: string;
   spawn: { map: string; slot: string; facing?: 'up' | 'down' | 'left' | 'right' };
   dialogue: { when?: string; lines: string[] }[];
+  /** Set by the build for a world npc with a sheet: a same-origin URL in dist/. */
+  spriteUrl?: string;
 }
 
 export type LocaleMap = Record<string, string>;

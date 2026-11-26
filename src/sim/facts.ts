@@ -2,6 +2,7 @@
 
 import type { ScenarioSpec } from '../content/types';
 import type { Env } from '../rules/expr';
+import { has, own, setOwn } from '../rules/own';
 import { validateNinesCi } from './ci';
 import { join } from './path';
 import { signature, type SimState } from './state';
@@ -22,14 +23,14 @@ export function gitChanges(s: SimState) {
   for (const [p, n] of Object.entries(s.fs)) {
     const sig = signature(n);
     if (sig !== undefined && p.startsWith(g.root === '/' ? '/' : g.root + '/')) {
-      work[p.slice(g.root === '/' ? 1 : g.root.length + 1)] = sig;
+      setOwn(work, p.slice(g.root === '/' ? 1 : g.root.length + 1), sig);
     }
   }
   for (const p of new Set([...Object.keys(g.head), ...Object.keys(g.index)])) {
-    if (g.head[p] !== g.index[p]) staged.push(p);
+    if (own(g.head, p) !== own(g.index, p)) staged.push(p);
   }
-  for (const p of Object.keys(g.index)) if (work[p] !== g.index[p]) unstaged.push(p);
-  for (const p of Object.keys(work)) if (!(p in g.index)) untracked.push(p);
+  for (const p of Object.keys(g.index)) if (own(work, p) !== own(g.index, p)) unstaged.push(p);
+  for (const p of Object.keys(work)) if (!has(g.index, p)) untracked.push(p);
   return { staged: staged.sort(), unstaged: unstaged.sort(), untracked: untracked.sort() };
 }
 
@@ -67,14 +68,14 @@ export function scenarioEnv(src: FactSource): Env {
         const n = s().fs[String(p)];
         return n?.type === 'file' && (n.content ?? '').includes(String(needle));
       },
-      service: (name) => s().services[String(name)]?.state ?? 'inactive',
+      service: (name) => own(s().services, String(name))?.state ?? 'inactive',
       restarted: (name) => s().restarted.includes(String(name)),
       pods_running: (dep) => {
         const pods = s().pods.filter((p) => p.deployment === String(dep));
         return pods.length > 0 && pods.every((p) => p.status === 'Running');
       },
       ran: (cmd) => s().ran.includes(String(cmd)),
-      flag: (name) => s().flags[String(name)] === true,
+      flag: (name) => own(s().flags, String(name)) === true,
     },
   };
 }

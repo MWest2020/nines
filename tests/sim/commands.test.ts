@@ -178,12 +178,11 @@ describe('consequences, not blocks', () => {
     expect(run(fresh(), 'rm -rf /*').events[0]?.id).toBe('outage');
     expect(run(fresh(), 'mv /etc /tmp').events[0]?.id).toBe('outage');
   });
-  it('a scenario event fires once, with its own money and reset', () => {
+  it('a scenario event brings its own money and reset', () => {
     const s = fresh();
     const r = run(s, 'rm -r /var/lib/db');
     expect(r.events).toEqual([{ id: 'db', say: 'event.db', scope: 'quest', money: -50, reset: true }]);
     expect(s.state.fs['/var/lib/db/data']).toBeDefined();
-    expect(run(s, 'rm -r /var/lib/db').events).toEqual([]);
   });
 });
 
@@ -332,6 +331,12 @@ describe('the session', () => {
     const boosted = session(FIXTURE, 1);
     expect(run(boosted, 'nope').hints).toEqual(['hint.one']);
   });
+  it('strips escape sequences from what the player types and saves', () => {
+    const s = fresh();
+    expect(sh(s, 'x\u001b[31my\u0007')).toBe('x[31my: command not found');
+    saveFile(s, '/tmp/f', 'a\u001b[31mb\r\nc\tz\n');
+    expect(s.state.fs['/tmp/f']).toMatchObject({ content: 'a[31mb\nc\tz\n' });
+  });
   it('clear and exit are ui actions', () => {
     const s = fresh();
     expect(run(s, 'clear').ui).toEqual({ clear: true });
@@ -341,5 +346,59 @@ describe('the session', () => {
     const s = fresh();
     steps(s, 'systemctl status web', 'sudo kubectl get pods');
     expect(s.state.ran).toEqual(['systemctl', 'systemctl status', 'kubectl', 'kubectl get']);
+  });
+});
+
+describe('names that exist on Object.prototype', () => {
+  it('are ordinary unknown words in the terminal, never a crash', () => {
+    const s = fresh();
+    for (const word of ['constructor', 'toString', 'valueOf', '__proto__', 'hasOwnProperty x']) {
+      const r = run(s, word);
+      expect(r.exit, word).toBe(127);
+    }
+    expect(sh(s, 'systemctl status constructor')).toBe('Unit constructor.service could not be found.');
+    expect(sh(s, 'systemctl restart toString')).toBe('Failed to restart toString.service: Unit toString.service not found.');
+    expect(sh(s, 'journalctl -u constructor')).toBe('-- No entries --');
+    expect(sh(s, 'kubectl rollout restart deployment/constructor')).toBe('Error from server (NotFound): deployments.apps "constructor" not found');
+    expect(run(s, 'kubectl get pods').exit).toBe(0);
+    expect(sh(s, 'help constructor')).toMatch(/No help for 'constructor'/);
+    expect(({} as Record<string, unknown>)['state']).toBeUndefined();
+  });
+  it('work as file names in git', () => {
+    const s = fresh();
+    sh(s, 'cd repo');
+    saveFile(s, '/home/dev/repo/constructor', 'x\n');
+    saveFile(s, '/home/dev/repo/__proto__', 'y\n');
+    expect(sh(s, 'git status')).toMatch(/Untracked files:\n\t__proto__\n\tconstructor/);
+    sh(s, 'git add .');
+    expect(sh(s, 'git status')).toMatch(/new file:   __proto__\n\tnew file:   constructor/);
+    expect(run(s, 'git commit -m "odd names"').out[1]).toBe(' 2 file(s) changed');
+  });
+});
+
+describe('events, hints and flags', () => {
+  const spec = {
+    ...FIXTURE,
+    events: [
+      ...FIXTURE.events!,
+      { id: 'clumsy', when: 'fails >= 1', say: 'event.clumsy', set_flag: 'was-clumsy' },
+    ],
+  };
+  it('an event that resets stays armed: the same damage costs twice', () => {
+    const s = session(FIXTURE);
+    expect(run(s, 'rm -r /var/lib/db').events.map((e) => e.id)).toEqual(['db']);
+    expect(run(s, 'rm -r /var/lib/db').events.map((e) => e.id)).toEqual(['db']);
+  });
+  it('the hint boost counts for hints only, never for events', () => {
+    const s = session(spec, 3);
+    expect(run(s, 'pwd').events).toEqual([]);
+    const r = run(s, 'nope');
+    expect(r.events).toEqual([{ id: 'clumsy', say: 'event.clumsy', scope: 'quest', money: 0, reset: false, setFlag: 'was-clumsy' }]);
+    expect(s.state.flags['was-clumsy']).toBe(true);
+  });
+  it('ran() sees the subcommand after leading flags', () => {
+    const s = fresh();
+    steps(s, 'kubectl -n default get pods');
+    expect(s.state.ran).toContain('kubectl get');
   });
 });

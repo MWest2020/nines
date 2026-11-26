@@ -8,6 +8,7 @@
 import type { Translate } from '../../core/i18n';
 import type { ScenarioSpec } from '../../content/types';
 import { type Compiled, type Env, test } from '../../rules/expr';
+import { has, own, setOwn } from '../../rules/own';
 import { validateNinesCi } from '../ci';
 import { gitChanges, pipelineFile } from '../facts';
 import { basename, dirname, isUnder, join, relativeTo, resolve } from '../path';
@@ -78,7 +79,7 @@ const fail = (out: string[], exit = 1): CmdResult => ({ out, exit, fail: true })
 
 function flags(ctx: Ctx, cmd: string, args: string[], spec: FlagSpec): { f: Flags; rest: string[] } | CmdResult {
   const r = parseFlags(args, spec);
-  if (!r.ok) return fail([ctx.t('sh.bad_option', { cmd, opt: r.bad }), ctx.t('sh.usage', { usage: USAGE[cmd] ?? cmd })], 2);
+  if (!r.ok) return fail([ctx.t('sh.bad_option', { cmd, opt: r.bad }), ctx.t('sh.usage', { usage: own(USAGE, cmd) ?? cmd })], 2);
   return { f: r.flags, rest: r.rest };
 }
 const isResult = (x: unknown): x is CmdResult => typeof x === 'object' && x !== null && 'exit' in x;
@@ -169,7 +170,7 @@ function catLike(cmd: 'cat' | 'less'): Command {
     const ui: Ui | undefined = cmd === 'less' ? { pager: true } : undefined;
     if (r.rest.length === 0) {
       if (stdin) return ok(stdin, ui);
-      return fail([ctx.t('sh.missing_operand', { cmd }), ctx.t('sh.usage', { usage: USAGE[cmd]! })]);
+      return fail([ctx.t('sh.missing_operand', { cmd }), ctx.t('sh.usage', { usage: own(USAGE, cmd) ?? cmd })]);
     }
     const out: string[] = [];
     let bad = false;
@@ -445,7 +446,7 @@ function editor(cmd: string): Command {
 // ------------------------------------------------------------------ services
 
 function statusBlock(ctx: Ctx, unit: string): string[] {
-  const svc = ctx.s.services[unit]!;
+  const svc = own(ctx.s.services, unit)!;
   const active =
     svc.state === 'active' ? 'active (running)' : svc.state === 'failed' ? 'failed (Result: exit-code)' : 'inactive (dead)';
   return [
@@ -463,7 +464,7 @@ const systemctl: Command = (ctx, args) => {
   const [sub, unitRaw] = r.rest;
   if (!sub || !unitRaw || r.rest.length > 2) return fail([ctx.t('sh.usage', { usage: USAGE['systemctl']! })]);
   const unit = unitRaw.replace(/\.service$/, '');
-  const svc = ctx.s.services[unit];
+  const svc = own(ctx.s.services, unit);
   switch (sub) {
     case 'status':
       if (!svc) return fail([ctx.t('sh.unit_not_found', { unit })], 4);
@@ -471,8 +472,8 @@ const systemctl: Command = (ctx, args) => {
     case 'restart':
     case 'start': {
       if (!svc) return fail([ctx.t('sh.restart_not_found', { unit, verb: sub })], 5);
-      const rule = ctx.serviceRules[unit];
-      const spec = ctx.spec.services?.[unit]?.restart;
+      const rule = own(ctx.serviceRules, unit);
+      const spec = own(ctx.spec.services, unit)?.restart;
       const now = clock(ctx.s);
       ctx.s.restarted.push(unit);
       if (rule === undefined || test(rule, ctx.env)) {
@@ -511,7 +512,7 @@ const journalctl: Command = (ctx, args) => {
   const unitRaw = f['u'] ?? f['unit'];
   if (typeof unitRaw !== 'string') return fail([ctx.t('sh.journalctl_need_unit')]);
   const unit = unitRaw.replace(/\.service$/, '');
-  const svc = ctx.s.services[unit];
+  const svc = own(ctx.s.services, unit);
   if (!svc || svc.logs.length === 0) return ok([ctx.t('sh.no_entries')]);
   const nRaw = f['n'] ?? f['lines'];
   let logs = svc.logs;
@@ -571,9 +572,9 @@ const kubectl: Command = (ctx, args) => {
       if (m) name = m[1];
       else if (['deployment', 'deployments', 'deploy'].includes(rest[2] ?? '')) name = rest[3];
       if (!name) return usage();
-      const spec = ctx.spec.deployments?.[name];
+      const spec = own(ctx.spec.deployments, name);
       if (!spec || (spec.namespace ?? 'default') !== ns) return fail([ctx.t('sh.deploy_not_found', { name })]);
-      const rule = ctx.deploymentRules[name];
+      const rule = own(ctx.deploymentRules, name);
       const healthy = rule === undefined || test(rule, ctx.env);
       ctx.s.generation++;
       ctx.s.restarted.push(name);
@@ -607,7 +608,7 @@ const git: Command = (ctx, args) => {
       if (c.staged.length > 0) {
         out.push(ctx.t('sh.git_staged'));
         for (const p of c.staged) {
-          const label = !(p in g.head) ? 'new file:' : !(p in g.index) ? 'deleted:' : 'modified:';
+          const label = !has(g.head, p) ? 'new file:' : !has(g.index, p) ? 'deleted:' : 'modified:';
           out.push(`\t${label.padEnd(12)}${p}`);
         }
         out.push('');
@@ -642,7 +643,7 @@ const git: Command = (ctx, args) => {
           return fail([ctx.t('sh.git_pathspec', { path: r.rest[i] ?? rel })], 128);
         }
         for (const k of known) delete g.index[k];
-        for (const k of work) g.index[relativeTo(k, g.root)] = signature(ctx.s.fs[k])!;
+        for (const k of work) setOwn(g.index, relativeTo(k, g.root), signature(ctx.s.fs[k])!);
       }
       return ok();
     }
@@ -655,7 +656,7 @@ const git: Command = (ctx, args) => {
         for (const k of Object.keys(g.index)) {
           const sig = signature(ctx.s.fs[join(g.root, k)]);
           if (sig === undefined) delete g.index[k];
-          else g.index[k] = sig;
+          else setOwn(g.index, k, sig);
         }
       }
       const c = gitChanges(ctx.s);
@@ -671,7 +672,7 @@ const git: Command = (ctx, args) => {
       if (pf) {
         ctx.s.pipeline.runs++;
         const n = 41 + ctx.s.pipeline.runs;
-        const committed = g.head[relativeTo(pf, g.root)];
+        const committed = own(g.head, relativeTo(pf, g.root));
         const result =
           committed === undefined || committed.startsWith('\u0000')
             ? { ok: false, errors: [`${relativeTo(pf, g.root)} is missing`] }
@@ -699,9 +700,10 @@ export const HELP_ORDER = [
 const help: Command = (ctx, args) => {
   const topic = args[0];
   if (topic !== undefined) {
-    const name = ALIASES[topic] ?? topic;
-    if (!USAGE[name]) return fail([ctx.t('sh.help_unknown', { cmd: topic })]);
-    return ok([`${USAGE[name]}`, `  ${ctx.t(`help.${name}`)}`]);
+    const name = own(ALIASES, topic) ?? topic;
+    const usage = own(USAGE, name);
+    if (usage === undefined) return fail([ctx.t('sh.help_unknown', { cmd: topic })]);
+    return ok([usage, `  ${ctx.t(`help.${name}`)}`]);
   }
   return ok([ctx.t('help.intro'), ...HELP_ORDER.map((c) => `  ${c.padEnd(11)} ${ctx.t(`help.${c}`)}`)]);
 };

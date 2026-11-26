@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createTranslator, defaultLocale, interpolate } from '../../src/core/i18n';
 import { progressEnv, questState } from '../../src/core/progress';
-import { BACKUP_KEY, deserialize, loadFrom, newGame, SAVE_KEY, saveTo, serialize } from '../../src/core/save';
+import { BACKUP_PREFIX, deserialize, loadFrom, newGame, SAVE_KEY, saveTo, serialize } from '../../src/core/save';
 import { compile, test } from '../../src/rules/expr';
 import { PROGRESS_FACTS } from '../../src/rules/registries';
 
@@ -38,10 +38,14 @@ describe('save', () => {
     expect(loadFrom(st, 'en')).toEqual({ kind: 'empty' });
     st.setItem(SAVE_KEY, '{not json');
     expect(loadFrom(st, 'en').kind).toBe('unreadable');
-    expect(st.m.get(BACKUP_KEY)).toBe('{not json');
+    expect(st.m.get(`${BACKUP_PREFIX}1`)).toBe('{not json');
+    st.setItem(SAVE_KEY, 'second');
+    loadFrom(st, 'en');
+    expect(st.m.get(`${BACKUP_PREFIX}1`)).toBe('{not json');
+    expect(st.m.get(`${BACKUP_PREFIX}2`)).toBe('second');
   });
   it('refuses saves from the future and repairs wrong types', () => {
-    expect(deserialize(JSON.stringify({ format: 'nines-save', version: 99, game: {} }), 'en')).toMatchObject({ kind: 'unreadable' });
+    expect(deserialize(JSON.stringify({ format: 'nines-save', version: 99, game: {} }), 'en')).toEqual({ kind: 'newer', version: 99 });
     const out = deserialize(JSON.stringify({ format: 'nines-save', version: 1, game: { money: 'lots', quests: { a: 'done', b: 'hacked' }, locale: 'fr' } }), 'nl');
     expect(out).toMatchObject({ kind: 'ok', game: { money: 0, quests: { a: 'done' }, locale: 'nl' } });
   });

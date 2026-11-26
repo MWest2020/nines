@@ -5,7 +5,8 @@
 import type { LocaleId } from '../content/types';
 
 export const SAVE_KEY = 'nines.save';
-export const BACKUP_KEY = 'nines.save.unreadable';
+/** Unreadable saves are kept as nines.save.unreadable.1, .2, ...: never overwritten. */
+export const BACKUP_PREFIX = 'nines.save.unreadable.';
 export const SAVE_VERSION = 1;
 
 export type QuestState = 'active' | 'done';
@@ -50,7 +51,18 @@ export function serialize(game: GameState): string {
   return JSON.stringify(file);
 }
 
-export type LoadOutcome = { kind: 'empty' } | { kind: 'ok'; game: GameState } | { kind: 'unreadable'; reason: string };
+/**
+ * - empty: start a new game.
+ * - ok: play on.
+ * - unreadable: the raw data has been backed up; start a new game and tell the player.
+ * - newer: made by a newer version of the game. Do not autosave over it; tell the player to
+ *   update. The caller may offer a new game that is kept in memory only.
+ */
+export type LoadOutcome =
+  | { kind: 'empty' }
+  | { kind: 'ok'; game: GameState }
+  | { kind: 'unreadable'; reason: string }
+  | { kind: 'newer'; version: number };
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
@@ -67,7 +79,7 @@ export function deserialize(raw: string | null, fallbackLocale: LocaleId): LoadO
   }
   let version = data['version'];
   if (!Number.isInteger(version) || version < 1) return { kind: 'unreadable', reason: 'bad version' };
-  if (version > SAVE_VERSION) return { kind: 'unreadable', reason: `made by a newer version (${version})` };
+  if (version > SAVE_VERSION) return { kind: 'newer', version };
   let game = data['game'];
   while (version < SAVE_VERSION) {
     const step = MIGRATIONS[version];
@@ -108,7 +120,11 @@ export function deserialize(raw: string | null, fallbackLocale: LocaleId): LoadO
 export function loadFrom(storage: Pick<Storage, 'getItem' | 'setItem'>, fallbackLocale: LocaleId): LoadOutcome {
   const raw = storage.getItem(SAVE_KEY);
   const out = deserialize(raw, fallbackLocale);
-  if (out.kind === 'unreadable' && raw !== null) storage.setItem(BACKUP_KEY, raw);
+  if (out.kind === 'unreadable' && raw !== null) {
+    let n = 1;
+    while (storage.getItem(BACKUP_PREFIX + n) !== null) n++;
+    storage.setItem(BACKUP_PREFIX + n, raw);
+  }
   return out;
 }
 

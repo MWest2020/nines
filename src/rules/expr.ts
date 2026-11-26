@@ -15,6 +15,8 @@
 //   NUMBER  := digits ("." digits)? ("K" | "M" | "G" | "T")?    sizes in powers of 1024
 //   STRING  := '"' ... '"' | "'" ... "'"                         escapes: \\ \" \' \n \t
 
+import { has, own } from './own';
+
 export type ValueType = 'number' | 'string' | 'boolean';
 export type Value = number | string | boolean;
 
@@ -88,10 +90,12 @@ export function tokenize(src: string): Tok[] {
         while (i < src.length && /[0-9]/.test(src[i]!)) i++;
       }
       let v = Number(src.slice(start, i));
+      if (!Number.isFinite(v)) throw new ExprError('number too large', start);
       const suffix = src[i];
       if (suffix !== undefined && suffix in SIZE_SUFFIX) {
         v *= SIZE_SUFFIX[suffix]!;
         i++;
+        if (!Number.isFinite(v)) throw new ExprError('number too large', start);
       }
       if (i < src.length && /[A-Za-z0-9_]/.test(src[i]!)) {
         throw new ExprError(`bad number "${src.slice(start, i + 1)}"`, start);
@@ -266,9 +270,16 @@ export function parse(src: string): Node {
 
 // ---------------------------------------------------------------- checker
 
+/** "/" or "/a/b": absolute, no empty, "." or ".." segments, no trailing slash. */
+export function isCleanPath(p: string): boolean {
+  if (p === '/') return true;
+  if (!p.startsWith('/') || p.endsWith('/')) return false;
+  return p.slice(1).split('/').every((seg) => seg !== '' && seg !== '.' && seg !== '..');
+}
+
 function sigOf(node: Node, reg: Registry): Signature | undefined {
-  if (node.kind === 'var') return reg.vars[node.name];
-  if (node.kind === 'call') return reg.funcs[node.name];
+  if (node.kind === 'var') return own(reg.vars, node.name);
+  if (node.kind === 'call') return own(reg.funcs, node.name);
   return undefined;
 }
 
@@ -278,17 +289,17 @@ export function check(node: Node, reg: Registry): ValueType {
     case 'lit':
       return typeof node.value as ValueType;
     case 'var': {
-      const sig = reg.vars[node.name];
+      const sig = own(reg.vars, node.name);
       if (!sig) {
-        if (reg.funcs[node.name]) throw new ExprError(`"${node.name}" is a function; call it with ( )`, node.pos);
+        if (has(reg.funcs, node.name)) throw new ExprError(`"${node.name}" is a function; call it with ( )`, node.pos);
         throw new ExprError(`unknown name "${node.name}"`, node.pos);
       }
       return sig.returns;
     }
     case 'call': {
-      const sig = reg.funcs[node.name];
+      const sig = own(reg.funcs, node.name);
       if (!sig) {
-        if (reg.vars[node.name]) throw new ExprError(`"${node.name}" is not a function; drop the ( )`, node.pos);
+        if (has(reg.vars, node.name)) throw new ExprError(`"${node.name}" is not a function; drop the ( )`, node.pos);
         throw new ExprError(`unknown function "${node.name}"`, node.pos);
       }
       if (node.args.length !== sig.args.length) {
@@ -299,8 +310,8 @@ export function check(node: Node, reg: Registry): ValueType {
         if (t !== sig.args[i]) {
           throw new ExprError(`argument ${i + 1} of ${node.name}() must be a ${sig.args[i]}, got a ${t}`, arg.pos);
         }
-        if (sig.pathArgs?.includes(i) && arg.kind === 'lit' && !String(arg.value).startsWith('/')) {
-          throw new ExprError(`argument ${i + 1} of ${node.name}() must be an absolute path`, arg.pos);
+        if (sig.pathArgs?.includes(i) && arg.kind === 'lit' && !isCleanPath(String(arg.value))) {
+          throw new ExprError(`argument ${i + 1} of ${node.name}() must be an absolute, normalised path (no trailing /, . or ..)`, arg.pos);
         }
       });
       return sig.returns;
@@ -364,12 +375,12 @@ export function evaluate(node: Node, env: Env): Value {
     case 'lit':
       return node.value;
     case 'var': {
-      const f = env.vars[node.name];
+      const f = own(env.vars, node.name);
       if (!f) throw new ExprError(`no value for "${node.name}"`, node.pos);
       return f();
     }
     case 'call': {
-      const f = env.funcs[node.name];
+      const f = own(env.funcs, node.name);
       if (!f) throw new ExprError(`no function "${node.name}"`, node.pos);
       return f(...node.args.map((a) => evaluate(a, env)));
     }

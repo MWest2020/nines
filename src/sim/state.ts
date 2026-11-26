@@ -2,6 +2,7 @@
 // be cloned with structuredClone, reset from its initial snapshot, and saved if we ever want to.
 
 import type { PodStatus, ScenarioSpec } from '../content/types';
+import { setOwn } from '../rules/own';
 import { dirname, isUnder, normalize } from './path';
 import { parseSize, utf8Length } from './size';
 
@@ -164,7 +165,7 @@ export function createState(spec: ScenarioSpec): SimState {
     const head: Record<string, string> = {};
     for (const [p, node] of Object.entries(fs)) {
       const sig = signature(node);
-      if (sig !== undefined && isUnder(p, root) && p !== root) head[p.slice(root === '/' ? 1 : root.length + 1)] = sig;
+      if (sig !== undefined && isUnder(p, root) && p !== root) setOwn(head, p.slice(root === '/' ? 1 : root.length + 1), sig);
     }
     git = { root, branch: spec.git.branch ?? 'main', head, index: { ...head }, commits: 0 };
   }
