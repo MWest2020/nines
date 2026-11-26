@@ -8,9 +8,10 @@ the battle must say so.
 
 Done: the rate limiter (Junior), `content/quests/rate-limiter-interview/`; nearby places search
 (Junior) and the URL shortener (Medior), `content/quests/nearby-places/` and
-`content/quests/url-shortener/` (https://github.com/MWest2020/nines/pull/11). Their paragraphs
-below stay as the brief they were written from. Still to write: ticket booking and the
-collaborative editor.
+`content/quests/url-shortener/` (https://github.com/MWest2020/nines/pull/11); ticket booking and the collaborative editor
+(Senior), `content/quests/ticket-booking-interview/` and `content/quests/collab-editor-interview/`
+(https://github.com/MWest2020/nines/pull/13). Their paragraphs below stay as the brief they were
+written from. All four topics are done.
 
 Every battle uses the five round types where they fit: `clarify` (what to ask first),
 `tradeoff` (a choice with its reason), `flaw` (spot the flaw in a proposal), `estimate`
@@ -77,7 +78,10 @@ with LRU eviction) or at a CDN, and cache "not found" briefly to absorb scanners
 needs abuse controls: rate limits (the Junior battle) and a check of target URLs against known
 malware and phishing lists.
 
-## Ticket booking · Senior · design
+## Ticket booking · Senior · design · done
+
+**Done** in `content/quests/ticket-booking-interview/` (https://github.com/MWest2020/nines/pull/13). It waits
+for the Senior Summit map (ARCHITECTURE.md, Content ahead of its map). The brief stays below for reference.
 
 Clarify: assigned seats or general admission; how hot the sale is (100,000 people at 10:00 for
 50,000 seats); how long checkout and payment take; seats per order. The invariant: **a seat is
@@ -104,7 +108,10 @@ as only the conditional write decides. An `estimate`: 50,000 seats in 10 minutes
 bookings per second on average, while hold attempts on the best seats run many times higher, so
 contention, not throughput, is the problem.
 
-## Collaborative document editor · Senior · design
+## Collaborative document editor · Senior · design · done
+
+**Done** in `content/quests/collab-editor-interview/` (https://github.com/MWest2020/nines/pull/13). It waits
+for the Senior Summit map (ARCHITECTURE.md, Content ahead of its map). The brief stays below for reference.
 
 Clarify: plain or rich text; how many people edit one document at once (tens, not thousands);
 offline editing (yes); history and undo; the latency people expect (their own keystrokes show at
