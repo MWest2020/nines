@@ -1,0 +1,395 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nines.invalid/schemas/map.schema.json",
+  "title": "maps/<id>.json",
+  "description": "A Tiled map saved as JSON (Tiled 1.10 or later): orthogonal, finite, 16 px tiles, tile data as plain arrays (not base64 or compressed), tilesets embedded. The validator checks layer sizes, tile ids, the collision layer, images and objects (ARCHITECTURE.md, The Phaser layer).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "type",
+    "orientation",
+    "infinite",
+    "width",
+    "height",
+    "tilewidth",
+    "tileheight",
+    "layers",
+    "tilesets"
+  ],
+  "properties": {
+    "type": {
+      "const": "map"
+    },
+    "version": {
+      "type": "string",
+      "maxLength": 20
+    },
+    "tiledversion": {
+      "type": "string",
+      "maxLength": 20
+    },
+    "orientation": {
+      "const": "orthogonal"
+    },
+    "renderorder": {
+      "const": "right-down"
+    },
+    "infinite": {
+      "const": false
+    },
+    "compressionlevel": {
+      "type": "integer"
+    },
+    "width": {
+      "type": "integer",
+      "minimum": 15,
+      "maximum": 200
+    },
+    "height": {
+      "type": "integer",
+      "minimum": 10,
+      "maximum": 200
+    },
+    "tilewidth": {
+      "const": 16
+    },
+    "tileheight": {
+      "const": 16
+    },
+    "nextlayerid": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "nextobjectid": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "backgroundcolor": {
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$"
+    },
+    "class": {
+      "type": "string",
+      "maxLength": 0
+    },
+    "layers": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 8,
+      "items": {
+        "oneOf": [
+          {
+            "$ref": "#/$defs/tileLayer"
+          },
+          {
+            "$ref": "#/$defs/objectLayer"
+          }
+        ]
+      }
+    },
+    "tilesets": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": {
+        "$ref": "#/$defs/tileset"
+      }
+    }
+  },
+  "$defs": {
+    "tileLayer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "name",
+        "width",
+        "height",
+        "data"
+      ],
+      "properties": {
+        "type": {
+          "const": "tilelayer"
+        },
+        "name": {
+          "enum": [
+            "ground",
+            "detail",
+            "props",
+            "above",
+            "collision"
+          ],
+          "description": "ground, detail and props are drawn under the characters, above over them; collision is hidden"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "visible": {
+          "type": "boolean"
+        },
+        "x": {
+          "const": 0
+        },
+        "y": {
+          "const": 0
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "data": {
+          "type": "array",
+          "maxItems": 40000,
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4294967295
+          }
+        }
+      }
+    },
+    "objectLayer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "name",
+        "objects"
+      ],
+      "properties": {
+        "type": {
+          "const": "objectgroup"
+        },
+        "name": {
+          "const": "objects"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "draworder": {
+          "enum": [
+            "topdown",
+            "index"
+          ]
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "visible": {
+          "type": "boolean"
+        },
+        "x": {
+          "const": 0
+        },
+        "y": {
+          "const": 0
+        },
+        "objects": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "$ref": "#/$defs/object"
+          }
+        }
+      }
+    },
+    "object": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "type",
+        "x",
+        "y"
+      ],
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "name": {
+          "$ref": "common.schema.json#/$defs/id"
+        },
+        "type": {
+          "enum": [
+            "spawn",
+            "terminal",
+            "battle",
+            "door",
+            "shop"
+          ],
+          "description": "spawn: a named point (player-start, npc-n, cameo-n, gate-<town>, where a door arrives); terminal: opens a terminal quest's machine; battle: starts a battle quest; door: walks to another map; shop: the Homelab Store"
+        },
+        "x": {
+          "type": "number",
+          "minimum": 0
+        },
+        "y": {
+          "type": "number",
+          "minimum": 0
+        },
+        "width": {
+          "type": "number",
+          "minimum": 0
+        },
+        "height": {
+          "type": "number",
+          "minimum": 0
+        },
+        "rotation": {
+          "const": 0
+        },
+        "visible": {
+          "type": "boolean"
+        },
+        "point": {
+          "type": "boolean"
+        },
+        "properties": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "type",
+              "value"
+            ],
+            "properties": {
+              "name": {
+                "enum": [
+                  "facing",
+                  "to_map",
+                  "to_point"
+                ]
+              },
+              "type": {
+                "const": "string"
+              },
+              "value": {
+                "type": "string",
+                "maxLength": 40
+              }
+            }
+          }
+        }
+      }
+    },
+    "tileset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "firstgid",
+        "name",
+        "image",
+        "imagewidth",
+        "imageheight",
+        "tilewidth",
+        "tileheight",
+        "columns",
+        "tilecount"
+      ],
+      "description": "an embedded tileset (no external .tsx): one image, 16 px tiles",
+      "properties": {
+        "firstgid": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "name": {
+          "$ref": "common.schema.json#/$defs/id"
+        },
+        "image": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._/-]+\\.png$",
+          "maxLength": 200,
+          "description": "relative to the map file; must be inside the repository and listed in ASSETS.md"
+        },
+        "imagewidth": {
+          "type": "integer",
+          "minimum": 16
+        },
+        "imageheight": {
+          "type": "integer",
+          "minimum": 16
+        },
+        "tilewidth": {
+          "const": 16
+        },
+        "tileheight": {
+          "const": 16
+        },
+        "columns": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "tilecount": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "margin": {
+          "const": 0
+        },
+        "spacing": {
+          "enum": [
+            0,
+            1
+          ]
+        },
+        "tiles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "properties"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "properties": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "name",
+                    "type",
+                    "value"
+                  ],
+                  "properties": {
+                    "name": {
+                      "const": "collides"
+                    },
+                    "type": {
+                      "const": "bool"
+                    },
+                    "value": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

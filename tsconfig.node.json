@@ -4,5 +4,5 @@
     "lib": ["ES2022"],
     "types": ["node"]
   },
-  "include": ["tools", "tests", "vite.config.ts", "src/sim", "src/rules", "src/core", "src/battle"]
+  "include": ["tools", "tests", "vite.config.ts", "src/sim", "src/rules", "src/core", "src/battle", "src/world"]
 }
