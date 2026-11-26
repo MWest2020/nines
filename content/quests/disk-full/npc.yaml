@@ -3,6 +3,7 @@ id: femke
 author: {name: "Nines team"}
 name: npc.name
 tint: "#c86848"
+sprite: {file: femke.png, frame: 16, source: "own work, Nines team: tools/art/draw-art.mjs", license: CC0-1.0}
 spawn: {map: junior-village, slot: npc-1, facing: down}
 dialogue:
   - when: 'quest("disk-full") == "done"'

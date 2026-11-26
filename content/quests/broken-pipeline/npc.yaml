@@ -3,6 +3,7 @@ id: ravi
 author: {name: "Nines team"}
 name: npc.name
 tint: "#4880c8"
+sprite: {file: ravi.png, frame: 16, source: "own work, Nines team: tools/art/draw-art.mjs", license: CC0-1.0}
 spawn: {map: junior-village, slot: npc-2, facing: left}
 dialogue:
   - when: 'quest("broken-pipeline") == "done"'
