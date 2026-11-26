@@ -67,6 +67,14 @@ services:
     state: active
     logs:
       - "Nov 26 06:00:02 web-01 systemd[1]: Started postgresql.service - PostgreSQL RDBMS."
+# Suggestions for the terminal's quick-command strip: a tap fills the input line.
+quick:
+  - df -h
+  - "du -sh /var/*"
+  - ls -lh
+  - cd /var/log
+  - "cat ~/NOTES.txt"
+  - help
 objectives:
   - {id: space, text: obj.space, done_when: 'disk_usage("/var") < 80'}
   - {id: database, text: obj.database, done_when: 'exists("/var/lib/postgresql/16/main/base.dat")'}
