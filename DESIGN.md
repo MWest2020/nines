@@ -89,10 +89,10 @@ advances. Our own shape: square corners, a 1 px gold rule under the name tab.
 │ ♣♣♣♣  │▤ ▤ │ │▤ ▤ │  ··  ♣♣♣♣              │
 │       └─▯──┘ └─▯──┘  ··········            │
 │  ···········☺··········  ☻ Femke           │
-│ ╔═ Femke ═╗────────────────────────────┐   │
-│ ║ Checkouts are failing on web-01 and  ║   │
-│ ║ the logs say: no space left.       ▸ ║   │
-│ ╚══════════════════════════════════════╝   │
+│ ┌─ Femke ─┐────────────────────────────┐   │
+│ │ Checkouts are failing on web-01 and  │   │
+│ │ the logs say: no space left.       ▸ │   │
+│ └──────────────────────────────────────┘   │
 └────────────────────────────────────────────┘
 ```
 

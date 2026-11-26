@@ -27,6 +27,10 @@ The rules, short:
 - **Pick a free cameo slot** on the map (`spawn: {map: junior-village, slot: cameo-1}`); the
   validator tells you when a slot is taken.
 
+**Licence of your contribution.** Everything you add under `/content` (text and sprites) is
+contributed under CC0-1.0, so the project can use it whatever licence the code ends up with
+(open question: https://github.com/MWest2020/nines/issues/3).
+
 Check your folder before you open the pull request:
 
 ```sh

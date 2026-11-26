@@ -133,8 +133,11 @@ Destructive commands are allowed and have effects:
   message, a money penalty (default €100, a scenario may override it) and the machine restored
   from its starting snapshot. What the player learned (counters, hints shown) stays.
 - A scenario adds its own **events**: a condition, a message, an optional money change, an
-  optional reset, an optional flag. Each fires once per session. Example: deleting the
-  database in "Disk full" costs €150 and restores the machine.
+  optional reset, an optional flag. An event fires once per session, except one that resets
+  the machine: the reset makes its condition false again, so it stays armed and doing the same
+  damage twice costs twice. Example: deleting the database in "Disk full" costs €150 and
+  restores the machine. A flag set by an event comes back in the result (`setFlag`); the game
+  stores it in the save, where progress conditions read it with `flag()`.
 
 ### Session lifecycle
 
@@ -156,8 +159,14 @@ The UI layer renders the output in xterm.js, shows objectives and hints next to 
 money changes from events to the game state, and on `justWon` closes the quest.
 
 **Hints** are conditions too, so a scenario can say "after two failed attempts and if the
-player has not run df yet". The `fails` fact includes the homelab's `hint_boost`, which is
-how "faster hints" works without special code.
+player has not run df yet". When hints are evaluated, the `fails` fact includes the homelab's
+`hint_boost`, which is how "faster hints" works without special code; events, objectives and
+restart rules see the real count.
+
+**Names on `Object.prototype`.** Every lookup of a name that came from content or from the
+player (commands, units, deployments, registry entries, git paths, locale keys) goes through
+`own()`/`has()` (`src/rules/own.ts`), so `constructor` or `__proto__` is just an unknown name.
+Tests cover it.
 
 ## The condition language
 
@@ -194,8 +203,10 @@ boolean. String facts with a closed set of values (`service()` is `active`, `ina
 `failed`) reject literals outside the set, so `service("nginx") == "actve"` fails in CI.
 Path arguments given as literals must be absolute.
 
-**Limits.** 512 characters, nesting depth 24, at most 4 arguments. A runtime error (which the
-checker should make impossible) evaluates to false instead of crashing.
+**Limits.** 512 characters, nesting depth 24, at most 4 arguments, finite numbers. Path
+arguments given as literals must be absolute and normalised (`/var/log`, not `/var/log/`). A
+runtime error (which the checker should make impossible) evaluates to false instead of
+crashing.
 
 **Registries** (`src/rules/registries.ts`) declare what may be asked; implementations live
 with the state they read:
@@ -233,7 +244,7 @@ content/
   locales/en.yaml, nl.yaml        UI, roadmap, shop and terminal strings
   roadmap.yaml                    towns, branches, nodes (the Career Trail)
   shop.yaml                       homelab items
-  maps/<id>.json                  Tiled maps (MVP build)
+  maps/<id>.json                  Tiled maps (allowed once the MVP build adds their checks)
   npcs/<id>/                      world NPCs that give no quest (optional)
     npc.yaml, <sprite>.png, locales/en.yaml, nl.yaml
   quests/<id>/                    one quest = one folder = one cameo pull request
@@ -317,17 +328,31 @@ title: "Disk full"
 build), in `npm test` and as `npm run validate:content` in CI. It checks the schema of every
 file and then what a schema cannot express:
 
-- the content folder holds only YAML, PNG sprites and Tiled JSON (no scripts, ever);
+- the content folder holds only YAML and PNG sprites (no scripts, ever), no symbolic links,
+  and every PNG is declared by an `npc.yaml` with its source and licence;
 - ids match folder names; ids and NPC spawn slots are unique across all folders;
-- references resolve: `giver`, `requires`, `roadmap_node` (and its branch), maps;
-- every condition parses and type-checks against the right registry, and names used in
-  `service("...")`, `pods_running("...")` and `restarted("...")` exist in that scenario;
+- references resolve: `giver`, `requires`, `roadmap_node` (and its branch), maps; quest,
+  roadmap and shop `requires` have no cycles;
+- every condition parses and type-checks against the right registry; name arguments must be
+  quoted literals and must exist: `service`, `pods_running` and `restarted` in that scenario,
+  `flag` among that scenario's `set_flag`s, `ran` among the terminal's commands, `quest`,
+  `has_item` and `xp` among the quests, shop items and branches;
+- no string holds a control character (no ANSI or OSC escape sequences can reach xterm.js);
 - every locale key a file uses exists in English and Dutch, both languages have the same keys
   and the same `{placeholders}`, and a folder has no unused keys;
-- paths are absolute and normalised, a `/` mount exists, a pipeline file has content;
+- paths are absolute and normalised, a `/` mount exists, a pipeline file has content, nothing
+  lies below a file, `home` and `cwd` are directories;
 - the scenario actually starts (`createSession`);
 - sprites are real PNGs whose size is 3 x 4 frames;
-- no string or author name uses a denylisted name (Pokémon, Nintendo and friends).
+- no file and no path in content uses a denylisted name (Pokémon, Nintendo and friends).
+
+Maps join the allowlist in the MVP build together with their checks: tilesets embedded in the
+map JSON, image paths relative and inside the repository, every image listed in ASSETS.md, the
+object layer's names (`player-start`, `npc-n`, `cameo-n`, interactables) present.
+
+**Content sprites and ASSETS.md.** A guest sprite records its source and licence in its
+`npc.yaml`, not in ASSETS.md, so a cameo stays one folder; the credits screen lists it.
+Waiting on Mark: https://github.com/MWest2020/nines/issues/2 (default: as described).
 
 ## Loading content offline
 
@@ -348,11 +373,24 @@ Guards:
   `img-src 'self' data: blob:` (Phaser makes its default textures from data URIs),
   `object-src 'none'`. A request to another origin is refused by the browser.
 - `tests/guards.test.ts` fails on `fetch`, `XMLHttpRequest`, `WebSocket`, `EventSource`,
-  `sendBeacon`, any `http(s)://` URL, `eval` or `new Function` in `src/`.
-- Phaser's bundle contains the strings `https://phaser.io` (its console banner, which we turn
-  off) and two XML namespace URIs. They are strings, not requests.
+  `sendBeacon`, any `http(s)://` URL, `eval`, `Function(`, `window.open` or navigation
+  (`location = ...`) in `src/`. Author URLs in the credits are text, never links.
+- `npm run check:dist` (in CI after the build) scans what ships, Phaser included: no `fetch`,
+  `WebSocket`, `EventSource`, `sendBeacon`, `window.open`, `eval` or `Function(`, and no URL
+  outside an allowlist. The allowlist is exactly what Phaser carries as plain strings:
+  `https://phaser.io` (its console banner, turned off) and two XML namespace URIs. Phaser also
+  has `new Function("return this")` as a global-object fallback inside a try/catch; the CSP
+  (no `'unsafe-eval'`) blocks it and the fallback continues. Vite's module-preload polyfill is
+  off because it fetches module URLs.
+- Terminal output that comes from the player (a file they wrote with the editor) has control
+  characters stripped before it reaches xterm.js; content cannot contain them at all.
 - The MVP's acceptance check is a devtools Network panel with zero requests outside the origin,
   documented with a screenshot in the MVP pull request (a browser task, see AGENTS.md).
+
+**"Runs offline"** means: `dist/` served over HTTP(S) by any static host (GitHub Pages, a
+sub-path included) keeps working with the network off once loaded, and the Capacitor app
+works with no network at all. It does not mean opening `dist/index.html` from `file://`:
+browsers refuse ES module scripts from `file://`, and that is not a target.
 
 The one runtime use of a YAML parser is the pipeline quest: the player's edited
 `.nines-ci.yml` has to be parsed to be validated. That uses the same `yaml` package the build
@@ -381,11 +419,12 @@ uses (no dependencies of its own); it never sees content files.
 
 - **Versioning.** `version` is the save format, not the game version. A format change bumps
   `SAVE_VERSION` and adds `MIGRATIONS[n]`, a pure function from version n to n+1; loading runs
-  the chain. A save from a newer version is refused, never overwritten.
+  the chain. A save from a newer version loads as `{kind: 'newer'}`: the game tells the player
+  to update and does not autosave, so the newer save is never overwritten.
 - **Robust loading.** After migration every field is checked and anything missing or of the
   wrong type falls back to a new game's value, so a hand-edited or partly broken save still
-  loads. An unreadable save is copied to `nines.save.unreadable` before a new game starts, and
-  the player is told.
+  loads. An unreadable save is copied to the next free `nines.save.unreadable.<n>` (never
+  overwriting an earlier backup) before a new game starts, and the player is told.
 - **What is not saved.** Terminal sessions. Opening a quest's terminal again starts its machine
   fresh, so content changes can never strand a save in a half-finished scenario. Quest ids are
   stable; a save that mentions a quest the content no longer has keeps the entry and ignores it.
@@ -403,8 +442,14 @@ uses (no dependencies of its own); it never sees content files.
   (`rm: cannot remove ...`, `On branch main`) keep the tool's English wording in `nl.yaml` too,
   because the player should learn the messages real systems print. Messages in the game's own
   voice (`sh.unsupported`, `sh.vi_note`), `help.*`, hints, objectives and dialogue are
-  translated. Command names, flags, column headers and log lines in scenarios are the
-  interface being taught and are not translated.
+  translated.
+- **Not in locale files, on purpose:** the simulated machine's own output, which is the
+  interface being taught rather than the game talking: command names and flags, usage syntax
+  (`USAGE` in `commands.ts`), column headers (`df`, `kubectl get pods`), the `systemctl status`
+  block, git's status labels (`modified:`, `new file:`, `deleted:`), commit lines, the
+  `deployment.apps/x restarted` line, generated systemd journal lines, the `nines-ci`
+  validator's messages and every log line or file in a `scenario.yaml`. These would be English
+  on a Dutch server too. If Mark wants them translated, they move to `sh.*` keys.
 - `tests/guards.test.ts` checks that every key used in `src/` exists in both languages.
 
 ## The Phaser layer (MVP build)
@@ -475,7 +520,8 @@ Pinned exactly, each version published at least two weeks before it was added (c
 - Vitest, in Node: the condition language, the parser, every command, the CI validator, saves,
   i18n, progress facts, the content validator (including that it rejects broken content), the
   guards, and the three MVP quests played end to end on the real content files.
-- `.github/workflows/ci.yml` on every push and pull request: `npm ci`, content validation,
-  `npm test`, `npm run build`. Actions pinned to commit SHAs, read-only token.
+- `.github/workflows/ci.yml` on every pull request and every push to `main`: `npm ci`, content
+  validation, `npm test`, `npm run build`, `npm run check:dist`. Actions pinned to commit SHAs,
+  read-only token.
 - Browser checks (Playwright, devtools) are for the MVP build and run under the memory cap in
   AGENTS.md, one browser at a time.
