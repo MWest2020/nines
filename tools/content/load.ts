@@ -9,7 +9,7 @@
 //      folder holds data files only.
 
 import { existsSync, lstatSync, readdirSync, readFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join, posix, relative } from 'node:path';
 import Ajv2020Import from 'ajv/dist/2020.js';
 import { parse as parseYaml } from 'yaml';
 import {
@@ -19,6 +19,7 @@ import {
   type LocaleId,
   type LocaleMap,
   LOCALES,
+  type MapEntry,
   type NpcSpec,
   npcKey,
   type QuestEntry,
@@ -27,7 +28,10 @@ import {
   type RoadmapSpec,
   type ScenarioSpec,
   type ShopSpec,
+  type TiledMap,
+  type TiledTileLayer,
 } from '../../src/content/types';
+import { GID_MASK, isFacing, isNpcSlot, objectTile, reachable, readMap, tileLayer, type WorldMap } from '../../src/world/grid';
 import { compile, type Node, type Registry } from '../../src/rules/expr';
 import { has } from '../../src/rules/own';
 import { COMMANDS } from '../../src/sim/shell/commands';
@@ -46,6 +50,40 @@ export interface LoadResult {
   errors: string[];
   /** absolute paths of sprite sheets, for the bundler to emit as assets */
   sprites: SpriteRef[];
+  /** tileset images of the maps, for the bundler to emit as assets */
+  tilesets: TilesetRef[];
+}
+
+export interface TilesetRef {
+  map: string;
+  /** the tileset's name in the map */
+  name: string;
+  /** absolute path of the PNG */
+  file: string;
+}
+
+export interface LoadOptions {
+  /** the repository root, where tileset images and ASSETS.md live (default: the content folder's parent) */
+  root?: string;
+}
+
+/** Rows of ASSETS.md as path -> cells: | `path` | source | author | licence | notes | */
+export function assetRows(markdown: string): Map<string, string[]> {
+  const rows = new Map<string, string[]>();
+  for (const line of markdown.split('\n')) {
+    const cells = line.split('|').slice(1, -1).map((c) => c.trim());
+    const m = /^`([^`]+)`$/.exec(cells[0] ?? '');
+    if (m) rows.set(m[1]!, cells);
+  }
+  return rows;
+}
+
+const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+
+/** Width and height of a PNG, or null when the bytes are not a PNG. */
+function pngSize(b: Buffer): { w: number; h: number } | null {
+  if (b.length < 24 || !PNG_SIGNATURE.every((x, i) => b[i] === x)) return null;
+  return { w: b.readUInt32BE(16), h: b.readUInt32BE(20) };
 }
 
 export interface SpriteRef {
@@ -105,7 +143,7 @@ function findCycle(edges: Record<string, readonly string[]>): string[] {
   return [];
 }
 
-const SCHEMA_FILES = ['common', 'quest', 'scenario', 'battle', 'npc', 'locale', 'roadmap', 'shop'];
+const SCHEMA_FILES = ['common', 'quest', 'scenario', 'battle', 'npc', 'locale', 'roadmap', 'shop', 'map'];
 const SCHEMA_BASE = 'https://nines.invalid/schemas/';
 
 /**
@@ -148,9 +186,11 @@ const dirnameOf = (p: string): string => (p.lastIndexOf('/') <= 0 ? '/' : p.slic
 const PLACEHOLDER = /\{([a-z0-9_]+)\}/g;
 const placeholders = (s: string): string => [...s.matchAll(PLACEHOLDER)].map((m) => m[1]).sort().join(',');
 
-export function loadContent(contentDir: string, schemaDir: string): LoadResult {
+export function loadContent(contentDir: string, schemaDir: string, options: LoadOptions = {}): LoadResult {
   const errors: string[] = [];
   const sprites: SpriteRef[] = [];
+  const tilesets: TilesetRef[] = [];
+  const root = options.root ?? join(contentDir, '..');
   const rel = (p: string) => relative(join(contentDir, '..'), p);
   const err = (file: string, msg: string) => errors.push(`${rel(file)}: ${msg}`);
 
@@ -165,10 +205,12 @@ export function loadContent(contentDir: string, schemaDir: string): LoadResult {
       return null;
     }
     let data: unknown;
+    const json = file.endsWith('.json');
     try {
-      data = parseYaml(readFileSync(file, 'utf8'), { uniqueKeys: true, prettyErrors: true });
+      // maps are Tiled JSON: parsed as JSON, so a YAML file named .json is refused
+      data = json ? JSON.parse(readFileSync(file, 'utf8')) : parseYaml(readFileSync(file, 'utf8'), { uniqueKeys: true, prettyErrors: true });
     } catch (e) {
-      err(file, `YAML: ${(e as Error).message.split('\n')[0]}`);
+      err(file, `${json ? 'JSON' : 'YAML'}: ${(e as Error).message.split('\n')[0]}`);
       return null;
     }
     const raw = readFileSync(file, 'utf8');
@@ -196,7 +238,7 @@ export function loadContent(contentDir: string, schemaDir: string): LoadResult {
     /^(quests|npcs)\/[^/]+\/(quest|scenario|battle|npc)\.yaml$/,
     /^(quests|npcs)\/[^/]+\/locales\/(en|nl)\.yaml$/,
     /^(quests|npcs)\/[^/]+\/[a-z0-9-]+\.png$/,
-    // maps/<id>.json (Tiled) is allowed once the MVP build adds its schema and checks.
+    /^maps\/[a-z0-9]+(-[a-z0-9]+)*\.json$/,
   ];
   const walk = (dir: string): string[] =>
     readdirSync(dir).flatMap((name) => {
@@ -268,6 +310,116 @@ export function loadContent(contentDir: string, schemaDir: string): LoadResult {
     }
   }
 
+  // ---- maps: Tiled JSON, tilesets embedded, images in the repository and in ASSETS.md
+  const mapsDir = join(contentDir, 'maps');
+  const assetsFile = join(root, 'ASSETS.md');
+  const assets = existsSync(assetsFile) ? assetRows(readFileSync(assetsFile, 'utf8')) : new Map<string, string[]>();
+  const maps: MapEntry[] = [];
+  const worlds = new Map<string, WorldMap>();
+  const mapIds = existsSync(mapsDir) ? readdirSync(mapsDir).filter((n) => n.endsWith('.json')).map((n) => n.slice(0, -5)).sort() : [];
+  for (const id of mapIds) {
+    const file = join(mapsDir, `${id}.json`);
+    const map = read<TiledMap>(file, 'map');
+    if (!map) continue;
+    const before = errors.length;
+    const cells = map.width * map.height;
+
+    // tile layers: known names, once each, the map's size
+    const names = map.layers.map((l) => l.name);
+    for (const n of new Set(names)) if (names.filter((x) => x === n).length > 1) err(file, `layer "${n}" appears twice`);
+    for (const need of ['ground', 'collision', 'objects']) if (!names.includes(need as never)) err(file, `needs a layer "${need}"`);
+    const tileLayers = map.layers.filter((l): l is TiledTileLayer => l.type === 'tilelayer');
+    for (const l of tileLayers) {
+      if (l.width !== map.width || l.height !== map.height) err(file, `layer "${l.name}" is ${l.width}x${l.height}, the map ${map.width}x${map.height}`);
+      if (l.data.length !== cells) err(file, `layer "${l.name}" has ${l.data.length} tiles, the map needs ${cells}`);
+    }
+    if (tileLayer(map, 'collision')?.visible !== false) err(file, 'the collision layer must be hidden (visible: false)');
+
+    // tilesets: ranges in order, the image where it says, the size it says, listed in ASSETS.md
+    const ranges: { first: number; last: number; name: string }[] = [];
+    for (const ts of map.tilesets) {
+      const sp = ts.spacing ?? 0;
+      const cols = Math.floor((ts.imagewidth + sp) / (16 + sp));
+      const rows = Math.floor((ts.imageheight + sp) / (16 + sp));
+      if (ts.columns !== cols || ts.tilecount !== cols * rows) err(file, `tileset "${ts.name}": a ${ts.imagewidth}x${ts.imageheight} image with spacing ${sp} has ${cols} columns and ${cols * rows} tiles`);
+      for (const t of ts.tiles ?? []) if (t.id >= ts.tilecount) err(file, `tileset "${ts.name}": tile ${t.id} does not exist`);
+      const prev = ranges[ranges.length - 1];
+      if (prev && ts.firstgid <= prev.last) err(file, `tileset "${ts.name}" overlaps "${prev.name}" (firstgid ${ts.firstgid})`);
+      ranges.push({ first: ts.firstgid, last: ts.firstgid + ts.tilecount - 1, name: ts.name });
+      if (ranges.filter((r) => r.name === ts.name).length > 1) err(file, `tileset name "${ts.name}" is used twice`);
+      const logical = posix.normalize(posix.join('content/maps', ts.image));
+      if (logical.startsWith('../') || posix.isAbsolute(ts.image)) {
+        err(file, `tileset "${ts.name}": image ${ts.image} lies outside the repository`);
+        continue;
+      }
+      if (logical.startsWith('content/')) {
+        err(file, `tileset "${ts.name}": tileset images live outside content/ (in assets/) with a row in ASSETS.md`);
+        continue;
+      }
+      const img = join(root, ...logical.split('/'));
+      if (!existsSync(img)) {
+        err(file, `tileset "${ts.name}": image ${logical} not found`);
+        continue;
+      }
+      const size = pngSize(readFileSync(img));
+      if (!size) err(file, `tileset "${ts.name}": ${logical} is not a PNG`);
+      else if (size.w !== ts.imagewidth || size.h !== ts.imageheight) err(file, `tileset "${ts.name}": ${logical} is ${size.w}x${size.h}, the map says ${ts.imagewidth}x${ts.imageheight}`);
+      const row = assets.get(logical);
+      if (!row || !row[1] || !row[3]) err(file, `tileset "${ts.name}": ${logical} has no row with a source and a licence in ASSETS.md`);
+      else if (!/^CC0\b/.test(row[3])) err(file, `tileset "${ts.name}": ${logical} is licensed "${row[3]}" in ASSETS.md; tiles must be CC0`);
+      tilesets.push({ map: id, name: ts.name, file: img });
+    }
+
+    // every tile id belongs to a tileset; the collision layer only uses colliding tiles
+    const known = (gid: number) => ranges.some((r) => gid >= r.first && gid <= r.last);
+    for (const l of tileLayers) {
+      const bad = l.data.findIndex((g) => g !== 0 && !known(g & GID_MASK));
+      if (bad >= 0) err(file, `layer "${l.name}": tile id ${l.data[bad]! & GID_MASK} at (${bad % map.width},${Math.floor(bad / map.width)}) is in no tileset`);
+    }
+    const collides = new Set<number>();
+    for (const ts of map.tilesets) for (const t of ts.tiles ?? []) if (t.properties.some((x) => x.name === 'collides' && x.value === true)) collides.add(ts.firstgid + t.id);
+    const col = tileLayer(map, 'collision');
+    const loose = col ? col.data.findIndex((g) => g !== 0 && !collides.has(g & GID_MASK)) : -1;
+    if (col && loose >= 0) err(file, `collision layer: the tile at (${loose % map.width},${Math.floor(loose / map.width)}) has no property collides: true`);
+
+    // objects: unique names, inside the map, the right properties per type
+    const objects = map.layers.flatMap((l) => (l.type === 'objectgroup' ? l.objects : []));
+    const objNames = objects.map((o) => o.name);
+    for (const n of new Set(objNames)) if (objNames.filter((x) => x === n).length > 1) err(file, `object name "${n}" is used twice`);
+    for (const o of objects) {
+      const at = objectTile(o);
+      if (at.x >= map.width || at.y >= map.height) err(file, `object "${o.name}" lies outside the map`);
+      const props = new Map((o.properties ?? []).map((x) => [x.name, x.value]));
+      const allowed = o.type === 'spawn' ? ['facing'] : o.type === 'door' ? ['to_map', 'to_point', 'facing'] : [];
+      for (const k of props.keys()) if (!allowed.includes(k)) err(file, `object "${o.name}" (${o.type}) may not have the property "${k}"`);
+      if (props.has('facing') && !isFacing(props.get('facing'))) err(file, `object "${o.name}": facing must be up, down, left or right`);
+      if (o.type === 'door' && (!props.has('to_map') || !props.has('to_point'))) err(file, `door "${o.name}" needs the properties to_map and to_point`);
+    }
+    if (errors.length === before) {
+      maps.push({ id, map });
+      worlds.set(id, readMap(id, map));
+    }
+  }
+
+  // doors lead to a spawn point in a map that exists; spawn points and doors stand on open ground
+  for (const [id, w] of worlds) {
+    const file = join(mapsDir, `${id}.json`);
+    for (const o of w.objects) {
+      const open = !w.solid[o.y * w.width + o.x];
+      if ((o.type === 'spawn' || o.type === 'door') && !open) err(file, `${o.type} "${o.name}" stands on a collision tile`);
+      if (o.type !== 'door') continue;
+      const target = worlds.get(o.props.to_map ?? '');
+      if (!target) {
+        if (!mapIds.includes(o.props.to_map ?? '')) err(file, `door "${o.name}" leads to unknown map "${o.props.to_map ?? ''}"`);
+        continue;
+      }
+      const point = target.objects.find((x) => x.name === o.props.to_point);
+      if (!point || point.type !== 'spawn') err(file, `door "${o.name}" leads to "${o.props.to_point ?? ''}", which is no spawn point in ${target.id}`);
+    }
+  }
+  const playerStarts = [...worlds.values()].flatMap((w) => w.objects.filter((o) => o.name === 'player-start'));
+  if (mapIds.length > 0 && worlds.size === mapIds.length && playerStarts.length !== 1) errors.push(`content/maps: exactly one map needs a spawn point "player-start" (found ${playerStarts.length})`);
+
   // ---- conditions
   const checkExpr = (file: string, where: string, src: string, reg: Registry): void => {
     try {
@@ -317,11 +469,16 @@ export function loadContent(contentDir: string, schemaDir: string): LoadResult {
     return file;
   };
 
-  const maps = existsSync(join(contentDir, 'maps'))
-    ? new Set(readdirSync(join(contentDir, 'maps')).map((n) => n.replace(/\.json$/, '')))
-    : null;
   const checkMap = (file: string, map: string) => {
-    if (maps && !maps.has(map)) err(file, `unknown map "${map}"`);
+    if (!mapIds.includes(map)) err(file, `unknown map "${map}"`);
+  };
+  /** The object `name` in `map` must exist and have one of the types. Skipped when the map itself is broken. */
+  const checkObject = (file: string, what: string, map: string, name: string, types: readonly string[]) => {
+    const w = worlds.get(map);
+    if (!w) return;
+    const o = w.objects.find((x) => x.name === name);
+    if (!o) err(file, `${what}: map ${map} has no object "${name}"`);
+    else if (!types.includes(o.type)) err(file, `${what}: "${name}" in ${map} is a ${o.type}, expected ${types.join(' or ')}`);
   };
 
   // ---- npcs and quests
@@ -338,6 +495,8 @@ export function loadContent(contentDir: string, schemaDir: string): LoadResult {
       progressExprs.push({ file, src: d.when });
     });
     checkMap(file, npc.spawn.map);
+    checkObject(file, 'spawn', npc.spawn.map, npc.spawn.slot, ['spawn']);
+    if (!isNpcSlot(npc.spawn.slot)) err(file, `spawn.slot "${npc.spawn.slot}" must be npc-<n>, cameo-<n> or gate-<town>`);
     if (DENYLIST.test(npc.author.name)) err(file, 'author name uses a name we must not use (IP rule, AGENTS.md)');
     const sprite = checkSprite(dir, npc);
     if (sprite) sprites.push(questId ? { owner: 'quest', id: questId, file: sprite } : { owner: 'npc', id: npc.id, file: sprite });
@@ -472,6 +631,8 @@ export function loadContent(contentDir: string, schemaDir: string): LoadResult {
     if (roadmap && !node) err(qFile, `unknown roadmap_node "${quest.roadmap_node}"`);
     if (node && node.branch !== quest.branch) err(qFile, `roadmap_node "${node.id}" is on branch ${node.branch}, the quest on ${quest.branch}`);
     checkMap(qFile, quest.start.map);
+    // a terminal quest starts at a terminal; a battle at a battle object or where its giver stands
+    checkObject(qFile, 'start', quest.start.map, quest.start.object, hasScenario ? ['terminal'] : ['battle', 'spawn']);
 
     if (scenario) {
       // scenario: paths, references, conditions
@@ -592,7 +753,41 @@ export function loadContent(contentDir: string, schemaDir: string): LoadResult {
     if (!npcIds.includes(q.quest.giver)) errors.push(`content/quests/${q.id}/quest.yaml: giver "${q.quest.giver}" is not an npc`);
   }
 
-  if (errors.length > 0 || !global || !roadmap || !shop) return { bundle: null, errors, sprites };
+  // ---- maps against content: every terminal and battle object starts a quest, gates exist, and
+  // everything can be reached on foot from where the player arrives
+  const questStarts = new Set(quests.map((q) => `${q.quest.start.map}/${q.quest.start.object}`));
+  for (const [id, w] of worlds) {
+    const file = join(mapsDir, `${id}.json`);
+    for (const o of w.objects) {
+      if ((o.type === 'terminal' || o.type === 'battle') && !questStarts.has(`${id}/${o.name}`)) {
+        err(file, `${o.type} "${o.name}" starts no quest (no quest.yaml has start: {map: ${id}, object: ${o.name}})`);
+      }
+    }
+    // where the player can appear: player-start and every spawn point a door leads to
+    const arrivals = new Set<string>(w.objects.filter((o) => o.name === 'player-start').map((o) => o.name));
+    for (const other of worlds.values()) for (const d of other.objects) if (d.type === 'door' && d.props.to_map === id && d.props.to_point) arrivals.add(d.props.to_point);
+    const startTiles = w.objects.filter((o) => arrivals.has(o.name));
+    if (startTiles.length === 0) {
+      err(file, 'the player can never get here: no player-start and no door leads to this map');
+      continue;
+    }
+    const occupied = new Set(w.objects.filter((o) => isNpcSlot(o.name)).map((o) => `${o.x},${o.y}`));
+    const seen = reachable(w, startTiles, occupied);
+    const at = (x: number, y: number) => x >= 0 && y >= 0 && x < w.width && y < w.height && seen[y * w.width + x] === 1;
+    for (const o of w.objects) {
+      const standOn = (o.type === 'spawn' && !isNpcSlot(o.name)) || o.type === 'door';
+      const ok = standOn ? at(o.x, o.y) : at(o.x, o.y - 1) || at(o.x, o.y + 1) || at(o.x - 1, o.y) || at(o.x + 1, o.y);
+      if (!ok) err(file, `${o.type} "${o.name}" at (${o.x},${o.y}) cannot be reached on foot`);
+    }
+  }
+  for (const q of quests) {
+    const t = q.battle?.trigger;
+    if (t?.kind === 'gate' && worlds.size > 0 && ![...worlds.values()].some((w) => w.objects.some((o) => o.name === `gate-${t.town}`))) {
+      errors.push(`content/quests/${q.id}/battle.yaml: no map has the object "gate-${t.town}" for this gate`);
+    }
+  }
+
+  if (errors.length > 0 || !global || !roadmap || !shop) return { bundle: null, errors, sprites, tilesets };
 
   // ---- credits, from author fields
   const credits = new Map<string, Credit>();
@@ -608,8 +803,9 @@ export function loadContent(contentDir: string, schemaDir: string): LoadResult {
   for (const l of LOCALES) merged[l] = { ...global[l], ...npcLocales[l], ...questLocales[l] };
 
   return {
-    bundle: { locales: merged, quests, npcs: worldNpcs, roadmap, shop, credits: [...credits.values()] },
+    bundle: { locales: merged, quests, npcs: worldNpcs, roadmap, shop, credits: [...credits.values()], maps },
     errors,
     sprites,
+    tilesets,
   };
 }

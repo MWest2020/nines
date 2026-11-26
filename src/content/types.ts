@@ -235,7 +235,102 @@ export interface ContentBundle {
   roadmap: RoadmapSpec;
   shop: ShopSpec;
   credits: Credit[];
+  /** Tiled maps from content/maps (see MapEntry below). */
+  maps: MapEntry[];
 }
 
 export const questKey = (questId: string, key: string): string => `quest.${questId}.${key}`;
 export const npcKey = (npcId: string, key: string): string => `npc.${npcId}.${key}`;
+
+// ---- maps (schemas/map.schema.json): Tiled maps saved as JSON, tilesets embedded
+
+export type TileLayerName = 'ground' | 'detail' | 'props' | 'above' | 'collision';
+export type MapObjectType = 'spawn' | 'terminal' | 'battle' | 'door' | 'shop';
+
+export interface TiledProperty {
+  name: string;
+  type: string;
+  value: string | boolean;
+}
+
+export interface TiledObject {
+  id?: number;
+  name: string;
+  type: MapObjectType;
+  x: number;
+  y: number;
+  width?: number;
+  height?: number;
+  rotation?: number;
+  visible?: boolean;
+  point?: boolean;
+  properties?: TiledProperty[];
+}
+
+export interface TiledTileLayer {
+  type: 'tilelayer';
+  name: TileLayerName;
+  id?: number;
+  width: number;
+  height: number;
+  opacity?: number;
+  visible?: boolean;
+  x?: number;
+  y?: number;
+  data: number[];
+}
+
+export interface TiledObjectLayer {
+  type: 'objectgroup';
+  name: 'objects';
+  id?: number;
+  draworder?: 'topdown' | 'index';
+  opacity?: number;
+  visible?: boolean;
+  x?: number;
+  y?: number;
+  objects: TiledObject[];
+}
+
+export interface TiledTileset {
+  firstgid: number;
+  name: string;
+  /** relative to the map file in content/maps/ */
+  image: string;
+  imagewidth: number;
+  imageheight: number;
+  tilewidth: 16;
+  tileheight: 16;
+  columns: number;
+  tilecount: number;
+  margin?: 0;
+  spacing?: 0 | 1;
+  tiles?: { id: number; properties: TiledProperty[] }[];
+}
+
+export interface TiledMap {
+  type: 'map';
+  version?: string;
+  tiledversion?: string;
+  orientation: 'orthogonal';
+  renderorder?: 'right-down';
+  infinite: false;
+  compressionlevel?: number;
+  width: number;
+  height: number;
+  tilewidth: 16;
+  tileheight: 16;
+  nextlayerid?: number;
+  nextobjectid?: number;
+  backgroundcolor?: string;
+  layers: (TiledTileLayer | TiledObjectLayer)[];
+  tilesets: TiledTileset[];
+}
+
+export interface MapEntry {
+  /** the file name without .json */
+  id: string;
+  map: TiledMap;
+  /** Set by the build: tileset name -> a same-origin URL in dist/. */
+  images?: Record<string, string>;
+}

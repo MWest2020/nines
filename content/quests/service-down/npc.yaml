@@ -3,6 +3,7 @@ id: bas
 author: {name: "Nines team"}
 name: npc.name
 tint: "#58a058"
+sprite: {file: bas.png, frame: 16, source: "own work, Nines team: tools/art/draw-art.mjs", license: CC0-1.0}
 spawn: {map: junior-village, slot: npc-3, facing: up}
 dialogue:
   - when: 'quest("service-down") == "done"'

@@ -1,9 +1,11 @@
-// Placeholder scene for the phase 1 skeleton. The MVP build replaces it with the village map,
-// the player, NPCs and the terminal overlay (see ARCHITECTURE.md, Modules).
+// Loads the maps' tilesets and the character sheets (all same-origin files in dist/), prepares
+// the placeholder NPC sheets and the walk animations, then starts the world where the save left
+// the player.
 
 import Phaser from 'phaser';
 import content from 'virtual:nines-content';
 import { getGameApi } from './api';
+import { createSprites, preloadSprites } from './world/sprites';
 
 export const VIEW = { width: 240, height: 160 } as const;
 
@@ -12,20 +14,18 @@ export class BootScene extends Phaser.Scene {
     super('boot');
   }
 
+  preload(): void {
+    preloadSprites(this, content);
+  }
+
   create(): void {
-    const api = getGameApi(this);
-    this.cameras.main.setBackgroundColor('#183048');
-    const style = { fontFamily: 'monospace', fontSize: '8px', color: '#f8f0d8', align: 'center' } as const;
-    const title = this.add.text(VIEW.width / 2, 56, '', { ...style, fontSize: '16px' }).setOrigin(0.5);
-    const subtitle = this.add.text(VIEW.width / 2, 84, '', style).setOrigin(0.5);
-    const skeleton = this.add.text(VIEW.width / 2, 108, '', { ...style, color: '#88c070' }).setOrigin(0.5);
-    const draw = () => {
-      title.setText(api.t('ui.title'));
-      subtitle.setText(api.t('ui.subtitle'));
-      skeleton.setText(api.t('ui.skeleton', { quests: content.quests.length }));
-    };
-    draw();
-    const off = api.store.subscribe((_g, change) => change.kind === 'locale' && draw());
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, off);
+    createSprites(this, content);
+    for (const m of content.maps) {
+      this.cache.tilemap.add(`map:${m.id}`, { format: Phaser.Tilemaps.Formats.TILED_JSON, data: m.map });
+    }
+    // Back where the save says, once the player has entered a map (positions are only saved
+    // on arrival, so they are always a spawn point or a door's landing).
+    const { game } = getGameApi(this).store;
+    this.scene.start('world', game.ticks > 0 ? { ...game.player } : {});
   }
 }

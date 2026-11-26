@@ -46,27 +46,35 @@ src/
     game.ts         money, XP, quest completion, shop purchases, the Career Trail's state
     persist.ts      the save slot over a key-value storage; never writes over a newer save
     talk.ts         what an NPC says, from the save
+  world/          the map as a grid (pure)
+    grid.ts         collision, objects, facing, steps, reachability; the validator uses it too
   content/
     types.ts        TypeScript mirror of the schemas; the bundle's shape
   game/           Phaser and DOM (thin)
-    BootScene.ts    placeholder in phase 1
+    BootScene.ts    loads tilesets and sheets, tints placeholder NPCs, starts the world
+    WorldScene.ts   the map, grid movement, NPCs, doors, talk and use
+    world/          events.ts (what the world emits), sprites.ts, PlaceholderDialogue.ts
     store.ts        GameStore: the live GameState behind core/game.ts, saves, change events
     api.ts          GameApi: what the world, terminal and battle code call (see below)
+    bridge.ts       answers the world's talk, use and enter events through the GameApi
     storage.ts      localStorage, or memory when the browser blocks it
     ui/             HudScene + DialogueBox, TrailScene, ShopScene, CreditsScene, the pixel font
-    (MVP) WorldScene, TerminalOverlay (DOM + xterm.js), BattleOverlay (DOM)
+    (MVP) TerminalOverlay (DOM + xterm.js), BattleOverlay (DOM)
+assets/           tilesets and sheets outside content (Kenney packs, own art), each in ASSETS.md
 tools/
   content/load.ts         load + validate + bundle /content (Node, build time only)
   vite-plugin-content.ts  exposes the bundle as `virtual:nines-content`
+  art/draw-art.mjs        draws our own sprites and tiles (reproducible; --check in npm test)
+  maps/build-maps.mjs     wrote the first versions of the Tiled maps from text layouts
 schemas/          JSON Schemas for every content file
 content/          the game's data
 tests/            Vitest: rules, sim, quests played end to end, content, guards
 ```
 
-Dependencies point one way: `game → battle, core, sim, rules, content/types`; `sim → rules`;
-`battle → core, rules`; `tools → battle, sim, rules` (to validate content with the same code
+Dependencies point one way: `game → battle, core, sim, rules, world, content/types`; `sim → rules`;
+`battle → core, rules`; `tools → battle, sim, rules, world` (to validate content with the same code
 the game runs). Nothing in
-`rules`, `sim` or `core` imports Phaser or touches `window`, `document` or `localStorage`
+`rules`, `sim`, `core`, `battle` or `world` imports Phaser or touches `window`, `document` or `localStorage`
 directly (`save.ts` takes a storage object).
 
 ## The terminal simulator
@@ -346,7 +354,7 @@ content/
   locales/en.yaml, nl.yaml        UI, roadmap, shop and terminal strings
   roadmap.yaml                    towns, branches, nodes (the Career Trail)
   shop.yaml                       homelab items
-  maps/<id>.json                  Tiled maps (allowed once the MVP build adds their checks)
+  maps/<id>.json                  Tiled maps (JSON, tilesets embedded; schemas/map.schema.json)
   npcs/<id>/                      world NPCs that give no quest (optional)
     npc.yaml, <sprite>.png, locales/en.yaml, nl.yaml
   quests/<id>/                    one quest = one folder = one cameo pull request
@@ -455,9 +463,25 @@ file and then what a schema cannot express:
   are read as Latin before the check. The phrases are broad on purpose ("wild" near "appear"
   is refused even in ordinary prose); rephrase when it trips.
 
-Maps join the allowlist in the MVP build together with their checks: tilesets embedded in the
-map JSON, image paths relative and inside the repository, every image listed in ASSETS.md, the
-object layer's names (`player-start`, `npc-n`, `cameo-n`, interactables) present.
+Maps (`content/maps/<id>.json`, schema `map`) are checked too:
+
+- Tiled JSON, orthogonal, finite, 16 px tiles, tile data as plain arrays (no base64, no
+  compression), tilesets embedded (no `.tsx`), one image each;
+- tile layers from `ground`, `detail`, `props`, `above`, `collision`, each once and the map's
+  size; `ground`, `collision` and the object layer `objects` are required; the collision layer
+  is hidden and holds only tiles with `collides: true`; every tile id belongs to a tileset;
+- tileset images: relative to the map, inside the repository but outside `content/`, real PNGs
+  of the size the map says, columns and tile count matching, each with a row in ASSETS.md;
+- objects: unique names; types `spawn`, `terminal`, `battle`, `door`, `shop`; only `facing` on
+  spawns and `to_map`, `to_point` (and `facing`) on doors; spawns and doors on open ground; a
+  door leads to a spawn point of a map that exists; exactly one map has `player-start`;
+- against the content: every NPC's `spawn.slot` is a spawn point of its map; a quest's
+  `start.object` exists (a `terminal` for a terminal quest, a `battle` or the giver's spawn for
+  a battle); every terminal and battle object starts a quest; a gate battle's `gate-<town>`
+  exists;
+- on foot: from `player-start` and every door's arrival point, every spawn and door can be
+  walked to, and every NPC slot, terminal, battle and shop has a reachable neighbour (NPC slots
+  count as occupied).
 
 **Content sprites and ASSETS.md.** A guest sprite records its source and licence in its
 `npc.yaml`, not in ASSETS.md, so a cameo stays one folder; the credits screen lists it.
@@ -573,12 +597,26 @@ the one-off event bonuses already paid (`<quest>/<event>`).
 
 ## The Phaser layer (MVP build)
 
-- **WorldScene**: a Tiled map with layers `ground`, `detail`, `above` (drawn over the player)
-  and `collision` (tiles with property `collides: true`), plus an object layer with named points:
-  `player-start`, `npc-1..n`, `cameo-1..n` (free slots for guest NPCs), interactables (`type:
-  terminal`, named as a quest's `start.object`), doors (`type: door`, properties `to_map`,
-  `to_point`) and the shop counter (`type: shop`). Tilesets are embedded in the map JSON. Grid
-  movement on 16 px tiles, four directions.
+- **WorldScene**: a Tiled map with layers `ground`, `detail`, `props` (under the characters),
+  `above` (drawn over them: tree crowns, lamp heads) and `collision` (hidden; tiles with property
+  `collides: true`), plus an object layer `objects` with named objects: spawn points
+  (`type: spawn`: `player-start`, `npc-1..n`, `cameo-1..n` as free slots for guest NPCs,
+  `gate-<town>`, and where doors arrive), terminals (`type: terminal`, named as a terminal
+  quest's `start.object`), battle starts (`type: battle`), doors (`type: door`, properties
+  `to_map`, `to_point`) and the shop counter (`type: shop`). Tilesets are embedded in the map
+  JSON. Grid movement on 16 px tiles, four directions: a tap turns, holding walks, one tile per
+  250 ms; NPCs block their tile. Keyboard: arrows or WASD, Enter or Space to use or talk, Escape
+  to close. Stepping onto a door fades to its map. The rack LEDs blink by swapping two tiles.
+- **World events** (`src/game/world/events.ts`, on `game.events`): `world:talk` (an NPC, its
+  quests), `world:use` (a terminal, battle or shop object and its quest) and `world:enter` (map
+  and position, for saves). Talk and use hand control over until the listener calls `done()`.
+  `src/game/bridge.ts` answers them through the GameApi (the real dialogue box, the shop,
+  saving the position). Only when nobody listens, as in a scene test, does the world fall back
+  to its own placeholder dialogue box. The world reads strings (`api.t`, so the NL/EN toggle
+  reaches it) and progress (`api.store.game`) from the GameApi, does not move or act while
+  `api.isBusy()`, and reads Enter, Space and Escape through `freshKeys`. `WorldScene` takes a
+  `WorldStart` (`map`, `x`, `y`, `facing`, or a spawn `point`); a saved spot that is no longer
+  open ground falls back to `player-start`.
 - **HudScene**: money, menu, roadmap button, the dialogue box, the on-screen controls on touch
   devices.
 - **TerminalOverlay**: DOM, not canvas, so text is crisp and the Android soft keyboard works.
