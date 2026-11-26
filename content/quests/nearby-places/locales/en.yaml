@@ -5,7 +5,7 @@ offer.2: "One design question, played straight: 'cafés near me'. Will you be my
 active.1: "The whiteboard is ready when you are. Ask before you draw; I'll be taking notes."
 done.1: "My first real interview is on Monday. I'm stealing your answer about the neighbour cells."
 attacker: "Ravi · backend developer"
-intro.1: "Whiteboard interview. Topic: nearby places search."
+intro.1: "Whiteboard interview · Topic: nearby places search"
 intro.2: "Ravi straightens his notes and tries to look stern. \"A map app. The user taps 'cafés near me'. Design the search behind that button.\""
 clarify.prompt.1: "\"You may ask me two questions before you draw. Which two?\""
 clarify.radius.text: "\"Everything within a radius, like 1 km, or the k nearest, however far away they are?\""

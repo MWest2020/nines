@@ -5,7 +5,7 @@ offer.2: "Today: a URL shortener. A small product with a lot of decisions in it.
 active.1: "The marker is yours. Numbers first, then boxes."
 done.1: "A solid review. You weighed every choice against what it costs; that is the Medior habit."
 attacker: "Ingrid · staff engineer"
-intro.1: "Whiteboard interview. Topic: a URL shortener."
+intro.1: "Whiteboard interview · Topic: a URL shortener"
 intro.2: "Ingrid writes s.example/aB3x9Kq on the board. \"A long link goes in, a short one comes out, and the short one redirects to the long one. Design the service.\""
 clarify.prompt.1: "\"Two questions before you draw any boxes. Which two?\""
 clarify.volume.text: "\"How many links are made a day, and how often is each one clicked?\""

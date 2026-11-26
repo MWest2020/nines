@@ -5,7 +5,7 @@ offer.2: "Eén ontwerpvraag, helemaal serieus: 'cafés in de buurt'. Wil jij mij
 active.1: "Het whiteboard staat klaar. Eerst vragen, dan tekenen; ik maak aantekeningen."
 done.1: "Maandag heb ik mijn eerste echte gesprek. Jouw antwoord over de buurcellen pik ik."
 attacker: "Ravi · backend-ontwikkelaar"
-intro.1: "Whiteboardgesprek. Onderwerp: plekken in de buurt zoeken."
+intro.1: "Whiteboardgesprek · Onderwerp: plekken in de buurt zoeken"
 intro.2: "Ravi legt zijn aantekeningen recht en probeert streng te kijken. \"Een kaart-app. De gebruiker tikt op 'cafés in de buurt'. Ontwerp de zoekfunctie achter die knop.\""
 clarify.prompt.1: "\"Je mag me twee vragen stellen voordat je gaat tekenen. Welke twee?\""
 clarify.radius.text: "\"Alles binnen een straal, zeg 1 km, of de k dichtstbijzijnde, hoe ver weg die ook liggen?\""
