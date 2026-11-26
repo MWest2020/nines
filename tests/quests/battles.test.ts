@@ -125,6 +125,49 @@ describe('the battles in content', () => {
       expect(wins, b.id).toBeLessThan(10);
     }
   });
+  it('do not give the answer away by length: the longest card is rarely the best', () => {
+    let rounds = 0;
+    let longestIsBest = 0;
+    const { locales } = content();
+    for (const b of battles()) {
+      for (const r of b.spec.rounds) {
+        if (r.type === 'order') continue;
+        rounds++;
+        const len = (o: { text: string }) => locales.en[questKey(b.id, o.text)]!.length;
+        const longest = [...r.options].sort((x, y) => len(y) - len(x))[0]!;
+        if (longest.grade === 'best') longestIsBest++;
+      }
+    }
+    expect(longestIsBest / rounds).toBeLessThanOrEqual(0.5);
+  });
+  it('do not give the answer away by length rank either: no rank holds the best in most rounds', () => {
+    const { locales } = content();
+    const ranks = new Map<number, number>();
+    let rounds = 0;
+    for (const b of battles()) {
+      for (const r of b.spec.rounds) {
+        if (r.type === 'order' || r.type === 'clarify') continue;
+        const len = (o: { text: string }) => locales.en[questKey(b.id, o.text)]!.length;
+        const rank = [...r.options].sort((x, y) => len(x) - len(y)).findIndex((o) => o.grade === 'best');
+        ranks.set(rank, (ranks.get(rank) ?? 0) + 1);
+        rounds++;
+      }
+    }
+    for (const [rank, n] of ranks) expect(n / rounds, `best is length rank ${rank + 1}`).toBeLessThanOrEqual(0.5);
+  });
+  it('are lost by a player who always picks the longest or the shortest cards', () => {
+    const { locales } = content();
+    for (const b of battles()) {
+      for (const dir of [1, -1]) {
+        const pick = (r: BattleRound) => {
+          if (r.type === 'order') return worstAnswer(r);
+          const len = (id: string) => locales.en[questKey(b.id, r.options.find((o) => o.id === id)!.text)]!.length * dir;
+          return ids(r).sort((x, y) => len(y) - len(x)).slice(0, pickOf(r));
+        };
+        expect(play(b.id, b.spec, pick).status, `${b.id} ${dir > 0 ? 'longest' : 'shortest'}`).toBe('lost');
+      }
+    }
+  });
   it('give hints on a retry', () => {
     for (const b of battles()) {
       const c = compileBattle(b.id, b.spec);

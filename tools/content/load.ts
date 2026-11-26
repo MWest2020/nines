@@ -114,15 +114,34 @@ const SCHEMA_BASE = 'https://nines.invalid/schemas/';
  * catchphrase, its effectiveness and fainting lines, its town leaders and its battle menu.
  * Battles say "PAGER: ..." or "Incoming: ..." instead (DESIGN.md, Battles).
  */
-export const DENYLIST = new RegExp(
+const DENIED = new RegExp(
   [
     'pok[eé]\\s?mon', 'pikachu', 'pok[eé]\\s?dex', 'pok[eé]\\s?ball', 'nintendo', 'game\\s?freak', 'game\\s?boy',
-    '\\bwild\\b[^.!?\\n]{0,40}\\bappear', '\\bwilde?\\b[^.!?\\n]{0,40}\\bversch(ijnt|een|enen)',
-    'super[\\s-]?effecti(ve|ef)', 'not very effective', 'niet erg effectief', '\\bfainted\\b', 'flauwgevallen',
-    '\\bgym\\s?leader', '\\belite\\s?four\\b', '\\btrainer\\s+battle', '\\bfight\\b[^\\n]{0,40}\\bbag\\b[^\\n]{0,40}\\brun\\b',
+    '\\bwilde?\\b[^!?\\n]{0,40}\\b(appear|versch(ijnt|een|enen))', '\\bversch(ijnt|een|enen)\\b[^!?\\n]{0,20}\\bwilde?\\b',
+    "\\bit'?s\\s+(super[\\s-]?effective|not\\s+very\\s+effective)", '\\bhet\\s+is\\s+(super[\\s-]?effectief|niet\\s+erg\\s+effectief)',
+    '\\bfainted\\b', 'flauwgevallen', '\\bgym\\s?leader', '\\belite\\s?four\\b', '\\btrainer\\s+battle',
+    '\\bfight\\b[^\\n]{0,40}\\bbag\\b[^\\n]{0,40}\\brun\\b',
   ].join('|'),
   'i',
 );
+
+/** Look-alike letters (Cyrillic, Greek) that would slip a name past the denylist, as Latin. */
+const LOOKALIKES: Record<string, string> = {
+  а: 'a', е: 'e', о: 'o', р: 'p', с: 'c', у: 'y', х: 'x', і: 'i', ј: 'j', ѕ: 's', ԁ: 'd', ӏ: 'l', к: 'k', м: 'm', т: 't', н: 'h', в: 'b',
+  А: 'A', Е: 'E', О: 'O', Р: 'P', С: 'C', У: 'Y', Х: 'X', І: 'I', Ј: 'J', Ѕ: 'S', К: 'K', М: 'M', Т: 'T', Н: 'H', В: 'B',
+  α: 'a', ε: 'e', ι: 'i', ο: 'o', ρ: 'p', κ: 'k', ν: 'v', τ: 't', Α: 'A', Ε: 'E', Ι: 'I', Ο: 'O', Ρ: 'P', Κ: 'K', Ν: 'N', Τ: 'T',
+};
+
+/** True when text uses a denied name or phrase, also when hidden by invisible or look-alike characters. */
+export const DENYLIST = {
+  test(text: string): boolean {
+    const plain = text
+      .normalize('NFKC')
+      .replace(/[\u00AD\u200B-\u200F\u2060-\u2064\uFEFF]/g, '')
+      .replace(/[\u0370-\u03FF\u0400-\u04FF\u0500-\u052F]/g, (c) => LOOKALIKES[c] ?? c);
+    return DENIED.test(plain);
+  },
+};
 
 const dirnameOf = (p: string): string => (p.lastIndexOf('/') <= 0 ? '/' : p.slice(0, p.lastIndexOf('/')));
 
@@ -153,7 +172,7 @@ export function loadContent(contentDir: string, schemaDir: string): LoadResult {
       return null;
     }
     const raw = readFileSync(file, 'utf8');
-    if (DENYLIST.test(raw)) err(file, 'mentions a name we must not use (IP rule, AGENTS.md)');
+    if (DENYLIST.test(raw)) err(file, 'uses a name or phrase we must not use (IP rule, AGENTS.md)');
     const strings: string[] = [];
     const collect = (v: unknown): void => {
       if (typeof v === 'string') strings.push(v);
@@ -192,7 +211,7 @@ export function loadContent(contentDir: string, schemaDir: string): LoadResult {
   const contentFiles = walk(contentDir);
   for (const file of contentFiles) {
     const r = relative(contentDir, file).split('\\').join('/');
-    if (DENYLIST.test(r)) err(file, 'the path mentions a name we must not use (IP rule, AGENTS.md)');
+    if (DENYLIST.test(r)) err(file, 'the path uses a name or phrase we must not use (IP rule, AGENTS.md)');
     if (!allowed.some((re) => re.test(r))) err(file, 'unexpected file: content holds YAML, PNG sprites and Tiled JSON maps only');
   }
 
@@ -215,7 +234,7 @@ export function loadContent(contentDir: string, schemaDir: string): LoadResult {
     }
     for (const l of LOCALES) {
       for (const [k, v] of Object.entries(maps[l])) {
-        if (DENYLIST.test(v)) err(join(dir, `${l}.yaml`), `"${k}" mentions a name we must not use (IP rule, AGENTS.md)`);
+        if (DENYLIST.test(v)) err(join(dir, `${l}.yaml`), `"${k}" uses a name or phrase we must not use (IP rule, AGENTS.md)`);
       }
     }
     return maps;
@@ -319,7 +338,7 @@ export function loadContent(contentDir: string, schemaDir: string): LoadResult {
       progressExprs.push({ file, src: d.when });
     });
     checkMap(file, npc.spawn.map);
-    if (DENYLIST.test(npc.author.name)) err(file, 'author name mentions a name we must not use');
+    if (DENYLIST.test(npc.author.name)) err(file, 'author name uses a name we must not use (IP rule, AGENTS.md)');
     const sprite = checkSprite(dir, npc);
     if (sprite) sprites.push(questId ? { owner: 'quest', id: questId, file: sprite } : { owner: 'npc', id: npc.id, file: sprite });
     npcs.push({ npc, dir, ...(questId ? { questId } : {}) });
@@ -443,7 +462,7 @@ export function loadContent(contentDir: string, schemaDir: string): LoadResult {
     };
 
     if (quest.id !== id) err(qFile, `id "${quest.id}" must equal the folder name "${id}"`);
-    if (DENYLIST.test(quest.author.name)) err(qFile, 'author name mentions a name we must not use');
+    if (DENYLIST.test(quest.author.name)) err(qFile, 'author name uses a name we must not use (IP rule, AGENTS.md)');
     [quest.title, quest.summary, ...quest.dialogue.offer, ...quest.dialogue.active, ...quest.dialogue.done].forEach((k) => need(qFile, k));
     for (const r of quest.requires) {
       if (r === id) err(qFile, 'a quest cannot require itself');

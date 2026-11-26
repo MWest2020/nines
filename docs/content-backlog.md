@@ -23,7 +23,8 @@ and latitude and write them in base32; a longer shared prefix means a smaller sh
 characters is about 4.9 × 4.9 km, 6 about 1.2 × 0.6 km at the equator), so a plain string index
 answers "which places are in this cell". The trap for a `flaw` round: two points a few metres
 apart can sit in different cells with no common prefix, so the query must cover the user's
-cell **and its 8 neighbours**, at a precision whose cells are about the search radius. **Quadtree**:
+cell **and its 8 neighbours**, at a precision whose cells are at least the search radius in
+both directions (5 characters for 1 km: 6-character cells are only 0.6 km north to south). **Quadtree**:
 split a square into four whenever it holds more than K places, so dense city centres get small
 cells and the countryside large ones; usually held in memory on each search server and rebuilt
 or patched as places change. The `tradeoff` is debatable and the explanation must say so:

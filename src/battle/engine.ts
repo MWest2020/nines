@@ -71,7 +71,7 @@ export interface RoundResult {
   pressure: number;
   /** locale keys, never empty: why the answer is good or not, and what was best */
   explanations: string[];
-  /** a perfect answer to this round, for the debrief */
+  /** a perfect answer to this round, for the debrief: the player's own when it was perfect */
   best: string[];
   status: BattleStatus;
 }
@@ -201,7 +201,7 @@ export function answerRound(b: CompiledBattle, s: BattleState, ids: readonly str
       confidence: confidence - s.confidence,
       pressure: pressure - s.pressure,
       explanations: explanations(round, ids),
-      best: perfectAnswer(round),
+      best: q === 1 ? [...ids] : perfectAnswer(round),
       status,
     },
   };

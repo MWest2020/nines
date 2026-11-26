@@ -4,7 +4,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writ
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { loadContent } from '../../tools/content/load';
+import { DENYLIST, loadContent } from '../../tools/content/load';
 import { CONTENT_DIR, SCHEMA_DIR } from '../helpers';
 
 describe('the content in this repository', () => {
@@ -143,6 +143,23 @@ describe('the validator rejects broken content', () => {
     expect(errorsAfter(en, (s) => s.replace('Textbook.', "It's super effective!"))).toMatch(/IP rule/);
     expect(errorsAfter(en, (s) => s.replace('Textbook.', 'The pager fainted.'))).toMatch(/IP rule/);
     expect(errorsAfter(en, (s) => s.replace('Textbook.', 'FIGHT  BAG  RUN'))).toMatch(/IP rule/);
+  });
+  it('the denylist sees through dots, word order, invisible and look-alike characters', () => {
+    for (const text of [
+      'A wild ... appeared!',
+      'A wild Mr. Mime appeared!',
+      'Er verschijnt een wilde bug!',
+      'A w\u200Bild outage appeared!',
+      'A w\u0456ld outage appeared!',
+      'Poke\u0301mon',
+    ]) {
+      expect(DENYLIST.test(text), text).toBe(true);
+    }
+  });
+  it('the denylist leaves ordinary engineering prose alone', () => {
+    for (const text of ['Retrying blindly is not very effective.', 'Dat is niet erg effectief.', 'A super effective cache.', 'Run the job, then check the bag of tasks.']) {
+      expect(DENYLIST.test(text), text).toBe(false);
+    }
   });
   it('sprites must be PNGs of the right size', () => {
     copy();

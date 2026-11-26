@@ -259,8 +259,8 @@ Desktop (an incident):
 │ ▣ Bas   18% of checkouts are failing. What's your first move?      │                    │
 │              Acknowledge the page, then open the dashboard. ◂ you  │ Impact          70 │
 │              ✓ Spot on: acknowledging is taking ownership...       │ ██████████████░░░░ │
-│ ▣ Bas   Errors jumped at 02:41. Where do you look next?            │                    │
-│               At what changed: v2.14 rolled out at 02:40. ◂ you    │ Hint               │
+│ ▣ Bas   Errors jumped at 03:00. Where do you look next?            │                    │
+│               At what changed: v2.14 rolled out at 02:59. ◂ you    │ Hint               │
 │              ✓ Spot on: a sudden step at an exact minute...        │ Stop the bleeding  │
 │ ▣ Bas   OK, the deploy it is. Put the next steps in order.         │ before you study   │
 ├────────────────────────────────────────────────────────────────────┤ the wound.         │
@@ -283,10 +283,10 @@ Desktop (a design interview, "spot the flaw"):
 │ └────────────────────────────────────────────────────────────────┘ │ ██████████░░░░░░░░ │
 │ ▣ Ingrid  What is wrong with this?                                 │                    │
 ├────────────────────────────────────────────────────────────────────┤                    │
-│ ( ) In-memory counters are too slow to check on every request      │                    │
-│ (•) A client is spread over 20 instances: up to 2,000 per minute   │                    │
-│ ( ) A restarted instance hands out a fresh burst                   │                    │
-│ ( ) Round-robin is the wrong algorithm for an API balancer         │                    │
+│ ( ) In-memory counters add latency to every call                   │                    │
+│ (•) One client is spread over 20 instances: up to 2,000 per minute │                    │
+│ ( ) A restarted instance hands every client a fresh burst          │                    │
+│ ( ) Round-robin ignores how busy each instance is                  │                    │
 │                                                         [ Send ]   │                    │
 └────────────────────────────────────────────────────────────────────┴────────────────────┘
 ```
@@ -305,10 +305,10 @@ a count in the header (`? 1`) that opens them over the transcript.
 │ Discount codes took 6 days   │
 │ plus 2 days of testing.      │
 ├──────────────────────────────┤
-│ ( ) a few hours              │
+│ ( ) under a day              │
 │ ( ) 1 to 3 working days      │
 │ (•) 4 to 15 working days     │
-│ ( ) more than 15 days        │
+│ ( ) 16 or more working days  │
 │                     [ Send ] │
 └──────────────────────────────┘
 ```

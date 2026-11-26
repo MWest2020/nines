@@ -212,9 +212,11 @@ battles add up to 120.
 
 **Explanations, every time.** Every option, step and range has a `why` (locale key, both
 languages, enforced by the schema and the validator). After each answer the engine returns the
-explanations of what was picked, then of the best answer when it was not picked, and for an
-estimate the `working`; for an order round, every step's reason in the right order. The
-debrief after the battle shows them all again.
+explanations of what was picked, then of the best answer when the answer was not perfect, and
+for an estimate the `working`; for an order round, every step's reason in the right order. The
+debrief after the battle shows them all again. Answer cards are written so that length gives
+nothing away: tests check that the best card is neither usually the longest nor usually at any
+one length rank, and that always picking the longest or the shortest cards loses.
 
 **Losing never blocks.** `retryBattle` starts a fresh try from any state: meters refilled,
 `attempt` + 1, wins kept, no money lost. Even the gate battle only waits for a win, with
@@ -237,7 +239,7 @@ solved. Estimate ranges stay ascending.
 - `npc`: talking to the quest's giver starts it; the giver is the one asking.
 - `pager`: a random event, "the 3 AM pager". Once its progress condition `when` holds and its
   quest is not done, every tick the game counts (a map change, say) pages the player with
-  `chance` percent, decided by a seeded roll on (battle id, tick). After that the quest's
+  `chance` percent, decided by a seeded roll on (battle id, game seed, tick). After that the quest's
   `start` object replays it.
 - `gate`: the boss between career stages. The road to `town` stays closed until the battle is
   won; the quest must be of the stage before that town, and a town has at most one gate.
@@ -443,7 +445,10 @@ file and then what a schema cannot express:
 - sprites are real PNGs whose size is 3 x 4 frames;
 - no file and no path in content uses a denylisted name (Pokémon, Nintendo and friends), nor
   that franchise's battle language in English or Dutch: its "a wild ... appeared" catchphrase,
-  its effectiveness and fainting lines, its town leaders and its battle-menu words.
+  its effectiveness and fainting lines, its town leaders and its battle-menu words. Text is
+  NFKC-normalised, invisible characters are removed and Cyrillic or Greek look-alike letters
+  are read as Latin before the check. The phrases are broad on purpose ("wild" near "appear"
+  is refused even in ordinary prose); rephrase when it trips.
 
 Maps join the allowlist in the MVP build together with their checks: tilesets embedded in the
 map JSON, image paths relative and inside the repository, every image listed in ASSETS.md, the

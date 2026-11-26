@@ -90,7 +90,8 @@ export const gradeOf = (q: number): Grade => (q >= 1 ? 'best' : q >= 0.5 ? 'fair
 
 /**
  * The explanations to show after an answer, as locale keys, never empty: what the player
- * chose and why it is good or not, then what the best answer was and why.
+ * chose and why it is good or not, then, unless the answer was already perfect, what the best
+ * answer was and why.
  */
 export function explanations(round: BattleRound, ids: readonly string[]): string[] {
   if (round.type === 'order') {
@@ -98,7 +99,8 @@ export function explanations(round: BattleRound, ids: readonly string[]): string
     return perfectAnswer(round).map((id) => round.items.find((i) => i.id === id)!.why);
   }
   const chosen = ids.map((id) => round.options.find((o) => o.id === id)!.why);
-  const best = perfectAnswer(round)
+  const perfect = quality(round, ids) === 1;
+  const best = (perfect ? [] : perfectAnswer(round))
     .filter((id) => !ids.includes(id))
     .map((id) => round.options.find((o) => o.id === id)!.why);
   return [...chosen, ...best, ...(round.type === 'estimate' ? [round.working] : [])];

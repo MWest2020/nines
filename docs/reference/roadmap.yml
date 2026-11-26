@@ -20,8 +20,8 @@ phases:
   - {id: android, name: "Android", summary: "Capacitor project, signed AAB from env vars, portrait and landscape, the three quests completed on a real device, PLAY_STORE.md filled in"}
   - {id: cameo, name: "Fourth-quest cameo proof", summary: "a sample guest quest added as one /content folder in its own commit, with no code change, and CONTRIBUTING.md's full worked example"}
   - id: battles
-    name: "Battles beyond Junior"
-    summary: "system-design battles for Medior City and Senior Summit, written from docs/content-backlog.md (Mark, 26 Nov 2026)"
+    name: "More battles"
+    summary: "the system-design battles still to write (nearby places for Junior Village, a URL shortener for Medior City, ticket booking and a collaborative editor for Senior Summit), from docs/content-backlog.md (Mark, 26 Nov 2026)"
     done_means:
       - {item: "Battle: nearby places search (Junior): geohash with neighbour cells, quadtree, ranking by exact distance", status: open, evidence: "https://github.com/MWest2020/nines/blob/main/docs/content-backlog.md"}
       - {item: "Battle: URL shortener (Medior): ID generation, base62, caching, 301 vs 302", status: open, evidence: "https://github.com/MWest2020/nines/blob/main/docs/content-backlog.md"}

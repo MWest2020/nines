@@ -134,6 +134,7 @@ describe('scoring, per question type', () => {
     expect(explanations(round('trade'), ['c'])).toEqual(['c.w', 'a.w']);
     expect(explanations(round('trade'), ['a'])).toEqual(['a.w']);
     expect(explanations(round('ask'), ['a', 'd'])).toEqual(['a.w', 'd.w', 'b.w']);
+    expect(explanations(round('ask'), ['b', 'a'])).toEqual(['b.w', 'a.w']); // perfect: nothing to add
     expect(explanations(round('steps'), ['s4', 's3', 's2', 's1'])).toEqual(['s1.w', 's2.w', 's3.w', 's4.w']);
     expect(explanations(round('calc'), ['low'])).toEqual(['low.w', 'right.w', 'calc.working']);
   });
@@ -307,6 +308,8 @@ describe('triggers', () => {
     expect(fired).toEqual(Array.from({ length: 200 }, (_, tick) => pagerFires('pager', rare, tick, env, 'available')));
     expect(fired.filter(Boolean).length).toBeGreaterThan(20);
     expect(fired.filter(Boolean).length).toBeLessThan(60);
+    const otherSave = Array.from({ length: 200 }, (_, tick) => pagerFires('pager', rare, tick, env, 'available', 42));
+    expect(otherSave).not.toEqual(fired);
   });
   it('a gate keeps the road to its town closed until its battle is won', () => {
     const game = newGame('en');
