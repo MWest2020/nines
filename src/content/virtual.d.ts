@@ -1,5 +1,4 @@
 declare module 'virtual:nines-content' {
-  import type { ContentBundle } from './types';
-  const bundle: ContentBundle;
+  const bundle: import('./types').ContentBundle;
   export default bundle;
 }

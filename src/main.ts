@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { BootScene, VIEW } from './game/BootScene';
+import { WorldScene } from './game/WorldScene';
 
 new Phaser.Game({
   type: Phaser.AUTO,
@@ -12,5 +13,5 @@ new Phaser.Game({
   // Phaser's banner is a console.log only; no request is made.
   banner: false,
   audio: { noAudio: true },
-  scene: [BootScene],
+  scene: [BootScene, WorldScene],
 });

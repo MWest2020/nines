@@ -22,7 +22,7 @@ export function ninesContent(): Plugin {
     load(id) {
       if (id !== RESOLVED_ID) return null;
       this.addWatchFile(contentDir);
-      const { bundle, errors, sprites } = loadContent(contentDir, schemaDir);
+      const { bundle, errors, sprites, tilesets } = loadContent(contentDir, schemaDir, { root });
       if (!bundle) {
         this.error(`content is invalid:\n  ${errors.join('\n  ')}`);
       }
@@ -33,7 +33,15 @@ export function ninesContent(): Plugin {
           ? `bundle.quests.find((q) => q.id === ${JSON.stringify(s.id)}).spriteUrl = sprite${i};`
           : `bundle.npcs.find((n) => n.id === ${JSON.stringify(s.id)}).spriteUrl = sprite${i};`,
       );
-      return [...imports, `const bundle = ${JSON.stringify(bundle)};`, ...assigns, 'export default bundle;'].join('\n');
+      // Tileset images: one import per file, then each map gets tileset name -> URL.
+      const files = [...new Set(tilesets.map((t) => t.file))];
+      const tileImports = files.map((f, i) => `import tiles${i} from ${JSON.stringify(`${f}?url`)};`);
+      const tileAssigns = tilesets.map(
+        (t) =>
+          `(bundle.maps.find((m) => m.id === ${JSON.stringify(t.map)}).images ??= {})[${JSON.stringify(t.name)}] = tiles${files.indexOf(t.file)};`,
+      );
+      for (const f of files) this.addWatchFile(f);
+      return [...imports, ...tileImports, `const bundle = ${JSON.stringify(bundle)};`, ...assigns, ...tileAssigns, 'export default bundle;'].join('\n');
     },
   };
 }

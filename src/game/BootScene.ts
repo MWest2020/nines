@@ -1,9 +1,9 @@
-// Placeholder scene for the phase 1 skeleton. The MVP build replaces it with the village map,
-// the player, NPCs and the terminal overlay (see ARCHITECTURE.md, Modules).
+// Loads the maps' tilesets and the character sheets (all same-origin files in dist/), prepares
+// the placeholder NPC sheets and the walk animations, then starts the world.
 
 import Phaser from 'phaser';
 import content from 'virtual:nines-content';
-import { createTranslator, defaultLocale } from '../core/i18n';
+import { createSprites, preloadSprites } from './world/sprites';
 
 export const VIEW = { width: 240, height: 160 } as const;
 
@@ -12,12 +12,15 @@ export class BootScene extends Phaser.Scene {
     super('boot');
   }
 
+  preload(): void {
+    preloadSprites(this, content);
+  }
+
   create(): void {
-    const t = createTranslator(content.locales, defaultLocale(navigator.languages ?? [navigator.language]));
-    this.cameras.main.setBackgroundColor('#183048');
-    const style = { fontFamily: 'monospace', fontSize: '8px', color: '#f8f0d8', align: 'center' } as const;
-    this.add.text(VIEW.width / 2, 56, t('ui.title'), { ...style, fontSize: '16px' }).setOrigin(0.5);
-    this.add.text(VIEW.width / 2, 84, t('ui.subtitle'), style).setOrigin(0.5);
-    this.add.text(VIEW.width / 2, 108, t('ui.skeleton', { quests: content.quests.length }), { ...style, color: '#88c070' }).setOrigin(0.5);
+    createSprites(this, content);
+    for (const m of content.maps) {
+      this.cache.tilemap.add(`map:${m.id}`, { format: Phaser.Tilemaps.Formats.TILED_JSON, data: m.map });
+    }
+    this.scene.start('world');
   }
 }
