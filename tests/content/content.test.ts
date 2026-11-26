@@ -98,7 +98,7 @@ describe('the validator rejects broken content', () => {
     expect(errs).toMatch(/symbolic links are not allowed/);
     expect(errs).toMatch(/no npc.yaml declares this image/);
     expect(errs).toMatch(/maps\/village.tmx: unexpected file/);
-    expect(errs).toMatch(/maps\/junior-village.json: .*(YAML|must be object)/);
+    expect(errs).toMatch(/maps\/junior-village.json: JSON:/);
   });
   it('the IP denylist covers every string and path, not just locale text', () => {
     expect(errorsAfter('quests/disk-full/scenario.yaml', (s) => s.replace('description: PostgreSQL RDBMS', 'description: Pokemon RDBMS'))).toMatch(/IP rule/);
@@ -226,6 +226,8 @@ describe('the validator checks maps', () => {
       cpSync(join(ROOT, 'assets'), join(fakeRoot, 'assets'), { recursive: true });
       writeFileSync(join(fakeRoot, 'ASSETS.md'), '| File | Source | Author | Licence | Notes |\n');
       expect(errorsAfterMap('server-room', () => undefined, fakeRoot)).toMatch(/nines-tiles.png has no row with a source and a licence in ASSETS.md/);
+      writeFileSync(join(fakeRoot, 'ASSETS.md'), readFileSync(join(ROOT, 'ASSETS.md'), 'utf8').replace('| Nines team | CC0 1.0 | server racks', '| Nines team | CC BY 4.0 | server racks'));
+      expect(errorsAfterMap('server-room', () => undefined, fakeRoot)).toMatch(/nines-tiles.png is licensed "CC BY 4.0" in ASSETS.md; tiles must be CC0/);
     } finally {
       rmSync(fakeRoot, { recursive: true, force: true });
     }
@@ -245,6 +247,8 @@ describe('the validator checks maps', () => {
     copy();
     writeFileSync(join(dir, 'quests', 'disk-full', 'npc.yaml'), readFileSync(join(dir, 'quests', 'disk-full', 'npc.yaml'), 'utf8').replace('slot: npc-1', 'slot: npc-9'));
     expect(loadContent(dir, SCHEMA_DIR, { root: ROOT }).errors.join('\n')).toMatch(/spawn: map junior-village has no object "npc-9"/);
+    writeFileSync(join(dir, 'quests', 'disk-full', 'npc.yaml'), readFileSync(join(dir, 'quests', 'disk-full', 'npc.yaml'), 'utf8').replace('slot: npc-9', 'slot: player-start'));
+    expect(loadContent(dir, SCHEMA_DIR, { root: ROOT }).errors.join('\n')).toMatch(/spawn.slot "player-start" must be npc-<n>, cameo-<n> or gate-<town>/);
     expect(errorsAfterMap('server-room', (m) => (obj(m, 'rack-web-01').type = 'battle'))).toMatch(/start: "rack-web-01" in server-room is a battle, expected terminal/);
     expect(errorsAfterMap('server-room', (m) => (obj(m, 'rack-web-01').name = 'rack-db-01'))).toMatch(/map server-room has no object "rack-web-01"/);
   });

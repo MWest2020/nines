@@ -205,10 +205,12 @@ export function loadContent(contentDir: string, schemaDir: string, options: Load
       return null;
     }
     let data: unknown;
+    const json = file.endsWith('.json');
     try {
-      data = parseYaml(readFileSync(file, 'utf8'), { uniqueKeys: true, prettyErrors: true });
+      // maps are Tiled JSON: parsed as JSON, so a YAML file named .json is refused
+      data = json ? JSON.parse(readFileSync(file, 'utf8')) : parseYaml(readFileSync(file, 'utf8'), { uniqueKeys: true, prettyErrors: true });
     } catch (e) {
-      err(file, `YAML: ${(e as Error).message.split('\n')[0]}`);
+      err(file, `${json ? 'JSON' : 'YAML'}: ${(e as Error).message.split('\n')[0]}`);
       return null;
     }
     const raw = readFileSync(file, 'utf8');
@@ -364,6 +366,7 @@ export function loadContent(contentDir: string, schemaDir: string, options: Load
       else if (size.w !== ts.imagewidth || size.h !== ts.imageheight) err(file, `tileset "${ts.name}": ${logical} is ${size.w}x${size.h}, the map says ${ts.imagewidth}x${ts.imageheight}`);
       const row = assets.get(logical);
       if (!row || !row[1] || !row[3]) err(file, `tileset "${ts.name}": ${logical} has no row with a source and a licence in ASSETS.md`);
+      else if (!/^CC0\b/.test(row[3])) err(file, `tileset "${ts.name}": ${logical} is licensed "${row[3]}" in ASSETS.md; tiles must be CC0`);
       tilesets.push({ map: id, name: ts.name, file: img });
     }
 
@@ -493,6 +496,7 @@ export function loadContent(contentDir: string, schemaDir: string, options: Load
     });
     checkMap(file, npc.spawn.map);
     checkObject(file, 'spawn', npc.spawn.map, npc.spawn.slot, ['spawn']);
+    if (!isNpcSlot(npc.spawn.slot)) err(file, `spawn.slot "${npc.spawn.slot}" must be npc-<n>, cameo-<n> or gate-<town>`);
     if (DENYLIST.test(npc.author.name)) err(file, 'author name uses a name we must not use (IP rule, AGENTS.md)');
     const sprite = checkSprite(dir, npc);
     if (sprite) sprites.push(questId ? { owner: 'quest', id: questId, file: sprite } : { owner: 'npc', id: npc.id, file: sprite });

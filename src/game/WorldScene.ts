@@ -15,6 +15,7 @@ import {
   ahead,
   canEnter,
   facingOf,
+  isFacing,
   isSolid,
   objectNamed,
   objectsAt,
@@ -247,7 +248,8 @@ export class WorldScene extends Phaser.Scene {
     if (!door) return;
     this.busy = true;
     this.player.sprite.stop();
-    const next: WorldStart = { map: door.props.to_map ?? DEFAULT_MAP, point: door.props.to_point ?? 'player-start' };
+    const facing = door.props.facing;
+    const next: WorldStart = { map: door.props.to_map ?? DEFAULT_MAP, point: door.props.to_point ?? 'player-start', ...(isFacing(facing) ? { facing } : {}) };
     this.cameras.main.fadeOut(150, 16, 24, 32);
     this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.restart(next));
   }

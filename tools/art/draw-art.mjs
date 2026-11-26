@@ -173,7 +173,7 @@ const STYLES = {
     ['up', 5, 3, 'A'], ['up', 6, 3, 'A'], ['up', 5, 12, 'A'], ['up', 6, 12, 'A'],
     ['left', 1, 7, 'A'], ['left', 1, 8, 'A'], ['left', 2, 8, 'A'], ['left', 3, 8, 'A'], ['left', 4, 8, 'A'], ['left', 5, 8, 'A'], ['left', 6, 8, 'A'], ['left', 5, 9, 'A'], ['left', 6, 9, 'A'],
   ],
-  badge: [
+  lanyard: [
     ['down', 10, 8, 'A'], ['down', 9, 7, 'A'], ['down', 11, 8, 'A'],
   ],
 };
@@ -186,7 +186,7 @@ export const CHARACTERS = {
   },
   femke: {
     file: 'content/quests/disk-full/femke.png',
-    styles: ['bun', 'badge'],
+    styles: ['bun', 'lanyard'],
     colours: { H: P.bark, h: P.shadow, S: P.orange, s: P.clay, C: P.clay, c: P.brick, A: P.gold, P: P.slate, p: P.shadow, F: P.ink },
   },
   ravi: {
