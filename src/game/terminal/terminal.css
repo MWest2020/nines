@@ -1,0 +1,372 @@
+/* The terminal overlay (DESIGN.md, Terminal overlay and Built-in editor). The palette is
+   DESIGN.md's; the font is the device's monospace, nothing is downloaded. */
+
+.nt-overlay {
+  --ink: #101820;
+  --shadow: #283840;
+  --slate: #485860;
+  --grey: #788890;
+  --mist: #b0b8b8;
+  --paper: #f8f0d8;
+  --screen: #081008;
+  --phosphor: #88e090;
+  --orange: #e89858;
+  --ice: #88b8e8;
+  --gold: #f8d070;
+  --forest: #306838;
+  --mono: ui-monospace, monospace;
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(16, 24, 32, 0.78);
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--paper);
+}
+
+.nt-overlay *,
+.nt-overlay *::before,
+.nt-overlay *::after {
+  box-sizing: border-box;
+}
+
+.nt-overlay [hidden] {
+  display: none !important;
+}
+
+.nt-window {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(1100px, 100vw);
+  height: min(720px, 100dvh);
+  background: var(--ink);
+  border: 1px solid var(--slate);
+}
+
+.nt-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--gold);
+}
+
+.nt-host {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--gold);
+}
+
+.nt-overlay button {
+  font: inherit;
+  color: var(--paper);
+  background: var(--shadow);
+  border: 1px solid var(--slate);
+  border-radius: 0;
+  cursor: pointer;
+}
+
+.nt-overlay button:focus-visible,
+.nt-input:focus-visible,
+.nt-area:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: -2px;
+}
+
+.nt-close {
+  min-width: 40px;
+  min-height: 32px;
+}
+
+.nt-objtoggle {
+  display: none;
+  min-height: 32px;
+  padding: 0 8px;
+}
+
+.nt-objtoggle .nt-count {
+  margin-left: 6px;
+  color: var(--gold);
+}
+
+.nt-body {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.nt-main {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--screen);
+}
+
+.nt-screen {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  padding: 4px 0 4px 6px;
+  overflow: hidden;
+}
+
+.nt-screen .xterm {
+  height: 100%;
+}
+
+/* xterm.css paints the viewport black and draws scroll shadows; the screen colour shows instead */
+.nt-screen .xterm-viewport {
+  background-color: var(--screen) !important;
+}
+
+.nt-screen .xterm-scrollable-element > .shadow {
+  display: none;
+}
+
+.nt-probe {
+  position: absolute;
+  visibility: hidden;
+  white-space: pre;
+  line-height: normal;
+}
+
+.nt-inputline {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 6px;
+  border-top: 1px solid var(--shadow);
+}
+
+.nt-prompt {
+  white-space: pre;
+  color: var(--ice);
+}
+
+.nt-input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 2px;
+  font: inherit;
+  color: var(--phosphor);
+  caret-color: var(--phosphor);
+  background: transparent;
+  border: 0;
+  outline: none;
+}
+
+.nt-side {
+  width: 260px;
+  padding: 8px 10px;
+  overflow-y: auto;
+  border-left: 1px solid var(--slate);
+}
+
+.nt-sidehead {
+  margin: 4px 0 6px;
+  font-size: 13px;
+  font-weight: normal;
+  color: var(--gold);
+}
+
+.nt-objectives {
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+}
+
+.nt-objectives li {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+  line-height: 1.3;
+}
+
+.nt-objectives .nt-done {
+  color: var(--phosphor);
+}
+
+.nt-objectives .nt-open {
+  color: var(--mist);
+}
+
+.nt-hints p {
+  margin: 0 0 8px;
+  line-height: 1.35;
+}
+
+.nt-hint {
+  color: var(--grey);
+}
+
+.nt-hint.nt-latest {
+  color: var(--paper);
+}
+
+.nt-nohint {
+  color: var(--grey);
+}
+
+.nt-quick {
+  display: flex;
+  gap: 6px;
+  padding: 6px 8px;
+  overflow-x: auto;
+  border-top: 1px solid var(--slate);
+}
+
+.nt-quick button {
+  flex: none;
+  min-height: 36px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.nt-quick .nt-key {
+  min-width: 40px;
+  color: var(--ice);
+}
+
+/* consequences and the win: our own dialogue box, an ink panel with a name tab and a gold rule */
+.nt-dialog {
+  position: absolute;
+  right: 12px;
+  bottom: 56px;
+  left: 12px;
+  z-index: 2;
+  padding: 10px 12px;
+  background: var(--ink);
+  border: 1px solid var(--slate);
+  border-top: 1px solid var(--gold);
+}
+
+.nt-speaker {
+  display: inline-block;
+  margin: -24px 0 6px;
+  padding: 2px 8px;
+  color: var(--gold);
+  background: var(--ink);
+  border: 1px solid var(--slate);
+  border-bottom: 1px solid var(--gold);
+}
+
+.nt-say {
+  margin: 0 0 6px;
+  line-height: 1.4;
+}
+
+.nt-extra {
+  margin: 0 0 8px;
+  color: var(--gold);
+}
+
+.nt-btn {
+  min-height: 36px;
+  padding: 0 14px;
+}
+
+.nt-btn.nt-primary {
+  color: var(--ink);
+  background: var(--gold);
+  border-color: var(--gold);
+}
+
+/* the built-in editor, over the terminal */
+.nt-editor {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  background: var(--ink);
+}
+
+.nt-editbody {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  background: var(--screen);
+}
+
+.nt-gutter,
+.nt-area {
+  margin: 0;
+  padding: 8px 6px;
+  font: 14px/20px var(--mono);
+  tab-size: 4;
+  white-space: pre;
+}
+
+.nt-gutter {
+  flex: none;
+  overflow: hidden;
+  color: var(--grey);
+  text-align: right;
+  user-select: none;
+  border-right: 1px solid var(--shadow);
+}
+
+.nt-area {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  color: var(--phosphor);
+  caret-color: var(--phosphor);
+  background: transparent;
+  border: 0;
+  outline: none;
+  resize: none;
+}
+
+.nt-status {
+  padding: 6px 8px;
+  font-size: 13px;
+  color: var(--mist);
+  border-top: 1px solid var(--slate);
+}
+
+.nt-status.nt-warn {
+  color: var(--orange);
+}
+
+/* phones: the objectives fold into the header and open over the output */
+@media (max-width: 720px) {
+  .nt-window {
+    width: 100vw;
+    height: 100dvh;
+    border: 0;
+  }
+
+  .nt-objtoggle {
+    display: inline-block;
+  }
+
+  .nt-objlabel {
+    display: none;
+  }
+
+  .nt-side {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 2;
+    display: none;
+    width: min(300px, 85vw);
+    background: var(--ink);
+  }
+
+  .nt-show-side .nt-side {
+    display: block;
+  }
+}

@@ -34,7 +34,7 @@ describe('no network at runtime', () => {
   });
   it('the pure core has no clock and no unseeded randomness', () => {
     const banned = /Math\.random|Date\.now|new Date\b|performance\.now|crypto\.getRandomValues/;
-    const pure = srcFiles.filter((f) => /[/\]src[/\](rules|sim|core|battle|world|terminal)[/\]/.test(f));
+    const pure = srcFiles.filter((f) => /[/\\]src[/\\](rules|sim|core|battle|world|terminal)[/\\]/.test(f));
     expect(pure.length).toBeGreaterThan(10);
     expect(pure.filter((f) => banned.test(readFileSync(f, 'utf8'))).map((f) => relative(ROOT, f))).toEqual([]);
   });

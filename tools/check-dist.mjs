@@ -14,6 +14,12 @@ const ALLOWED_URLS = new Set(['https://phaser.io', 'https://phaser.io/', 'http:/
 // Phaser's global-object fallback, inside try/catch; the CSP (no 'unsafe-eval') blocks it.
 const ALLOWED_SNIPPETS = ['new Function("return this")'];
 
+// xterm.js's default handler for OSC 8 hyperlinks: it asks confirm() and then opens a window.
+// It cannot run here: the overlay passes its own linkHandler (activation does nothing), and no
+// escape sequence can reach xterm (content has no control characters, player text is stripped).
+// Matched by shape, because the minifier renames the variables.
+const ALLOWED_PATTERNS = [/confirm\(`Do you want to navigate to \$\{\w+\}\?[^`]*`\)\)\{let \w+=window\.open\(\);/g];
+
 const BANNED = [/\bfetch\s*\(/, /\bWebSocket\b/, /\bEventSource\b/, /\bsendBeacon\b/, /\bRTCPeerConnection\b/, /window\.open\s*\(/, /\beval\s*\(/, /\bFunction\s*\(/];
 
 const walk = (dir) => readdirSync(dir).flatMap((n) => (statSync(join(dir, n)).isDirectory() ? walk(join(dir, n)) : [join(dir, n)]));
@@ -24,6 +30,7 @@ if (files.length === 0) problems.push('dist/ is empty: run npm run build first')
 for (const file of files) {
   let text = readFileSync(file, 'utf8');
   for (const s of ALLOWED_SNIPPETS) text = text.split(s).join('');
+  for (const re of ALLOWED_PATTERNS) text = text.replace(re, '');
   const name = relative(DIST, file);
   for (const m of text.matchAll(/https?:\/\/[A-Za-z0-9.\-_~:/?#@!$&'()*+,;=%]*/g)) {
     const url = m[0].replace(/[)'",;]+$/, '');
