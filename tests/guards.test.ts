@@ -23,7 +23,12 @@ describe('no network at runtime', () => {
     expect(hits).toEqual([]);
   });
   it('src/ never evaluates strings as code', () => {
-    const banned = /\beval\s*\(|new\s+Function\s*\(|setTimeout\s*\(\s*['"`]|setInterval\s*\(\s*['"`]/;
+    const banned = /\beval\s*\(|\bFunction\s*\(|setTimeout\s*\(\s*['"`]|setInterval\s*\(\s*['"`]/;
+    const hits = srcFiles.filter((f) => banned.test(readFileSync(f, 'utf8'))).map((f) => relative(ROOT, f));
+    expect(hits).toEqual([]);
+  });
+  it('src/ never opens a page or navigates away (author URLs are shown as text only)', () => {
+    const banned = /window\.open\s*\(|\blocation\s*\.\s*(href|assign|replace)\b|\blocation\s*=[^=]/;
     const hits = srcFiles.filter((f) => banned.test(readFileSync(f, 'utf8'))).map((f) => relative(ROOT, f));
     expect(hits).toEqual([]);
   });
@@ -40,8 +45,9 @@ describe('strings live in locale files', () => {
   it('every t() key used in src/ exists in English and Dutch', () => {
     const { locales } = content();
     const keys = new Set<string>();
+    // Every quoted key-shaped literal counts, also those picked by a ternary.
     for (const f of srcFiles) {
-      for (const m of readFileSync(f, 'utf8').matchAll(/\bt\(\s*'([a-z0-9_.]+)'/g)) keys.add(m[1]!);
+      for (const m of readFileSync(f, 'utf8').matchAll(/'((?:sh|help|ui)\.[a-z0-9_.]+)'/g)) keys.add(m[1]!);
     }
     for (const c of HELP_ORDER) keys.add(`help.${c}`);
     for (const k of ['help.intro', 'sh.unterminated_quote', 'sh.empty_pipe', 'sh.outage']) keys.add(k);
@@ -52,13 +58,22 @@ describe('strings live in locale files', () => {
 });
 
 describe('assets', () => {
-  it('every binary asset outside content/ is listed in ASSETS.md', () => {
-    const assets = readFileSync(join(ROOT, 'ASSETS.md'), 'utf8');
+  it('every binary asset outside content/ has a row in ASSETS.md with a source and a licence', () => {
+    // Rows look like: | `path` | source | author | licence | notes |
+    const rows = new Map<string, string[]>();
+    for (const line of readFileSync(join(ROOT, 'ASSETS.md'), 'utf8').split('\n')) {
+      const cells = line.split('|').slice(1, -1).map((c) => c.trim());
+      const m = /^`([^`]+)`$/.exec(cells[0] ?? '');
+      if (m) rows.set(m[1]!, cells);
+    }
     const binary = /\.(png|jpe?g|gif|webp|svg|ogg|mp3|wav|ttf|otf|woff2?|aseprite|tsx|tmx)$/i;
     const files = walk(ROOT)
       .map((f) => relative(ROOT, f).split('\\').join('/'))
       .filter((f) => binary.test(f) && !f.startsWith('content/'));
-    const unlisted = files.filter((f) => !assets.includes(`\`${f}\``));
+    const unlisted = files.filter((f) => {
+      const cells = rows.get(f);
+      return !cells || !cells[1] || !cells[3];
+    });
     expect(unlisted).toEqual([]);
   });
 });

@@ -27,8 +27,11 @@ export function ninesContent(): Plugin {
         this.error(`content is invalid:\n  ${errors.join('\n  ')}`);
       }
       const imports = sprites.map((s, i) => `import sprite${i} from ${JSON.stringify(`${s.file}?url`)};`);
-      const assigns = sprites.map(
-        (s, i) => `bundle.quests.find((q) => q.id === ${JSON.stringify(s.questId)}).spriteUrl = sprite${i};`,
+      // A quest's giver sheet goes on the quest entry, a world npc's on the npc.
+      const assigns = sprites.map((s, i) =>
+        s.owner === 'quest'
+          ? `bundle.quests.find((q) => q.id === ${JSON.stringify(s.id)}).spriteUrl = sprite${i};`
+          : `bundle.npcs.find((n) => n.id === ${JSON.stringify(s.id)}).spriteUrl = sprite${i};`,
       );
       return [...imports, `const bundle = ${JSON.stringify(bundle)};`, ...assigns, 'export default bundle;'].join('\n');
     },

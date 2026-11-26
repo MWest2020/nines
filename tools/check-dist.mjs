@@ -1,0 +1,39 @@
+// After `npm run build`: scan what actually ships (dist/) for ways to reach the network or run
+// strings as code. Our own src/ is guarded by tests/guards.test.ts; this covers third-party code
+// (Phaser) and the bundler's output. Run: node tools/check-dist.mjs  (CI does, after the build).
+
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join, relative } from 'node:path';
+
+const DIST = join(import.meta.dirname, '..', 'dist');
+
+// Strings Phaser carries that are not requests: its console banner (we turn it off) and two
+// XML namespace identifiers.
+const ALLOWED_URLS = new Set(['https://phaser.io', 'https://phaser.io/', 'http://www.w3.org/2000/svg', 'http://www.w3.org/1999/xhtml']);
+
+// Phaser's global-object fallback, inside try/catch; the CSP (no 'unsafe-eval') blocks it.
+const ALLOWED_SNIPPETS = ['new Function("return this")'];
+
+const BANNED = [/\bfetch\s*\(/, /\bWebSocket\b/, /\bEventSource\b/, /\bsendBeacon\b/, /\bRTCPeerConnection\b/, /window\.open\s*\(/, /\beval\s*\(/, /\bFunction\s*\(/];
+
+const walk = (dir) => readdirSync(dir).flatMap((n) => (statSync(join(dir, n)).isDirectory() ? walk(join(dir, n)) : [join(dir, n)]));
+
+const problems = [];
+const files = walk(DIST).filter((f) => /\.(js|html|css|json)$/.test(f));
+if (files.length === 0) problems.push('dist/ is empty: run npm run build first');
+for (const file of files) {
+  let text = readFileSync(file, 'utf8');
+  for (const s of ALLOWED_SNIPPETS) text = text.split(s).join('');
+  const name = relative(DIST, file);
+  for (const m of text.matchAll(/https?:\/\/[A-Za-z0-9.\-_~:/?#@!$&'()*+,;=%]*/g)) {
+    const url = m[0].replace(/[)'",;]+$/, '');
+    if (!ALLOWED_URLS.has(url)) problems.push(`${name}: URL ${url}`);
+  }
+  for (const re of BANNED) if (re.test(text)) problems.push(`${name}: ${re}`);
+}
+
+if (problems.length > 0) {
+  console.error(`dist/ check failed:\n  ${problems.join('\n  ')}`);
+  process.exit(1);
+}
+console.log(`dist/ check passed: ${files.length} files, no network APIs, no remote URLs outside the allowlist.`);

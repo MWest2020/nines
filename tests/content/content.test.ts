@@ -1,6 +1,6 @@
 // The content validator: `npm run validate:content` runs this file, CI runs it on every push.
 
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -64,6 +64,46 @@ describe('the validator rejects broken content', () => {
   });
   it('names that would point at someone else\'s IP are refused', () => {
     expect(errorsAfter('quests/disk-full/locales/en.yaml', (s) => s.replace('Hi, I\'m Femke', 'Gotta catch them, like Pokémon'))).toMatch(/IP rule/);
+  });
+  it('keys that exist on Object.prototype are still unknown keys', () => {
+    expect(errorsAfter('quests/disk-full/quest.yaml', (s) => s.replace('offer: [offer.1, offer.2]', 'offer: [offer.1, offer.2, constructor]'))).toMatch(/unknown locale key "constructor"/);
+    expect(errorsAfter('shop.yaml', (s) => s.replace('description: item.raspberry_pi.desc', 'description: constructor'))).toMatch(/unknown locale key "constructor"/);
+  });
+  it('paths in conditions must be normalised', () => {
+    expect(errorsAfter('quests/disk-full/scenario.yaml', (s) => s.replace('disk_usage("/var")', 'disk_usage("/var/")'))).toMatch(/normalised/);
+  });
+  it('names in conditions must exist and be quoted', () => {
+    expect(errorsAfter('quests/disk-full/npc.yaml', (s) => s.replace('quest("disk-full")', 'quest("dsk-full")'))).toMatch(/no such quest/);
+    expect(errorsAfter('quests/disk-full/npc.yaml', (s) => s.replace('quest("disk-full") == "done"', 'has_item("lambo")'))).toMatch(/no such shop item/);
+    expect(errorsAfter('quests/disk-full/npc.yaml', (s) => s.replace('quest("disk-full") == "done"', 'xp("cooking") > 1'))).toMatch(/no such branch/);
+    expect(errorsAfter('quests/disk-full/scenario.yaml', (s) => s.replace('!ran("df")', '!ran("htop")'))).toMatch(/not a command/);
+    expect(errorsAfter('quests/disk-full/scenario.yaml', (s) => s.replace('!ran("df")', '!flag("nope")'))).toMatch(/no event in this scenario sets that flag/);
+    expect(errorsAfter('quests/disk-full/scenario.yaml', (s) => s.replace('service("nginx") == "active"', 'service(pipeline_status) == "active"'))).toMatch(/needs a quoted name/);
+  });
+  it('requirements may not form a cycle', () => {
+    copy();
+    edit('quests/disk-full/quest.yaml', (s) => s.replace('requires: []', 'requires: [service-down]'));
+    edit('quests/service-down/quest.yaml', (s) => s.replace('requires: []', 'requires: [disk-full]'));
+    expect(loadContent(dir, SCHEMA_DIR).errors.join('\n')).toMatch(/quest requirements form a cycle/);
+    expect(errorsAfter('roadmap.yaml', (s) => s.replace('title: node.linux.files, requires: []', 'title: node.linux.files, requires: [linux-services]'))).toMatch(/roadmap node requirements form a cycle/);
+  });
+  it('control characters, symlinks, stray images and maps (until the MVP) are refused', () => {
+    expect(errorsAfter('quests/disk-full/locales/en.yaml', (s) => s.replace('title: "Disk full"', 'title: "Disk \\e]8;;https://x.test\\e\\\\full"'))).toMatch(/control characters/);
+    copy();
+    symlinkSync('/etc/passwd', join(dir, 'quests', 'disk-full', 'link.yaml'));
+    writeFileSync(join(dir, 'quests', 'disk-full', 'stray.png'), Buffer.alloc(24));
+    mkdirSync(join(dir, 'maps'));
+    writeFileSync(join(dir, 'maps', 'junior-village.json'), 'not json');
+    const errs = loadContent(dir, SCHEMA_DIR).errors.join('\n');
+    expect(errs).toMatch(/symbolic links are not allowed/);
+    expect(errs).toMatch(/no npc.yaml declares this image/);
+    expect(errs).toMatch(/maps\/junior-village.json: unexpected file/);
+  });
+  it('the IP denylist covers every string and path, not just locale text', () => {
+    expect(errorsAfter('quests/disk-full/scenario.yaml', (s) => s.replace('description: PostgreSQL RDBMS', 'description: Pokemon RDBMS'))).toMatch(/IP rule/);
+  });
+  it('machines must make sense', () => {
+    expect(errorsAfter('quests/disk-full/scenario.yaml', (s) => s.replace('dirs: [/tmp, /var/tmp, /var/cache/nginx]', 'dirs: [/tmp, /var/tmp, /var/cache/nginx, /home/dev/NOTES.txt/inner]'))).toMatch(/lies below the file/);
   });
   it('sprites must be PNGs of the right size', () => {
     copy();

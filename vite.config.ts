@@ -11,6 +11,8 @@ export default defineConfig({
     target: 'es2022',
     outDir: 'dist',
     assetsInlineLimit: 0,
+    // No preload polyfill: it fetches module URLs at runtime, and modern browsers do not need it.
+    modulePreload: { polyfill: false },
     // Phaser alone is about 1.2 MB minified; it is split into its own chunk.
     chunkSizeWarningLimit: 1600,
     rollupOptions: {

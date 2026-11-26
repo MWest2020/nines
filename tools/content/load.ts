@@ -8,7 +8,7 @@
 //      with the same placeholders, sprites are real PNGs of the right size, and the content
 //      folder holds data files only.
 
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, lstatSync, readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import Ajv2020Import from 'ajv/dist/2020.js';
 import { parse as parseYaml } from 'yaml';
@@ -27,7 +27,9 @@ import {
   type ScenarioSpec,
   type ShopSpec,
 } from '../../src/content/types';
-import { compile, literalCalls, type Registry } from '../../src/rules/expr';
+import { compile, type Node, type Registry } from '../../src/rules/expr';
+import { has } from '../../src/rules/own';
+import { COMMANDS } from '../../src/sim/shell/commands';
 import { PROGRESS_FACTS, SCENARIO_FACTS } from '../../src/rules/registries';
 import { normalize } from '../../src/sim/path';
 import { createSession } from '../../src/sim/session';
@@ -39,8 +41,65 @@ const Ajv2020: AjvClass = ((Ajv2020Import as unknown as { default?: AjvClass }).
 export interface LoadResult {
   bundle: ContentBundle | null;
   errors: string[];
-  /** absolute paths of sprite sheets, by quest id, for the bundler to emit as assets */
-  sprites: { questId: string; file: string }[];
+  /** absolute paths of sprite sheets, for the bundler to emit as assets */
+  sprites: SpriteRef[];
+}
+
+export interface SpriteRef {
+  /** a quest folder's giver, or a world npc */
+  owner: 'quest' | 'npc';
+  id: string;
+  file: string;
+}
+
+/** Control characters other than tab, newline and carriage return (ANSI/OSC escapes start here). */
+const CONTROL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/;
+
+/** Functions whose first argument names something; it must be a literal so it can be checked. */
+const NAME_ARGS = new Set(['service', 'pods_running', 'restarted', 'flag', 'ran', 'quest', 'has_item', 'xp']);
+
+function callsIn(node: Node, out: { name: string; first: Node | undefined }[] = []) {
+  switch (node.kind) {
+    case 'call':
+      out.push({ name: node.name, first: node.args[0] });
+      node.args.forEach((a) => callsIn(a, out));
+      break;
+    case 'not':
+      callsIn(node.expr, out);
+      break;
+    case 'logic':
+    case 'cmp':
+      callsIn(node.left, out);
+      callsIn(node.right, out);
+      break;
+    default:
+      break;
+  }
+  return out;
+}
+
+/** Ids in a cycle of "requires" edges, or [] when there is none. */
+function findCycle(edges: Record<string, readonly string[]>): string[] {
+  const state = new Map<string, 'open' | 'done'>();
+  const stack: string[] = [];
+  const visit = (id: string): string[] => {
+    if (state.get(id) === 'done') return [];
+    if (state.get(id) === 'open') return [...stack.slice(stack.indexOf(id)), id];
+    state.set(id, 'open');
+    stack.push(id);
+    for (const next of has(edges, id) ? edges[id]! : []) {
+      const c = visit(next);
+      if (c.length > 0) return c;
+    }
+    stack.pop();
+    state.set(id, 'done');
+    return [];
+  };
+  for (const id of Object.keys(edges)) {
+    const c = visit(id);
+    if (c.length > 0) return c;
+  }
+  return [];
 }
 
 const SCHEMA_FILES = ['common', 'quest', 'scenario', 'npc', 'locale', 'roadmap', 'shop'];
@@ -49,12 +108,14 @@ const SCHEMA_BASE = 'https://nines.invalid/schemas/';
 /** Words that would point at someone else's IP. Content must never need them. */
 const DENYLIST = /pok[eé]\s?mon|pikachu|pok[eé]\s?dex|pok[eé]\s?ball|nintendo|game\s?freak|game\s?boy/i;
 
+const dirnameOf = (p: string): string => (p.lastIndexOf('/') <= 0 ? '/' : p.slice(0, p.lastIndexOf('/')));
+
 const PLACEHOLDER = /\{([a-z0-9_]+)\}/g;
 const placeholders = (s: string): string => [...s.matchAll(PLACEHOLDER)].map((m) => m[1]).sort().join(',');
 
 export function loadContent(contentDir: string, schemaDir: string): LoadResult {
   const errors: string[] = [];
-  const sprites: { questId: string; file: string }[] = [];
+  const sprites: SpriteRef[] = [];
   const rel = (p: string) => relative(join(contentDir, '..'), p);
   const err = (file: string, msg: string) => errors.push(`${rel(file)}: ${msg}`);
 
@@ -75,6 +136,16 @@ export function loadContent(contentDir: string, schemaDir: string): LoadResult {
       err(file, `YAML: ${(e as Error).message.split('\n')[0]}`);
       return null;
     }
+    const raw = readFileSync(file, 'utf8');
+    if (DENYLIST.test(raw)) err(file, 'mentions a name we must not use (IP rule, AGENTS.md)');
+    const strings: string[] = [];
+    const collect = (v: unknown): void => {
+      if (typeof v === 'string') strings.push(v);
+      else if (Array.isArray(v)) v.forEach(collect);
+      else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) (strings.push(k), collect(x));
+    };
+    collect(data);
+    if (strings.some((x) => CONTROL.test(x))) err(file, 'contains control characters (escape sequences are not allowed in content)');
     const validate = ajv.getSchema(`${SCHEMA_BASE}${schema}.schema.json`)!;
     if (!validate(data)) {
       for (const e of validate.errors ?? []) err(file, `${e.instancePath || '/'} ${e.message ?? 'is invalid'}`);
@@ -90,15 +161,22 @@ export function loadContent(contentDir: string, schemaDir: string): LoadResult {
     /^(quests|npcs)\/[^/]+\/(quest|scenario|npc)\.yaml$/,
     /^(quests|npcs)\/[^/]+\/locales\/(en|nl)\.yaml$/,
     /^(quests|npcs)\/[^/]+\/[a-z0-9-]+\.png$/,
-    /^maps\/[a-z0-9-]+\.json$/,
+    // maps/<id>.json (Tiled) is allowed once the MVP build adds its schema and checks.
   ];
   const walk = (dir: string): string[] =>
     readdirSync(dir).flatMap((name) => {
       const p = join(dir, name);
-      return statSync(p).isDirectory() ? walk(p) : [p];
+      const st = lstatSync(p);
+      if (st.isSymbolicLink()) {
+        err(p, 'symbolic links are not allowed in content');
+        return [];
+      }
+      return st.isDirectory() ? walk(p) : [p];
     });
-  for (const file of walk(contentDir)) {
+  const contentFiles = walk(contentDir);
+  for (const file of contentFiles) {
     const r = relative(contentDir, file).split('\\').join('/');
+    if (DENYLIST.test(r)) err(file, 'the path mentions a name we must not use (IP rule, AGENTS.md)');
     if (!allowed.some((re) => re.test(r))) err(file, 'unexpected file: content holds YAML, PNG sprites and Tiled JSON maps only');
   }
 
@@ -111,10 +189,10 @@ export function loadContent(contentDir: string, schemaDir: string): LoadResult {
       maps[l] = m;
     }
     const enFile = join(dir, 'en.yaml');
-    for (const k of Object.keys(maps.en)) if (!(k in maps.nl)) err(join(dir, 'nl.yaml'), `missing key "${k}"`);
-    for (const k of Object.keys(maps.nl)) if (!(k in maps.en)) err(enFile, `missing key "${k}"`);
+    for (const k of Object.keys(maps.en)) if (!has(maps.nl, k)) err(join(dir, 'nl.yaml'), `missing key "${k}"`);
+    for (const k of Object.keys(maps.nl)) if (!has(maps.en, k)) err(enFile, `missing key "${k}"`);
     for (const k of Object.keys(maps.en)) {
-      const nl = maps.nl[k];
+      const nl = has(maps.nl, k) ? maps.nl[k] : undefined;
       if (nl !== undefined && placeholders(maps.en[k]!) !== placeholders(nl)) {
         err(join(dir, 'nl.yaml'), `"${k}" has placeholders {${placeholders(nl)}}, en has {${placeholders(maps.en[k]!)}}`);
       }
@@ -132,7 +210,7 @@ export function loadContent(contentDir: string, schemaDir: string): LoadResult {
   const shop = read<ShopSpec>(join(contentDir, 'shop.yaml'), 'shop');
 
   const needGlobal = (file: string, key: string) => {
-    if (global && !(key in global.en)) err(file, `unknown locale key "${key}" (content/locales)`);
+    if (global && !has(global.en, key)) err(file, `unknown locale key "${key}" (content/locales)`);
   };
   if (roadmap) {
     const f = join(contentDir, 'roadmap.yaml');
@@ -161,6 +239,25 @@ export function loadContent(contentDir: string, schemaDir: string): LoadResult {
       compile(src, reg);
     } catch (e) {
       err(file, `${where}: ${(e as Error).message} in: ${src}`);
+    }
+  };
+
+  // Name-like arguments must be literals, and the names must exist.
+  const checkNames = (file: string, src: string, reg: Registry, known: (name: string, arg: string) => string | null): void => {
+    let ast: Node;
+    try {
+      ast = compile(src, reg).ast;
+    } catch {
+      return; // already reported
+    }
+    for (const c of callsIn(ast)) {
+      if (!NAME_ARGS.has(c.name)) continue;
+      if (c.first?.kind !== 'lit') {
+        err(file, `${c.name}() needs a quoted name, not an expression, in: ${src}`);
+        continue;
+      }
+      const problem = known(c.name, String(c.first.value));
+      if (problem) err(file, `${c.name}("${String(c.first.value)}"): ${problem}`);
     }
   };
 
@@ -194,15 +291,21 @@ export function loadContent(contentDir: string, schemaDir: string): LoadResult {
 
   // ---- npcs and quests
   const npcs: { npc: NpcSpec; dir: string; questId?: string }[] = [];
+  const progressExprs: { file: string; src: string }[] = [];
+  const progressFlags = new Set<string>();
   const checkNpc = (dir: string, npc: NpcSpec, local: LocaleMap | null, questId?: string) => {
     const file = join(dir, 'npc.yaml');
     const keys = [npc.name, ...npc.dialogue.flatMap((d) => d.lines)];
-    for (const k of keys) if (local && !(k in local)) err(file, `unknown locale key "${k}"`);
-    npc.dialogue.forEach((d, i) => d.when !== undefined && checkExpr(file, `dialogue[${i}].when`, d.when, PROGRESS_FACTS));
+    for (const k of keys) if (local && !has(local, k)) err(file, `unknown locale key "${k}"`);
+    npc.dialogue.forEach((d, i) => {
+      if (d.when === undefined) return;
+      checkExpr(file, `dialogue[${i}].when`, d.when, PROGRESS_FACTS);
+      progressExprs.push({ file, src: d.when });
+    });
     checkMap(file, npc.spawn.map);
     if (DENYLIST.test(npc.author.name)) err(file, 'author name mentions a name we must not use');
     const sprite = checkSprite(dir, npc);
-    if (sprite && questId) sprites.push({ questId, file: sprite });
+    if (sprite) sprites.push(questId ? { owner: 'quest', id: questId, file: sprite } : { owner: 'npc', id: npc.id, file: sprite });
     npcs.push({ npc, dir, ...(questId ? { questId } : {}) });
     return keys;
   };
@@ -243,7 +346,7 @@ export function loadContent(contentDir: string, schemaDir: string): LoadResult {
     const used = new Set<string>();
     const need = (file: string, key: string) => {
       used.add(key);
-      if (!(key in loc.en)) err(file, `unknown locale key "${key}"`);
+      if (!has(loc.en, key)) err(file, `unknown locale key "${key}"`);
     };
 
     if (quest.id !== id) err(qFile, `id "${quest.id}" must equal the folder name "${id}"`);
@@ -300,20 +403,26 @@ export function loadContent(contentDir: string, schemaDir: string): LoadResult {
     ];
     const services = Object.keys(scenario.services ?? {});
     const deployments = Object.keys(scenario.deployments ?? {});
+    const flags = (scenario.events ?? []).flatMap((e) => (e.set_flag ? [e.set_flag] : []));
+    flags.forEach((f) => progressFlags.add(f));
     for (const src of allExprs) {
-      let calls: ReturnType<typeof literalCalls> = [];
-      try {
-        calls = literalCalls(compile(src, SCENARIO_FACTS).ast);
-      } catch {
-        continue; // already reported
-      }
-      for (const c of calls) {
-        const arg = String(c.arg);
-        if (c.name === 'service' && !services.includes(arg)) err(sFile, `service("${arg}"): no such service in this scenario`);
-        if (c.name === 'pods_running' && !deployments.includes(arg)) err(sFile, `pods_running("${arg}"): no such deployment`);
-        if (c.name === 'restarted' && !services.includes(arg) && !deployments.includes(arg)) err(sFile, `restarted("${arg}"): no such service or deployment`);
+      checkNames(sFile, src, SCENARIO_FACTS, (name, arg) => {
+        if (name === 'service' && !services.includes(arg)) return `no such service in this scenario`;
+        if (name === 'pods_running' && !deployments.includes(arg)) return `no such deployment in this scenario`;
+        if (name === 'restarted' && !services.includes(arg) && !deployments.includes(arg)) return `no such service or deployment`;
+        if (name === 'flag' && !flags.includes(arg)) return `no event in this scenario sets that flag`;
+        if (name === 'ran' && !has(COMMANDS, arg.split(' ')[0] ?? '')) return `not a command of this terminal`;
+        return null;
+      });
+    }
+    // the machine must make sense: nothing below a file, home and cwd are directories
+    const filePaths = new Set(Object.keys(scenario.files ?? {}));
+    for (const p of [...filePaths, ...(scenario.dirs ?? []), scenario.home, scenario.cwd ?? scenario.home]) {
+      for (let a = dirnameOf(p); a !== '/'; a = dirnameOf(a)) {
+        if (filePaths.has(a)) err(sFile, `"${p}" lies below the file "${a}"`);
       }
     }
+    for (const p of [scenario.home, scenario.cwd]) if (p !== undefined && filePaths.has(p)) err(sFile, `"${p}" must be a directory, it is a file`);
     // the whole thing must start
     try {
       createSession(scenario, { t: (k) => k });
@@ -330,6 +439,34 @@ export function loadContent(contentDir: string, schemaDir: string): LoadResult {
     for (const l of LOCALES) for (const [k, v] of Object.entries(loc[l])) questLocales[l][questKey(id, k)] = v;
     quests.push({ id, quest, scenario, ...(npc ? { npc } : {}) });
   }
+
+  // ---- every PNG is a sprite some npc.yaml declares (with its source and licence)
+  const declared = new Set(sprites.map((x) => x.file));
+  for (const file of contentFiles) {
+    if (file.endsWith('.png') && !declared.has(file)) err(file, 'no npc.yaml declares this image (sprite: file, source, license)');
+  }
+
+  // ---- progress conditions name real quests, items, branches and flags
+  const shopIds = shop?.items.map((i) => i.id) ?? [];
+  const branchIds = roadmap?.branches.map((b) => b.id as string) ?? [];
+  for (const { file, src } of progressExprs) {
+    checkNames(file, src, PROGRESS_FACTS, (name, arg) => {
+      if (name === 'quest' && !questIds.includes(arg)) return 'no such quest';
+      if (name === 'has_item' && !shopIds.includes(arg)) return 'no such shop item';
+      if (name === 'xp' && !branchIds.includes(arg)) return 'no such branch';
+      if (name === 'flag' && !progressFlags.has(arg)) return 'no event sets that flag';
+      return null;
+    });
+  }
+
+  // ---- no "requires" cycles: a cycle would lock its members forever
+  const cycleCheck = (what: string, edges: Record<string, readonly string[]>) => {
+    const c = findCycle(edges);
+    if (c.length > 0) errors.push(`content: ${what} requirements form a cycle: ${c.join(' -> ')}`);
+  };
+  cycleCheck('quest', Object.fromEntries(quests.map((q) => [q.id, q.quest.requires])));
+  if (roadmap) cycleCheck('roadmap node', Object.fromEntries(roadmap.nodes.map((n) => [n.id, n.requires])));
+  if (shop) cycleCheck('shop item', Object.fromEntries(shop.items.map((i) => [i.id, i.requires])));
 
   // ---- cross-folder checks
   const npcIds = npcs.map((n) => n.npc.id);
