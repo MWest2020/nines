@@ -11,6 +11,8 @@ Play it in the browser: https://mwest2020.github.io/nines/ (every green push to 
 npm ci
 npm test          # unit tests, quests played end to end, content validation
 npm run build     # static site in dist/
+# the browser smoke test (Python Playwright; see AGENTS.md for the memory cap)
+uv run --with playwright==1.65.2 python tests/e2e/smoke.py
 ```
 
 - [ARCHITECTURE.md](ARCHITECTURE.md): modules, the terminal simulator, content, saves, i18n, Android
@@ -22,4 +24,5 @@ npm run build     # static site in dist/
 - [docs/reference/roadmap.yml](docs/reference/roadmap.yml): phases and what "done" means
 - [docs/content-backlog.md](docs/content-backlog.md): battle topics still to write
 
-Status: phase 1 (architecture and skeleton). The game itself is not playable yet.
+Status: MVP build. Junior Village and its three terminal quests are playable on desktop; touch
+controls and battles in the game are still to come.

@@ -48,6 +48,10 @@ src/
     talk.ts         what an NPC says, from the save
   world/          the map as a grid (pure)
     grid.ts         collision, objects, facing, steps, reachability; the validator uses it too
+  terminal/       the terminal's input line without the DOM (pure)
+    history.ts      up/down history with the line being typed kept as a draft
+    complete.ts     Tab completion: commands, subcommands, units, deployments, paths
+    editor.ts       the editor buffer: tab lines and the gutter, line/column, Tab = 2 spaces
   content/
     types.ts        TypeScript mirror of the schemas; the bundle's shape
   game/           Phaser and DOM (thin)
@@ -59,7 +63,8 @@ src/
     bridge.ts       answers the world's talk, use and enter events through the GameApi
     storage.ts      localStorage, or memory when the browser blocks it
     ui/             HudScene + DialogueBox, TrailScene, ShopScene, CreditsScene, the pixel font
-    (MVP) TerminalOverlay (DOM + xterm.js), BattleOverlay (DOM)
+    terminal/       TerminalOverlay.ts (DOM + xterm.js), terminal.css, wire.ts (to the GameApi)
+    (MVP) BattleOverlay (DOM)
 assets/           tilesets and sheets outside content (Kenney packs, own art), each in ASSETS.md
 tools/
   content/load.ts         load + validate + bundle /content (Node, build time only)
@@ -68,11 +73,12 @@ tools/
   maps/build-maps.mjs     wrote the first versions of the Tiled maps from text layouts
 schemas/          JSON Schemas for every content file
 content/          the game's data
-tests/            Vitest: rules, sim, quests played end to end, content, guards
+tests/            Vitest: rules, sim, terminal input, quests played end to end, content, guards
+  e2e/smoke.py      the browser smoke test: the three quests typed into the real overlay
 ```
 
-Dependencies point one way: `game → battle, core, sim, rules, world, content/types`; `sim → rules`;
-`battle → core, rules`; `tools → battle, sim, rules, world` (to validate content with the same code
+Dependencies point one way: `game → battle, core, sim, rules, terminal, world, content/types`;
+`terminal → sim, rules`; `sim → rules`; `battle → core, rules`; `tools → battle, sim, rules, world` (to validate content with the same code
 the game runs). Nothing in
 `rules`, `sim`, `core`, `battle` or `world` imports Phaser or touches `window`, `document` or `localStorage`
 directly (`save.ts` takes a storage object).
@@ -177,7 +183,8 @@ state. Then, for each line the player types, `run(session, line)`:
 `saveFile(session, path, content)` (the editor's Save) writes the file and runs step 4.
 
 The UI layer renders the output in xterm.js, shows objectives and hints next to it, applies
-money changes from events to the game state, and on `justWon` closes the quest.
+money changes from events to the game state, and on `justWon` closes the quest (see
+TerminalOverlay below).
 
 **Hints** are conditions too, so a scenario can say "after two failed attempts and if the
 player has not run df yet". When hints are evaluated, the `fails` fact includes the homelab's
@@ -417,6 +424,7 @@ git: {root: /home/dev/shop, pipeline: {file: .nines-ci.yml, validator: nines-ci}
 objectives: [{id, text, done_when}]          # all true = quest complete
 hints: [{id, when, text}]
 events: [{id, when, say, money?, reset?, set_flag?}]
+quick?: ["df -h", "du -sh /var/*"]            # the quick-command strip; must parse, start with a command
 outage?: {say?, money?}                       # override the built-in outage
 
 # npc.yaml
@@ -513,10 +521,14 @@ Guards:
   outside an allowlist. The allowlist is exactly what Phaser carries as plain strings:
   `https://phaser.io` (its console banner, turned off) and two XML namespace URIs. Phaser also
   has `new Function("return this")` as a global-object fallback inside a try/catch; the CSP
-  (no `'unsafe-eval'`) blocks it and the fallback continues. Vite's module-preload polyfill is
-  off because it fetches module URLs.
-- Terminal output that comes from the player (a file they wrote with the editor) has control
-  characters stripped before it reaches xterm.js; content cannot contain them at all.
+  (no `'unsafe-eval'`) blocks it and the fallback continues. xterm.js carries its default
+  handler for OSC 8 hyperlinks (`confirm(...)` then `window.open()`); the check allows exactly
+  that code by its shape. It cannot run: the overlay passes its own `linkHandler`, whose
+  activation does nothing, and no escape sequence reaches xterm (below). Vite's module-preload
+  polyfill is off because it fetches module URLs.
+- Terminal output that comes from the player (a file they wrote with the editor, the line they
+  typed) has control characters stripped before it reaches xterm.js; content cannot contain
+  them at all. The only escape sequences xterm sees are the overlay's own colour codes.
 - The MVP's acceptance check is a devtools Network panel with zero requests outside the origin,
   documented with a screenshot in the MVP pull request (a browser task, see AGENTS.md).
 
@@ -625,6 +637,39 @@ the one-off event bonuses already paid (`<quest>/<event>`).
   `enterkeyhint=send`): xterm's hidden-textarea input is unreliable with Android IMEs. A strip
   of quick-command buttons fills the input; Tab completes commands and paths; ↑/↓ walk the
   history. The editor is a `<textarea>` with a line-number gutter that marks lines with tabs.
+  Built (`src/game/terminal/`):
+  - **Opening.** Using a `terminal` object runs `openQuestTerminal(api, quest)` from
+    `bridge.ts`. A locked quest only says so; an available one is accepted first, so a player
+    may fix the machine before talking to its giver. A done quest's machine opens again as a
+    replay that pays nothing. One terminal at a time, a fresh machine every time (sessions are
+    not saved). The overlay holds the UI busy (`api.hold()`) while open.
+  - **Input.** Our own `<input>`: Enter runs the line, Tab completes (`terminal/complete.ts`;
+    several matches are listed in the output, like bash), ↑/↓ walk the history, Ctrl-C drops
+    the line (`^C`), Ctrl-L clears. Keys typed in the overlay stop at its root, so Phaser's
+    window listener never sees them. The Enter that opened the terminal is ignored until it is
+    released, so it does not run an empty line.
+  - **Quick strip.** Tab, ↑, ↓, then the keys phones hide (`| / - ~ *`, inserted at the
+    cursor), then the scenario's `quick` lines (they fill the input; the player presses Enter),
+    then `exit`. Buttons do not take focus, so the soft keyboard stays up.
+  - **Side panel.** Objectives with a filled dot when done and a ring when open (shape, not
+    only colour), and every hint unlocked so far with the latest one bright. Hints come from
+    the scenario's conditions; `api.hintBoost()` goes into `createSession`, so the Raspberry Pi
+    makes them come one try sooner. On a narrow screen the panel folds into a count in the
+    header that opens it over the output.
+  - **Consequences.** Every fired event (a scenario event or the built-in outage) is told in
+    the overlay's own dialogue box, spoken by the quest's giver, with the money actually lost
+    (`applyTerminalEvents`; money never goes below zero). Input waits until it is dismissed.
+  - **Editor.** `edit <file>` (and `nano`, `vi`, `vim`) opens it over the terminal. The gutter
+    marks lines that contain a tab with `⇥`, the status line names them, Tab inserts two
+    spaces, Ctrl+S or Save calls `saveFile` and re-checks the objectives, Esc or Cancel
+    discards.
+  - **The win.** On `justWon` the overlay calls `completeQuest` (pays once, saves), shows
+    "Quest complete!" with the reward, and Continue closes it; then `showQuestDone` plays the
+    giver's done lines and the world takes control back.
+  - **Look.** The device's monospace font (`ui-monospace, monospace`), DESIGN.md's terminal
+    colours (prompt in ice, failed commands in orange). xterm is sized by measuring one cell in
+    that font, without the fit addon. Every string is a locale key; the machine's own output
+    stays as the real tools print it (i18n, The terminal boundary).
 - **BattleOverlay**: DOM, like the terminal, over the dimmed world: the transcript, the
   whiteboard, the two meters, the answer cards (DESIGN.md, Battles). Map objects add
   `gate-<town>` (where a gate battle's giver stands and the road is blocked) and the `start`
@@ -710,7 +755,7 @@ Pinned exactly, each version published at least two weeks before it was added (c
 | vitest | 4.1.12 | dev | tests; 5.x needs Node 22, and the agents' host runs Node 20 |
 | ajv | 8.20.0 | dev | JSON Schema validation, build time only (it generates code, so it never ships) |
 | @types/node | 22.20.5 | dev | types for tools and tests |
-| @xterm/xterm | 6.0.0 | runtime, MVP build | the terminal renderer; no addons |
+| @xterm/xterm | 6.0.0 | runtime | the terminal's output renderer (MIT); no addons; published 22 Dec 2025, the current release |
 | @capacitor/core, cli, android | 8.x | Android phase | pinned when that phase starts |
 
 ## Testing and CI
@@ -721,7 +766,12 @@ Pinned exactly, each version published at least two weeks before it was added (c
   (every question type, meters in bounds, retry, hints, seeded cards, triggers) and every
   battle in content played perfectly, all wrong and at random.
 - `.github/workflows/ci.yml` on every pull request and every push to `main`: `npm ci`, content
-  validation, `npm test`, `npm run build`, `npm run check:dist`. Actions pinned to commit SHAs,
+  validation, `npm test`, `npm run build`, `npm run check:dist`, the browser smoke test.
+  Actions pinned to commit SHAs,
   read-only token.
-- Browser checks (Playwright, devtools) are for the MVP build and run under the memory cap in
-  AGENTS.md, one browser at a time.
+- `tests/e2e/smoke.py` (Python Playwright, no npm dependency): serves `dist/` under a sub-path,
+  walks the player to Ravi's laptop and the two server-room racks with the keyboard (paths from
+  the Tiled maps), and plays all three MVP quests by typing real commands, the editor and a
+  database-deleting mistake included. It fails on any request outside the origin and on any page
+  error. CI runs it after `check:dist`; locally it runs under the memory cap in AGENTS.md, one
+  browser at a time.
