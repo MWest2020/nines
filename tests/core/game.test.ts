@@ -5,6 +5,7 @@ import {
   buy,
   canBuy,
   completeQuest,
+  gateWon,
   currentQuest,
   hintBoost,
   incomePerQuest,
@@ -314,10 +315,20 @@ describe('the Career Trail', () => {
     expect(test(compile('xp("linux") >= 20 && xp("cicd") == 0', PROGRESS_FACTS), env)).toBe(true);
   });
 
-  it('gateOpen in battle/triggers agrees with townOpen', () => {
+  it('gateOpen in battle/triggers agrees with gateWon', () => {
     for (const g of [fresh(), done(fresh(), 'disk-full', 'service-down', 'broken-pipeline', 'rate-limiter-interview')]) {
-      for (const town of ['junior', 'medior', 'senior']) expect(gateOpen(town, rules().quests, g)).toBe(townOpen(g, rules(), town));
+      for (const town of ['junior', 'medior', 'senior']) expect(gateOpen(town, rules().quests, g)).toBe(gateWon(g, rules(), town));
     }
+  });
+
+  it('opens towns in road order: Senior Summit waits for Medior City', () => {
+    const g = fresh();
+    expect(['junior', 'medior', 'senior'].map((t) => townOpen(g, rules(), t))).toEqual([true, false, false]);
+    expect(gateWon(g, rules(), 'senior')).toBe(true);
+    expect(trail(g, rules()).towns.map((t) => t.open)).toEqual([true, false, false]);
+    const won = done(g, 'disk-full', 'service-down', 'broken-pipeline', 'rate-limiter-interview');
+    expect(['junior', 'medior', 'senior'].map((t) => townOpen(won, rules(), t))).toEqual([true, true, true]);
+    expect(townOpen(g, rules(), 'atlantis')).toBe(false);
   });
 });
 

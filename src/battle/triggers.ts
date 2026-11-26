@@ -8,7 +8,7 @@
 
 import type { BattleTrigger, QuestEntry } from '../content/types';
 import type { GameState } from '../core/save';
-import { townOpen } from '../core/game';
+import { gateWon } from '../core/game';
 import { compile, type Env, test } from '../rules/expr';
 import { PROGRESS_FACTS } from '../rules/registries';
 import { roll } from './seed';
@@ -21,5 +21,5 @@ export function pagerFires(id: string, trigger: BattleTrigger, tick: number, env
 
 /** Is the road to this town open? Closed while a gate battle for it is not won. */
 export function gateOpen(town: string, quests: readonly QuestEntry[], game: GameState): boolean {
-  return townOpen(game, { quests: [...quests] }, town);
+  return gateWon(game, { quests: [...quests] }, town);
 }

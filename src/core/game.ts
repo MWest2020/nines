@@ -179,11 +179,23 @@ export const tick = (game: GameState): GameState => ({ ...game, ticks: game.tick
 export type NodeState = 'done' | 'open' | 'locked';
 
 /**
- * Is the road to this town open? Closed while a gate battle for it is not won
- * (ARCHITECTURE.md, Battles: gate). battle/triggers.ts gateOpen uses this.
+ * Has the gate battle into this town been won (or does the town have no gate)? ARCHITECTURE.md,
+ * Battles: gate. battle/triggers.ts gateOpen uses this.
  */
-export function townOpen(game: GameState, rules: Pick<Rules, 'quests'>, town: string): boolean {
+export function gateWon(game: GameState, rules: Pick<Rules, 'quests'>, town: string): boolean {
   return rules.quests.every((q) => q.battle?.trigger.kind !== 'gate' || q.battle.trigger.town !== town || stateOf(game, rules, q.id) === 'done');
+}
+
+/**
+ * Is the road to this town open? The towns lie on one road in roadmap order, so a town is open
+ * when its own gate is won and every town before it is open: Senior Summit stays closed while
+ * the road to Medior City is.
+ */
+export function townOpen(game: GameState, rules: Pick<Rules, 'quests' | 'roadmap'>, town: string): boolean {
+  const towns = rules.roadmap.towns;
+  const at = towns.findIndex((t) => t.id === town);
+  if (at < 0) return false;
+  return towns.slice(0, at + 1).every((t) => gateWon(game, rules, t.id));
 }
 
 const stageOpen = (game: GameState, rules: Rules, stage: Stage): boolean =>
