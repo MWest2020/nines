@@ -1,0 +1,10 @@
+schema: 1
+id: ravi
+author: {name: "Nines team"}
+name: npc.name
+tint: "#4880c8"
+spawn: {map: junior-village, slot: npc-2, facing: left}
+dialogue:
+  - when: 'quest("broken-pipeline") == "done"'
+    lines: [npc.after]
+  - lines: [npc.idle]

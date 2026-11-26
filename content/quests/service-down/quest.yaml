@@ -1,0 +1,17 @@
+schema: 1
+id: service-down
+author: {name: "Nines team"}
+title: title
+summary: summary
+stage: junior
+branch: incident
+track: any
+roadmap_node: incident-first
+requires: []
+giver: bas
+start: {map: server-room, object: rack-app-01}
+reward: {money: 175, xp: 25}
+dialogue:
+  offer: [offer.1, offer.2]
+  active: [active.1]
+  done: [done.1]

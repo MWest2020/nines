@@ -1,0 +1,83 @@
+# web-01: /var is almost full and the shop starts throwing errors.
+schema: 1
+host: web-01
+user: dev
+home: /home/dev
+motd: motd
+mounts:
+  - {path: /, device: /dev/sda1, size: 20G, base_used: 6G}
+  - {path: /var, device: /dev/sdb1, size: 10G, base_used: 750M}
+dirs: [/tmp, /var/tmp, /var/cache/nginx]
+files:
+  /home/dev/NOTES.txt: |
+    web-01 runbook (Femke)
+    - logs live in /var/log
+    - the database lives in /var/lib/postgresql. Never touch it.
+    - old nginx logs are rotated and gzipped every night
+  /etc/nginx/nginx.conf: |
+    user www-data;
+    events {}
+    http {
+      access_log /var/log/nginx/access.log;
+      include /etc/nginx/conf.d/*.conf;
+    }
+  /var/log/nginx/access.log:
+    size: 120M
+    content: |
+      10.0.4.21 - - [26/Nov/2026:08:59:58 +0100] "GET /shop/cart HTTP/1.1" 200 5120
+      10.0.4.22 - - [26/Nov/2026:08:59:59 +0100] "POST /shop/checkout HTTP/1.1" 500 312
+      10.0.4.21 - - [26/Nov/2026:09:00:01 +0100] "GET /shop/ HTTP/1.1" 200 20480
+  /var/log/nginx/access.log.1:
+    size: 900M
+    content: |
+      10.0.4.19 - - [25/Nov/2026:23:59:59 +0100] "GET /shop/ HTTP/1.1" 200 20480
+  /var/log/nginx/access.log.2.gz: {size: 450M}
+  /var/log/nginx/access.log.3.gz: {size: 450M}
+  /var/log/nginx/access.log.4.gz: {size: 450M}
+  /var/log/nginx/access.log.5.gz: {size: 450M}
+  /var/log/nginx/access.log.6.gz: {size: 450M}
+  /var/log/nginx/access.log.7.gz: {size: 450M}
+  /var/log/nginx/access.log.8.gz: {size: 450M}
+  /var/log/nginx/access.log.9.gz: {size: 450M}
+  /var/log/nginx/error.log:
+    size: 2M
+    content: |
+      2026/11/26 08:59:59 [crit] 812#812: *4411 pwrite() "/var/cache/nginx/client_temp/0000000042" failed (28: No space left on device)
+      2026/11/26 09:00:02 [crit] 812#812: *4415 pwrite() "/var/cache/nginx/client_temp/0000000043" failed (28: No space left on device)
+  /var/log/shop/app.log:
+    size: 50M
+    content: |
+      2026-11-26T08:59:59Z ERROR checkout failed: write /var/tmp/session-8812: no space left on device
+  /var/log/shop/debug.log:
+    size: 2.4G
+    content: |
+      2026-11-26T09:00:00Z DEBUG cart: recalculating totals for cart 8812
+      2026-11-26T09:00:00Z DEBUG cart: item 1 of 3 ok
+      2026-11-26T09:00:00Z DEBUG cart: item 2 of 3 ok
+  /var/log/journal/system.journal: {size: 300M}
+  /var/lib/postgresql/16/main/base.dat: {size: 1.5G}
+services:
+  nginx:
+    description: A high performance web server and a reverse proxy server
+    state: active
+    logs:
+      - "Nov 26 06:00:01 web-01 systemd[1]: Started nginx.service - A high performance web server and a reverse proxy server."
+  postgresql:
+    description: PostgreSQL RDBMS
+    state: active
+    logs:
+      - "Nov 26 06:00:02 web-01 systemd[1]: Started postgresql.service - PostgreSQL RDBMS."
+objectives:
+  - {id: space, text: obj.space, done_when: 'disk_usage("/var") < 80'}
+  - {id: database, text: obj.database, done_when: 'exists("/var/lib/postgresql/16/main/base.dat")'}
+  - {id: web, text: obj.web, done_when: 'service("nginx") == "active"'}
+hints:
+  - {id: df, when: 'commands >= 3 && !ran("df")', text: hint.df}
+  - {id: du, when: 'ran("df") && !ran("du") && commands >= 5', text: hint.du}
+  - {id: gz, when: 'disk_usage("/var") >= 80 && (fails >= 2 || commands >= 10)', text: hint.gz}
+events:
+  - id: database-gone
+    when: 'removed("/var/lib/postgresql/16/main/base.dat")'
+    say: event.database_gone
+    money: -150
+    reset: true

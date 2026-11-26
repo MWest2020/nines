@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nines.invalid/schemas/npc.schema.json",
+  "title": "npc.yaml",
+  "description": "A character in the world. Dialogue entries are tried in order; the first whose condition holds is spoken.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "id", "author", "name", "spawn", "dialogue"],
+  "properties": {
+    "schema": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "id": { "$ref": "common.schema.json#/$defs/id" },
+    "author": { "$ref": "common.schema.json#/$defs/author" },
+    "name": { "$ref": "common.schema.json#/$defs/localeKey" },
+    "sprite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file", "frame", "source", "license"],
+      "description": "a PNG sheet next to this file: 3 columns (step, stand, step) x 4 rows (down, left, right, up)",
+      "properties": {
+        "file": { "type": "string", "pattern": "^[a-z0-9-]+\\.png$" },
+        "frame": { "enum": [16, 32] },
+        "source": { "type": "string", "minLength": 1, "maxLength": 200, "description": "who drew it, or where it came from" },
+        "license": { "const": "CC0-1.0" }
+      }
+    },
+    "tint": {
+      "type": "string",
+      "pattern": "^#[0-9a-f]{6}$",
+      "description": "colour for the built-in placeholder sprite when there is no sheet"
+    },
+    "spawn": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["map", "slot"],
+      "properties": {
+        "map": { "$ref": "common.schema.json#/$defs/id" },
+        "slot": { "$ref": "common.schema.json#/$defs/id", "description": "a named point in the map: npc-1..n or cameo-1..n" },
+        "facing": { "enum": ["up", "down", "left", "right"] }
+      }
+    },
+    "dialogue": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["lines"],
+        "properties": {
+          "when": { "$ref": "common.schema.json#/$defs/expr", "description": "a progress condition, e.g. quest(\"disk-full\") == \"done\"" },
+          "lines": { "$ref": "common.schema.json#/$defs/lines" }
+        }
+      }
+    }
+  }
+}

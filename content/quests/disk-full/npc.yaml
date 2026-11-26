@@ -1,0 +1,10 @@
+schema: 1
+id: femke
+author: {name: "Nines team"}
+name: npc.name
+tint: "#c86848"
+spawn: {map: junior-village, slot: npc-1, facing: down}
+dialogue:
+  - when: 'quest("disk-full") == "done"'
+    lines: [npc.after]
+  - lines: [npc.idle]

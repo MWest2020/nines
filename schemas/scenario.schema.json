@@ -1,0 +1,370 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nines.invalid/schemas/scenario.schema.json",
+  "title": "scenario.yaml",
+  "description": "The simulated machine behind a quest's terminal, and the conditions that win, hint and punish.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "host",
+    "user",
+    "home",
+    "motd",
+    "mounts",
+    "objectives"
+  ],
+  "properties": {
+    "schema": {
+      "$ref": "common.schema.json#/$defs/schemaVersion"
+    },
+    "host": {
+      "type": "string",
+      "pattern": "^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$"
+    },
+    "user": {
+      "type": "string",
+      "pattern": "^[a-z_][a-z0-9_-]{0,31}$"
+    },
+    "home": {
+      "$ref": "common.schema.json#/$defs/absPath"
+    },
+    "cwd": {
+      "$ref": "common.schema.json#/$defs/absPath"
+    },
+    "motd": {
+      "$ref": "common.schema.json#/$defs/localeKey"
+    },
+    "mounts": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "device",
+          "size"
+        ],
+        "properties": {
+          "path": {
+            "$ref": "common.schema.json#/$defs/absPath"
+          },
+          "device": {
+            "type": "string",
+            "pattern": "^/dev/[a-z0-9/-]+$"
+          },
+          "size": {
+            "$ref": "common.schema.json#/$defs/size"
+          },
+          "base_used": {
+            "$ref": "common.schema.json#/$defs/size",
+            "description": "space used by files the scenario does not list"
+          }
+        }
+      }
+    },
+    "dirs": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/absPath"
+      },
+      "maxItems": 200
+    },
+    "files": {
+      "type": "object",
+      "maxProperties": 400,
+      "propertyNames": {
+        "$ref": "common.schema.json#/$defs/absPath"
+      },
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "string",
+            "maxLength": 20000
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "size": {
+                "$ref": "common.schema.json#/$defs/size"
+              },
+              "content": {
+                "type": "string",
+                "maxLength": 20000,
+                "description": "the visible text; with size, the tail of a bigger file"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "services": {
+      "type": "object",
+      "maxProperties": 20,
+      "propertyNames": {
+        "pattern": "^[a-z0-9][a-z0-9_.@-]{0,40}$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "description",
+          "state"
+        ],
+        "properties": {
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "state": {
+            "enum": [
+              "active",
+              "inactive",
+              "failed"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "logs": {
+            "$ref": "#/$defs/logLines"
+          },
+          "restart": {
+            "$ref": "#/$defs/restartRule"
+          }
+        }
+      }
+    },
+    "deployments": {
+      "type": "object",
+      "maxProperties": 20,
+      "propertyNames": {
+        "$ref": "common.schema.json#/$defs/id"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "namespace": {
+            "$ref": "common.schema.json#/$defs/id"
+          },
+          "replicas": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "status": {
+            "$ref": "#/$defs/podStatus"
+          },
+          "restarts": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 999
+          },
+          "logs": {
+            "$ref": "#/$defs/logLines"
+          },
+          "restart": {
+            "$ref": "#/$defs/deploymentRestart"
+          }
+        }
+      }
+    },
+    "git": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "root"
+      ],
+      "properties": {
+        "root": {
+          "$ref": "common.schema.json#/$defs/absPath"
+        },
+        "branch": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9/_-]{0,40}$"
+        },
+        "pipeline": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "file",
+            "validator"
+          ],
+          "properties": {
+            "file": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$",
+              "description": "relative to the git root"
+            },
+            "validator": {
+              "enum": [
+                "nines-ci"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "objectives": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "text",
+          "done_when"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "common.schema.json#/$defs/id"
+          },
+          "text": {
+            "$ref": "common.schema.json#/$defs/localeKey"
+          },
+          "done_when": {
+            "$ref": "common.schema.json#/$defs/expr"
+          }
+        }
+      }
+    },
+    "hints": {
+      "type": "array",
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "when",
+          "text"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "common.schema.json#/$defs/id"
+          },
+          "when": {
+            "$ref": "common.schema.json#/$defs/expr"
+          },
+          "text": {
+            "$ref": "common.schema.json#/$defs/localeKey"
+          }
+        }
+      }
+    },
+    "events": {
+      "type": "array",
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "when",
+          "say"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "common.schema.json#/$defs/id"
+          },
+          "when": {
+            "$ref": "common.schema.json#/$defs/expr"
+          },
+          "say": {
+            "$ref": "common.schema.json#/$defs/localeKey"
+          },
+          "money": {
+            "type": "integer",
+            "minimum": -1000,
+            "maximum": 1000
+          },
+          "reset": {
+            "type": "boolean",
+            "description": "restore the machine to its starting state"
+          },
+          "set_flag": {
+            "$ref": "common.schema.json#/$defs/id"
+          }
+        }
+      }
+    },
+    "outage": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "overrides the built-in consequence of rm -rf on a vital path",
+      "properties": {
+        "say": {
+          "$ref": "common.schema.json#/$defs/localeKey"
+        },
+        "money": {
+          "type": "integer",
+          "minimum": -1000,
+          "maximum": 0
+        }
+      }
+    }
+  },
+  "$defs": {
+    "logLines": {
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "type": "string",
+        "maxLength": 400
+      }
+    },
+    "podStatus": {
+      "enum": [
+        "Running",
+        "Pending",
+        "CrashLoopBackOff",
+        "Error",
+        "ImagePullBackOff"
+      ]
+    },
+    "restartRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "succeeds_if": {
+          "$ref": "common.schema.json#/$defs/expr"
+        },
+        "logs_on_success": {
+          "$ref": "#/$defs/logLines"
+        },
+        "logs_on_failure": {
+          "$ref": "#/$defs/logLines"
+        }
+      }
+    },
+    "deploymentRestart": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "succeeds_if": {
+          "$ref": "common.schema.json#/$defs/expr"
+        },
+        "logs_on_success": {
+          "$ref": "#/$defs/logLines"
+        },
+        "logs_on_failure": {
+          "$ref": "#/$defs/logLines"
+        },
+        "status_on_failure": {
+          "$ref": "#/$defs/podStatus"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,17 @@
+schema: 1
+id: disk-full
+author: {name: "Nines team"}
+title: title
+summary: summary
+stage: junior
+branch: linux
+track: any
+roadmap_node: linux-disk
+requires: []
+giver: femke
+start: {map: server-room, object: rack-web-01}
+reward: {money: 150, xp: 20}
+dialogue:
+  offer: [offer.1, offer.2]
+  active: [active.1]
+  done: [done.1]
