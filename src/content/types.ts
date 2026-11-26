@@ -14,7 +14,8 @@ export type BranchId =
   | 'containers'
   | 'iac'
   | 'observability'
-  | 'incident';
+  | 'incident'
+  | 'design';
 
 /** A size: bytes as a number, or a string such as "4.2G", "120M", "512K". */
 export type Size = number | string;
@@ -131,10 +132,88 @@ export interface ShopSpec {
   }[];
 }
 
+// ---- battles (schemas/battle.schema.json): an encounter in which someone questions the player
+
+export type BattleKind = 'design' | 'incident' | 'stakeholder';
+/** best = full credit, fair = half, weak = none. */
+export type Grade = 'best' | 'fair' | 'weak';
+
+export interface BattleOption {
+  id: string;
+  text: string;
+  grade: Grade;
+  why: string;
+}
+
+interface RoundBase {
+  id: string;
+  /** what the attacker says before the question: context, then the question */
+  prompt: string[];
+  /** pressure a perfect answer removes */
+  stakes: number;
+  /** confidence a fully wrong answer costs (default: stakes) */
+  cost?: number;
+}
+
+/** Pick the best trade-off, where an option is a choice together with its reason. */
+export interface TradeoffRound extends RoundBase {
+  type: 'tradeoff';
+  options: BattleOption[];
+}
+
+/** Spot the flaw in a proposal shown on the whiteboard. */
+export interface FlawRound extends RoundBase {
+  type: 'flaw';
+  proposal: string[];
+  options: BattleOption[];
+}
+
+/** Choose what to ask first; pick is how many questions the player may ask. */
+export interface ClarifyRound extends RoundBase {
+  type: 'clarify';
+  pick?: number;
+  options: BattleOption[];
+}
+
+/** Put steps in order. Listed order is correct; equal ranks may come in either order. */
+export interface OrderRound extends RoundBase {
+  type: 'order';
+  items: { id: string; text: string; why: string; rank?: number }[];
+}
+
+/** Back-of-envelope: pick the range that holds the estimate. Ranges ascend and touch. */
+export interface EstimateRound extends RoundBase {
+  type: 'estimate';
+  value: number;
+  working: string;
+  options: (BattleOption & { min: number; max?: number })[];
+}
+
+export type BattleRound = TradeoffRound | FlawRound | ClarifyRound | OrderRound | EstimateRound;
+
+export type BattleTrigger =
+  | { kind: 'npc' }
+  | { kind: 'pager'; when: string; chance: number }
+  | { kind: 'gate'; town: string };
+
+export interface BattleSpec {
+  schema: 1;
+  kind: BattleKind;
+  attacker: string;
+  intro: string[];
+  trigger: BattleTrigger;
+  meters?: { confidence?: number; pressure?: number };
+  rounds: BattleRound[];
+  hints?: { id: string; round?: string; when: string; text: string }[];
+  outro: { won: string[]; lost: string[] };
+}
+
 export interface QuestEntry {
   id: string;
   quest: QuestSpec;
-  scenario: ScenarioSpec;
+  /** a terminal quest has a scenario, a battle quest a battle; never both */
+  scenario?: ScenarioSpec;
+  battle?: BattleSpec;
   npc?: NpcSpec;
   /** Set by the build for a quest that ships its own sprite: a same-origin URL in dist/. */
   spriteUrl?: string;

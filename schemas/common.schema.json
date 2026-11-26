@@ -42,7 +42,7 @@
     },
     "stage": { "enum": ["junior", "medior", "senior"] },
     "branch": {
-      "enum": ["linux", "networking", "git", "cicd", "containers", "iac", "observability", "incident"]
+      "enum": ["linux", "networking", "git", "cicd", "containers", "iac", "observability", "incident", "design"]
     },
     "author": {
       "type": "object",

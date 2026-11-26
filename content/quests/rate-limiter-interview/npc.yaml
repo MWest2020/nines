@@ -1,0 +1,10 @@
+schema: 1
+id: ingrid
+author: {name: "Nines team"}
+name: npc.name
+tint: "#a868a8"
+spawn: {map: junior-village, slot: gate-medior, facing: down}
+dialogue:
+  - when: 'quest("rate-limiter-interview") == "done"'
+    lines: [npc.after]
+  - lines: [npc.idle]

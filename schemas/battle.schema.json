@@ -1,0 +1,227 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nines.invalid/schemas/battle.schema.json",
+  "title": "battle.yaml",
+  "description": "An encounter in a quest folder (instead of scenario.yaml): someone questions the player over a few rounds. Strings are locale keys from this folder's locales/. Engine: src/battle/; rules: ARCHITECTURE.md, Battles.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "kind", "attacker", "intro", "trigger", "rounds", "outro"],
+  "properties": {
+    "schema": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "kind": {
+      "enum": ["design", "incident", "stakeholder"],
+      "description": "design = a system-design interview, incident = triage under pressure, stakeholder = a demanding colleague (scope, trade-offs, saying no well)"
+    },
+    "attacker": { "$ref": "common.schema.json#/$defs/localeKey", "description": "who is asking, as shown in the header" },
+    "intro": { "$ref": "common.schema.json#/$defs/lines", "description": "the opening lines, e.g. the pager message" },
+    "trigger": {
+      "type": "object",
+      "description": "how the battle starts: talking to the giver, a random page, or the gate to a town",
+      "required": ["kind"],
+      "properties": { "kind": { "enum": ["npc", "pager", "gate"] } },
+      "discriminator": { "propertyName": "kind" },
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": { "kind": { "const": "npc" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "when", "chance"],
+          "properties": {
+            "kind": { "const": "pager" },
+            "when": { "$ref": "common.schema.json#/$defs/expr", "description": "a progress condition: from when on the pager may go off" },
+            "chance": { "type": "integer", "minimum": 1, "maximum": 100, "description": "percent per tick the game counts (seeded, deterministic)" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "town"],
+          "properties": {
+            "kind": { "const": "gate" },
+            "town": { "$ref": "common.schema.json#/$defs/id", "description": "a town in roadmap.yaml whose road opens when this battle is won" }
+          }
+        }
+      ]
+    },
+    "meters": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "starting values (and maxima); both default to 100",
+      "properties": {
+        "confidence": { "type": "integer", "minimum": 10, "maximum": 200 },
+        "pressure": { "type": "integer", "minimum": 10, "maximum": 200 }
+      }
+    },
+    "rounds": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 12,
+      "items": { "$ref": "#/$defs/round" }
+    },
+    "hints": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "when", "text"],
+        "properties": {
+          "id": { "$ref": "common.schema.json#/$defs/id" },
+          "round": { "$ref": "common.schema.json#/$defs/id", "description": "only while this round is on screen; without it, for the whole battle" },
+          "when": { "$ref": "common.schema.json#/$defs/expr", "description": "a battle condition: attempts, misses, round, confidence, pressure" },
+          "text": { "$ref": "common.schema.json#/$defs/localeKey" }
+        }
+      }
+    },
+    "outro": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["won", "lost"],
+      "properties": {
+        "won": { "$ref": "common.schema.json#/$defs/lines" },
+        "lost": { "$ref": "common.schema.json#/$defs/lines" }
+      }
+    }
+  },
+  "$defs": {
+    "grade": { "enum": ["best", "fair", "weak"], "description": "best = full credit, fair = half, weak = none" },
+    "option": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "text", "grade", "why"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/id" },
+        "text": { "$ref": "common.schema.json#/$defs/localeKey" },
+        "grade": { "$ref": "#/$defs/grade" },
+        "why": { "$ref": "common.schema.json#/$defs/localeKey", "description": "shown after every answer: why this is right, half right or wrong" }
+      }
+    },
+    "options": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 6,
+      "items": { "$ref": "#/$defs/option" }
+    },
+    "round": {
+      "type": "object",
+      "required": ["type"],
+      "properties": { "type": { "enum": ["tradeoff", "flaw", "clarify", "order", "estimate"] } },
+      "discriminator": { "propertyName": "type" },
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "type", "prompt", "stakes", "options"],
+          "description": "pick the best trade-off: each option is a choice with its reason",
+          "properties": {
+            "id": { "$ref": "common.schema.json#/$defs/id" },
+            "type": { "const": "tradeoff" },
+            "prompt": { "$ref": "common.schema.json#/$defs/lines" },
+            "stakes": { "$ref": "#/$defs/stakes" },
+            "cost": { "$ref": "#/$defs/cost" },
+            "options": { "$ref": "#/$defs/options" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "type", "prompt", "stakes", "proposal", "options"],
+          "description": "spot the flaw in a proposal shown on the whiteboard",
+          "properties": {
+            "id": { "$ref": "common.schema.json#/$defs/id" },
+            "type": { "const": "flaw" },
+            "prompt": { "$ref": "common.schema.json#/$defs/lines" },
+            "stakes": { "$ref": "#/$defs/stakes" },
+            "cost": { "$ref": "#/$defs/cost" },
+            "proposal": { "$ref": "common.schema.json#/$defs/lines" },
+            "options": { "$ref": "#/$defs/options" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "type", "prompt", "stakes", "options"],
+          "description": "choose what to ask first",
+          "properties": {
+            "id": { "$ref": "common.schema.json#/$defs/id" },
+            "type": { "const": "clarify" },
+            "prompt": { "$ref": "common.schema.json#/$defs/lines" },
+            "stakes": { "$ref": "#/$defs/stakes" },
+            "cost": { "$ref": "#/$defs/cost" },
+            "pick": { "type": "integer", "minimum": 1, "maximum": 3, "description": "how many questions the player may ask (default 1)" },
+            "options": { "type": "array", "minItems": 3, "maxItems": 8, "items": { "$ref": "#/$defs/option" } }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "type", "prompt", "stakes", "items"],
+          "description": "put the steps in order; the listed order is the right one, equal ranks are interchangeable",
+          "properties": {
+            "id": { "$ref": "common.schema.json#/$defs/id" },
+            "type": { "const": "order" },
+            "prompt": { "$ref": "common.schema.json#/$defs/lines" },
+            "stakes": { "$ref": "#/$defs/stakes" },
+            "cost": { "$ref": "#/$defs/cost" },
+            "items": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 8,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["id", "text", "why"],
+                "properties": {
+                  "id": { "$ref": "common.schema.json#/$defs/id" },
+                  "text": { "$ref": "common.schema.json#/$defs/localeKey" },
+                  "why": { "$ref": "common.schema.json#/$defs/localeKey" },
+                  "rank": { "type": "integer", "minimum": 1, "maximum": 8, "description": "default: its position; give two steps the same rank when either may come first" }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "type", "prompt", "stakes", "value", "working", "options"],
+          "description": "back-of-envelope: pick the range that holds the estimate",
+          "properties": {
+            "id": { "$ref": "common.schema.json#/$defs/id" },
+            "type": { "const": "estimate" },
+            "prompt": { "$ref": "common.schema.json#/$defs/lines" },
+            "stakes": { "$ref": "#/$defs/stakes" },
+            "cost": { "$ref": "#/$defs/cost" },
+            "value": { "type": "number", "minimum": 0, "description": "the reference estimate; it must lie in the range graded best" },
+            "working": { "$ref": "common.schema.json#/$defs/localeKey", "description": "the arithmetic, step by step, shown after every answer" },
+            "options": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 6,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["id", "text", "grade", "why", "min"],
+                "properties": {
+                  "id": { "$ref": "common.schema.json#/$defs/id" },
+                  "text": { "$ref": "common.schema.json#/$defs/localeKey" },
+                  "grade": { "$ref": "#/$defs/grade" },
+                  "why": { "$ref": "common.schema.json#/$defs/localeKey" },
+                  "min": { "type": "number", "minimum": 0, "description": "inclusive" },
+                  "max": { "type": "number", "minimum": 0, "description": "exclusive; only the last range may leave it out" }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "stakes": { "type": "integer", "minimum": 1, "maximum": 100, "description": "pressure a perfect answer removes" },
+    "cost": { "type": "integer", "minimum": 0, "maximum": 100, "description": "confidence a fully wrong answer costs (default: stakes)" }
+  }
+}

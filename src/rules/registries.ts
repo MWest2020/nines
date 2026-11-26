@@ -47,3 +47,15 @@ export const PROGRESS_FACTS: Registry = {
     flag: { args: ['string'], returns: 'boolean' },
   },
 };
+
+/** Facts about a battle in progress: its hints use these (src/battle/engine.ts). */
+export const BATTLE_FACTS: Registry = {
+  vars: {
+    attempts: { args: [], returns: 'number' },
+    misses: { args: [], returns: 'number' },
+    round: { args: [], returns: 'number' },
+    confidence: { args: [], returns: 'number' },
+    pressure: { args: [], returns: 'number' },
+  },
+  funcs: {},
+};

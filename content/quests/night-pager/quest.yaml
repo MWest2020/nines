@@ -1,0 +1,20 @@
+# A battle quest: the 3 AM pager. It goes off by itself (trigger: pager in battle.yaml) once
+# the player has fixed app-01 and Ravi's pipeline; afterwards it can be replayed from the
+# on-call laptop.
+schema: 1
+id: night-pager
+author: {name: "Nines team"}
+title: title
+summary: summary
+stage: junior
+branch: incident
+track: any
+roadmap_node: incident-pager
+requires: [service-down, broken-pipeline]
+giver: bas
+start: {map: junior-village, object: on-call-laptop}
+reward: {money: 200, xp: 30}
+dialogue:
+  offer: [offer.1, offer.2]
+  active: [active.1]
+  done: [done.1]

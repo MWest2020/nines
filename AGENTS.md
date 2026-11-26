@@ -10,6 +10,8 @@ from Mark's brief (26 Nov 2026); a reviewer blocks a pull request that breaks on
    no look-alike dialogue boxes or menus (DESIGN.md lists what to avoid). Only own pixel art or
    CC0 assets (for example Kenney.nl). The content validator refuses a denylist of names; that
    is a floor, not the check.
+   Battles (Mark, 26 Nov 2026) are engineering conversations, not creature fights, and follow
+   this rule in full: our own announcement, layout and meter names (DESIGN.md, Battles).
 2. **Every asset is recorded.** A row in ASSETS.md (path, source, author, licence) in the same
    commit that adds the file. `npm test` fails on an unlisted binary outside `content/`. A
    quest sprite records its source and licence in its `npc.yaml` (licence `CC0-1.0`).

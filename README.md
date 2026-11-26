@@ -20,5 +20,6 @@ npm run build     # static site in dist/
 - [ASSETS.md](ASSETS.md): every asset with its source and licence
 - [PLAY_STORE.md](PLAY_STORE.md): store listing and Data safety
 - [docs/reference/roadmap.yml](docs/reference/roadmap.yml): phases and what "done" means
+- [docs/content-backlog.md](docs/content-backlog.md): battle topics still to write
 
 Status: phase 1 (architecture and skeleton). The game itself is not playable yet.
