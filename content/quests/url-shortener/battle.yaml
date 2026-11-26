@@ -1,0 +1,104 @@
+# Design interview: a URL shortener, Medior. Ingrid again, a level up.
+# Facts checked: 100 million links a month for 5 years at 500 bytes is about 3 TB; 62^7 is about
+# 3.5 trillion codes; counter blocks vs random codes vs a hash prefix (debatable, and the
+# explanations say so); per-server counters collide; 301 may be cached by browsers without a
+# cache header, 302/307 are not cached unless told to (RFC 9110/9111); cache-aside with LRU for
+# skewed reads; the order of the write path; layered abuse controls.
+schema: 1
+kind: design
+attacker: attacker
+intro: [intro.1, intro.2]
+trigger: {kind: npc}
+rounds:
+  - id: clarify
+    type: clarify
+    prompt: [clarify.prompt.1]
+    stakes: 15
+    pick: 2
+    options:
+      - {id: volume, grade: best, text: clarify.volume.text, why: clarify.volume.why}
+      - {id: clicks, grade: best, text: clarify.clicks.text, why: clarify.clicks.why}
+      - {id: alias, grade: fair, text: clarify.alias.text, why: clarify.alias.why}
+      - {id: length, grade: weak, text: clarify.length.text, why: clarify.length.why}
+      - {id: framework, grade: weak, text: clarify.framework.text, why: clarify.framework.why}
+  - id: storage
+    type: estimate
+    prompt: [storage.prompt.1, storage.prompt.2]
+    stakes: 15
+    value: 3
+    working: storage.working
+    options:
+      - {id: gb, grade: weak, min: 0, max: 0.1, text: storage.gb.text, why: storage.gb.why}
+      - {id: year, grade: fair, min: 0.1, max: 1, text: storage.year.text, why: storage.year.why}
+      - {id: tb, grade: best, min: 1, max: 10, text: storage.tb.text, why: storage.tb.why}
+      - {id: clicks, grade: weak, min: 10, max: 100, text: storage.clicks.text, why: storage.clicks.why}
+      - {id: huge, grade: weak, min: 100, text: storage.huge.text, why: storage.huge.why}
+  - id: ids
+    type: tradeoff
+    prompt: [ids.prompt.1]
+    stakes: 15
+    options:
+      - {id: blocks, grade: best, text: ids.blocks.text, why: ids.blocks.why}
+      - {id: random, grade: best, text: ids.random.text, why: ids.random.why}
+      - {id: sequence, grade: fair, text: ids.sequence.text, why: ids.sequence.why}
+      - {id: hash, grade: fair, text: ids.hash.text, why: ids.hash.why}
+      - {id: md5, grade: weak, text: ids.md5.text, why: ids.md5.why}
+      - {id: uuid, grade: weak, text: ids.uuid.text, why: ids.uuid.why}
+  - id: counters
+    type: flaw
+    prompt: [counters.prompt.1]
+    stakes: 15
+    proposal: [counters.proposal.1, counters.proposal.2, counters.proposal.3]
+    options:
+      - {id: duplicates, grade: best, text: counters.duplicates.text, why: counters.duplicates.why}
+      - {id: guessable, grade: fair, text: counters.guessable.text, why: counters.guessable.why}
+      - {id: slow, grade: weak, text: counters.slow.text, why: counters.slow.why}
+      - {id: case, grade: weak, text: counters.case.text, why: counters.case.why}
+  - id: redirect
+    type: tradeoff
+    prompt: [redirect.prompt.1]
+    stakes: 15
+    options:
+      - {id: temporary, grade: best, text: redirect.temporary.text, why: redirect.temporary.why}
+      - {id: max-age, grade: fair, text: redirect.max-age.text, why: redirect.max-age.why}
+      - {id: permanent, grade: weak, text: redirect.permanent.text, why: redirect.permanent.why}
+      - {id: page, grade: weak, text: redirect.page.text, why: redirect.page.why}
+  - id: cache
+    type: tradeoff
+    prompt: [cache.prompt.1, cache.prompt.2]
+    stakes: 15
+    options:
+      - {id: aside, grade: best, text: cache.aside.text, why: cache.aside.why}
+      - {id: everything, grade: weak, text: cache.everything.text, why: cache.everything.why}
+      - {id: cdn, grade: fair, text: cache.cdn.text, why: cache.cdn.why}
+      - {id: none, grade: weak, text: cache.none.text, why: cache.none.why}
+  - id: create
+    type: order
+    prompt: [create.prompt.1]
+    stakes: 15
+    items:
+      - {id: limit, text: create.limit.text, why: create.limit.why}
+      - {id: validate, text: create.validate.text, why: create.validate.why}
+      - {id: blocklist, text: create.blocklist.text, why: create.blocklist.why}
+      - {id: code, text: create.code.text, why: create.code.why}
+      - {id: insert, text: create.insert.text, why: create.insert.why}
+      - {id: reply, text: create.reply.text, why: create.reply.why}
+  - id: abuse
+    type: tradeoff
+    prompt: [abuse.prompt.1, abuse.prompt.2]
+    stakes: 15
+    options:
+      - {id: layers, grade: best, text: abuse.layers.text, why: abuse.layers.why}
+      - {id: accounts, grade: fair, text: abuse.accounts.text, why: abuse.accounts.why}
+      - {id: longer, grade: weak, text: abuse.longer.text, why: abuse.longer.why}
+      - {id: once, grade: weak, text: abuse.once.text, why: abuse.once.why}
+      - {id: permanent, grade: weak, text: abuse.permanent.text, why: abuse.permanent.why}
+hints:
+  - {id: storage, round: storage, when: 'attempts >= 1 || misses >= 2', text: hint.storage}
+  - {id: ids, round: ids, when: 'attempts >= 1', text: hint.ids}
+  - {id: counters, round: counters, when: 'attempts >= 1', text: hint.counters}
+  - {id: redirect, round: redirect, when: 'attempts >= 1', text: hint.redirect}
+  - {id: breathe, when: 'confidence <= 40', text: hint.breathe}
+outro:
+  won: [won.1]
+  lost: [lost.1]

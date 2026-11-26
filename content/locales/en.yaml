@@ -112,6 +112,8 @@ node.incident.first: "First response"
 node.incident.pager: "The 3 AM page"
 node.cicd.release_scope: "Small releases, safe releases"
 node.design.rate_limiter: "Protect an API from floods"
+node.design.nearby: "Find what is close by"
+node.design.url_shortener: "Short links, many clicks"
 
 item.raspberry_pi: "Raspberry Pi"
 item.raspberry_pi.desc: "A tiny homelab. It hosts a side project that pays €10 after every quest, and it lets you test things at home: hints come one try sooner."

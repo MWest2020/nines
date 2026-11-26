@@ -25,7 +25,9 @@ nodes:
   - {id: incident-pager, branch: incident, stage: junior, title: node.incident.pager, requires: [incident-first]}
   - {id: cicd-release-scope, branch: cicd, stage: junior, title: node.cicd.release_scope, requires: [cicd-pipeline]}
   - {id: design-rate-limiter, branch: design, stage: junior, title: node.design.rate_limiter, requires: []}
+  - {id: design-nearby, branch: design, stage: junior, title: node.design.nearby, requires: []}
   - {id: observability-logs, branch: observability, stage: medior, title: node.observability.logs, requires: [incident-first]}
   - {id: containers-pods, branch: containers, stage: medior, title: node.containers.pods, requires: [linux-services]}
   - {id: networking-dns, branch: networking, stage: medior, title: node.networking.dns, requires: [linux-files]}
   - {id: iac-first, branch: iac, stage: medior, title: node.iac.first, requires: [git-basics, cicd-pipeline]}
+  - {id: design-url-shortener, branch: design, stage: medior, title: node.design.url_shortener, requires: [design-rate-limiter]}

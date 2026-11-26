@@ -1,0 +1,20 @@
+# A battle quest: Ravi practises running an interview, with you as the candidate. Talking to
+# Ravi starts it (trigger: npc in battle.yaml) once his pipeline is fixed; it starts where he
+# stands (his spawn slot), so it needs no battle object on the map.
+schema: 1
+id: nearby-places
+author: {name: "Nines team"}
+title: title
+summary: summary
+stage: junior
+branch: design
+track: any
+roadmap_node: design-nearby
+requires: [broken-pipeline]
+giver: ravi
+start: {map: junior-village, object: npc-2}
+reward: {money: 200, xp: 30}
+dialogue:
+  offer: [offer.1, offer.2]
+  active: [active.1]
+  done: [done.1]

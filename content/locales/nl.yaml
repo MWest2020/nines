@@ -112,6 +112,8 @@ node.incident.first: "Eerste hulp bij storingen"
 node.incident.pager: "De pieper van drie uur 's nachts"
 node.cicd.release_scope: "Kleine releases, veilige releases"
 node.design.rate_limiter: "Een API beschermen tegen stormen"
+node.design.nearby: "Vind wat dichtbij is"
+node.design.url_shortener: "Korte links, veel kliks"
 
 item.raspberry_pi: "Raspberry Pi"
 item.raspberry_pi.desc: "Een piepklein homelab. Er draait een zijproject op dat na elke quest €10 oplevert, en je kunt thuis oefenen: hints komen één poging eerder."
