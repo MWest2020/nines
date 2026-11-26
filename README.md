@@ -5,6 +5,7 @@ pixel-art town, fix simulated servers in an in-game terminal, earn money for hom
 pick a track (SRE or Platform Engineering) on the way to Senior.
 
 No tracking, no ads, no network calls. It runs from static files and offline on Android.
+Play it in the browser: https://mwest2020.github.io/nines/ (every green push to main deploys; the MVP is still being built).
 
 ```sh
 npm ci
