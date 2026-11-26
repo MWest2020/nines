@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nines.invalid/schemas/common.schema.json",
+  "title": "Shared definitions for Nines content",
+  "description": "The .invalid host is a name only; schemas are never fetched.",
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "maxLength": 40,
+      "description": "lower-case words joined by single dashes, e.g. disk-full"
+    },
+    "localeKey": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_.-]*$",
+      "maxLength": 80,
+      "description": "a key in the locale files next to this file (or the global ones)"
+    },
+    "lines": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/localeKey" },
+      "minItems": 1,
+      "maxItems": 12
+    },
+    "expr": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "description": "a condition in the Nines condition language (ARCHITECTURE.md, Conditions)"
+    },
+    "absPath": {
+      "type": "string",
+      "pattern": "^/([A-Za-z0-9._@+-]+(/[A-Za-z0-9._@+-]+)*)?$",
+      "maxLength": 200
+    },
+    "size": {
+      "oneOf": [
+        { "type": "integer", "minimum": 0 },
+        { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?[BKMGT]?$" }
+      ],
+      "description": "bytes, or a number with B, K, M, G or T (powers of 1024)"
+    },
+    "stage": { "enum": ["junior", "medior", "senior"] },
+    "branch": {
+      "enum": ["linux", "networking", "git", "cicd", "containers", "iac", "observability", "incident"]
+    },
+    "author": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "handle": { "type": "string", "pattern": "^@?[A-Za-z0-9-]{1,39}$" },
+        "url": {
+          "type": "string",
+          "pattern": "^https://[^\\s]+$",
+          "maxLength": 200,
+          "description": "shown as plain text in the credits, never opened by the game"
+        }
+      }
+    },
+    "schemaVersion": { "const": 1 }
+  }
+}

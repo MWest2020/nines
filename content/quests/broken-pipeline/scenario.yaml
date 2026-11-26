@@ -1,0 +1,36 @@
+# build-01: the shop's CI pipeline file is broken, so nothing ships.
+schema: 1
+host: build-01
+user: dev
+home: /home/dev
+cwd: /home/dev/shop
+motd: motd
+mounts:
+  - {path: /, device: /dev/vda1, size: 40G, base_used: 8G}
+dirs: [/tmp]
+files:
+  /home/dev/shop/README.md: |
+    # shop
+    The webshop. CI config: .nines-ci.yml (stages, then one block per job).
+  /home/dev/shop/package.json: |
+    {"name": "shop", "scripts": {"build": "vite build", "test": "vitest run"}}
+  /home/dev/shop/src/cart.js: |
+    export const total = (items) => items.reduce((sum, i) => sum + i.price * i.qty, 0);
+  /home/dev/shop/ci-last-run.log: |
+    ci: pipeline #41 started for main
+    ci: pipeline #41 failed:
+    ci:   - line 15: Tabs are not allowed as indentation
+  # The broken file. Line 15 is indented with a tab, and the test job's stage has a typo.
+  /home/dev/shop/.nines-ci.yml: "stages:\n  - build\n  - test\n\nbuild:\n  stage: build\n  script:\n    - npm ci\n    - npm run build\n\ntest:\n  stage: tset\n  needs: [build]\n  script:\n\t- npm test\n"
+git:
+  root: /home/dev/shop
+  branch: main
+  pipeline: {file: .nines-ci.yml, validator: nines-ci}
+objectives:
+  - {id: valid, text: obj.valid, done_when: 'pipeline_valid'}
+  - {id: green, text: obj.green, done_when: 'pipeline_status == "passed"'}
+hints:
+  - {id: log, when: 'commands >= 3 && !ran("cat") && !ran("less")', text: hint.log}
+  - {id: tabs, when: '!pipeline_valid && (fails >= 2 || commands >= 8)', text: hint.tabs}
+  - {id: stage, when: '!pipeline_valid && commands >= 14', text: hint.stage}
+  - {id: commit, when: 'pipeline_valid && pipeline_status != "passed" && commands >= 2', text: hint.commit}

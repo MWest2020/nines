@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nines.invalid/schemas/quest.schema.json",
+  "title": "quest.yaml",
+  "description": "One quest: who gives it, where it starts, what it pays. Strings are locale keys from this folder's locales/.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "id", "author", "title", "summary", "stage", "branch", "track", "roadmap_node", "requires", "giver", "start", "reward", "dialogue"],
+  "properties": {
+    "schema": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "id": { "$ref": "common.schema.json#/$defs/id", "description": "must equal the folder name" },
+    "author": { "$ref": "common.schema.json#/$defs/author" },
+    "title": { "$ref": "common.schema.json#/$defs/localeKey" },
+    "summary": { "$ref": "common.schema.json#/$defs/localeKey" },
+    "stage": { "$ref": "common.schema.json#/$defs/stage" },
+    "branch": { "$ref": "common.schema.json#/$defs/branch" },
+    "track": { "enum": ["any", "sre", "platform"] },
+    "roadmap_node": { "$ref": "common.schema.json#/$defs/id" },
+    "requires": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/id" },
+      "uniqueItems": true,
+      "maxItems": 8
+    },
+    "giver": { "$ref": "common.schema.json#/$defs/id", "description": "an npc id: this folder's npc.yaml or content/npcs/<id>" },
+    "start": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["map", "object"],
+      "properties": {
+        "map": { "$ref": "common.schema.json#/$defs/id" },
+        "object": { "$ref": "common.schema.json#/$defs/id", "description": "a named object in the Tiled map that opens the terminal" }
+      }
+    },
+    "reward": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["money", "xp"],
+      "properties": {
+        "money": { "type": "integer", "minimum": 0, "maximum": 5000 },
+        "xp": { "type": "integer", "minimum": 0, "maximum": 500 },
+        "tech_debt": { "type": "integer", "minimum": 0, "maximum": 10, "description": "for meme side-quests: debt that later triggers extra incidents" }
+      }
+    },
+    "dialogue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["offer", "active", "done"],
+      "properties": {
+        "offer": { "$ref": "common.schema.json#/$defs/lines" },
+        "active": { "$ref": "common.schema.json#/$defs/lines" },
+        "done": { "$ref": "common.schema.json#/$defs/lines" }
+      }
+    }
+  }
+}

@@ -1,0 +1,11 @@
+# Homelab gear. Effects are the only levers; the engine knows these two.
+schema: 1
+items:
+  - id: raspberry-pi
+    title: item.raspberry_pi
+    description: item.raspberry_pi.desc
+    price: 200
+    requires: []
+    effects:
+      income_per_quest: 10
+      hint_boost: 1

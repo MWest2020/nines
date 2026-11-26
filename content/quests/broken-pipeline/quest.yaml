@@ -1,0 +1,17 @@
+schema: 1
+id: broken-pipeline
+author: {name: "Nines team"}
+title: title
+summary: summary
+stage: junior
+branch: cicd
+track: any
+roadmap_node: cicd-pipeline
+requires: []
+giver: ravi
+start: {map: junior-village, object: ravi-laptop}
+reward: {money: 200, xp: 25}
+dialogue:
+  offer: [offer.1, offer.2]
+  active: [active.1]
+  done: [done.1]

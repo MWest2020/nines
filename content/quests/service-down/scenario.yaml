@@ -1,0 +1,61 @@
+# app-01: nginx will not start after last night's config change.
+schema: 1
+host: app-01
+user: dev
+home: /home/dev
+motd: motd
+mounts:
+  - {path: /, device: /dev/sda1, size: 20G, base_used: 5G}
+dirs: [/tmp, /var/www/shop]
+files:
+  /home/dev/handover.txt: |
+    Night shift handover (Bas):
+    - 02:55 changed the shop's listen port back to 80 in /etc/nginx/conf.d/shop.conf
+    - 03:12 restarted nginx, went to bed. All fine I think!
+  /etc/nginx/nginx.conf: |
+    user www-data;
+    events {}
+    http {
+      include /etc/nginx/conf.d/*.conf;
+    }
+  /etc/nginx/conf.d/shop.conf: |
+    server {
+      listn 80;
+      server_name shop.example.test;
+      root /var/www/shop;
+    }
+  /var/www/shop/index.html: |
+    <h1>Shop</h1>
+  /var/log/nginx/error.log: |
+    2026/11/26 03:12:01 [emerg] 812#812: unknown directive "listn" in /etc/nginx/conf.d/shop.conf:2
+services:
+  nginx:
+    description: A high performance web server and a reverse proxy server
+    state: failed
+    logs:
+      - "Nov 26 03:12:01 app-01 systemd[1]: Starting nginx.service - A high performance web server and a reverse proxy server..."
+      - "Nov 26 03:12:01 app-01 nginx[812]: nginx: [emerg] unknown directive \"listn\" in /etc/nginx/conf.d/shop.conf:2"
+      - "Nov 26 03:12:01 app-01 nginx[812]: nginx: configuration file /etc/nginx/nginx.conf test failed"
+      - "Nov 26 03:12:01 app-01 systemd[1]: nginx.service: Control process exited, code=exited, status=1/FAILURE"
+      - "Nov 26 03:12:01 app-01 systemd[1]: nginx.service: Failed with result 'exit-code'."
+      - "Nov 26 03:12:01 app-01 systemd[1]: Failed to start nginx.service - A high performance web server and a reverse proxy server."
+    restart:
+      succeeds_if: 'file_contains("/etc/nginx/conf.d/shop.conf", "listen 80;") && !file_contains("/etc/nginx/conf.d/shop.conf", "listn")'
+      logs_on_failure:
+        - "Nov 26 09:00:00 app-01 nginx[1204]: nginx: [emerg] unknown directive \"listn\" in /etc/nginx/conf.d/shop.conf:2"
+        - "Nov 26 09:00:00 app-01 nginx[1204]: nginx: configuration file /etc/nginx/nginx.conf test failed"
+  shop-api:
+    description: Shop API
+    state: active
+    logs:
+      - "Nov 26 06:00:03 app-01 systemd[1]: Started shop-api.service - Shop API."
+objectives:
+  - {id: web, text: obj.web, done_when: 'service("nginx") == "active"'}
+hints:
+  - {id: status, when: 'commands >= 3 && !ran("systemctl status") && !ran("journalctl")', text: hint.status}
+  - {id: journal, when: 'restarted("nginx") && service("nginx") == "failed" && !ran("journalctl")', text: hint.journal}
+  - {id: typo, when: 'ran("journalctl") && service("nginx") == "failed" && (fails >= 2 || commands >= 8)', text: hint.typo}
+events:
+  - id: config-gone
+    when: 'removed("/etc/nginx/conf.d/shop.conf")'
+    say: event.config_gone

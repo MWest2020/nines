@@ -1,0 +1,11 @@
+node_modules/
+dist/
+coverage/
+*.log
+.env
+.env.*
+# Android signing material never enters the repo
+*.jks
+*.keystore
+keystore.properties
+android/app/release/

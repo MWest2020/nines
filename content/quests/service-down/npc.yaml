@@ -1,0 +1,10 @@
+schema: 1
+id: bas
+author: {name: "Nines team"}
+name: npc.name
+tint: "#58a058"
+spawn: {map: junior-village, slot: npc-3, facing: up}
+dialogue:
+  - when: 'quest("service-down") == "done"'
+    lines: [npc.after]
+  - lines: [npc.idle]

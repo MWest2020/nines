@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nines.invalid/schemas/locale.schema.json",
+  "title": "locales/en.yaml and locales/nl.yaml",
+  "description": "A flat map of key to text. Both languages must have the same keys and the same {placeholders}.",
+  "type": "object",
+  "minProperties": 1,
+  "propertyNames": { "$ref": "common.schema.json#/$defs/localeKey" },
+  "additionalProperties": { "type": "string", "minLength": 1, "maxLength": 600 }
+}

@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nines.invalid/schemas/roadmap.schema.json",
+  "title": "content/roadmap.yaml",
+  "description": "The Career Trail: towns (stages), branches (routes) and the nodes on them.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "towns", "branches", "nodes"],
+  "properties": {
+    "schema": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "towns": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "stage", "title"],
+        "properties": {
+          "id": { "$ref": "common.schema.json#/$defs/id" },
+          "stage": { "$ref": "common.schema.json#/$defs/stage" },
+          "title": { "$ref": "common.schema.json#/$defs/localeKey" }
+        }
+      }
+    },
+    "branches": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title"],
+        "properties": {
+          "id": { "$ref": "common.schema.json#/$defs/branch" },
+          "title": { "$ref": "common.schema.json#/$defs/localeKey" }
+        }
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "branch", "stage", "title", "requires"],
+        "properties": {
+          "id": { "$ref": "common.schema.json#/$defs/id" },
+          "branch": { "$ref": "common.schema.json#/$defs/branch" },
+          "stage": { "$ref": "common.schema.json#/$defs/stage" },
+          "title": { "$ref": "common.schema.json#/$defs/localeKey" },
+          "requires": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/id" }, "uniqueItems": true }
+        }
+      }
+    }
+  }
+}
