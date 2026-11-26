@@ -25,12 +25,16 @@ const BANNED = [/\bfetch\s*\(/, /\bWebSocket\b/, /\bEventSource\b/, /\bsendBeaco
 const walk = (dir) => readdirSync(dir).flatMap((n) => (statSync(join(dir, n)).isDirectory() ? walk(join(dir, n)) : [join(dir, n)]));
 
 const problems = [];
+let allowedHits = 0;
 const files = walk(DIST).filter((f) => /\.(js|html|css|json)$/.test(f));
 if (files.length === 0) problems.push('dist/ is empty: run npm run build first');
 for (const file of files) {
   let text = readFileSync(file, 'utf8');
   for (const s of ALLOWED_SNIPPETS) text = text.split(s).join('');
-  for (const re of ALLOWED_PATTERNS) text = text.replace(re, '');
+  for (const re of ALLOWED_PATTERNS) {
+    allowedHits += (text.match(re) ?? []).length;
+    text = text.replace(re, '');
+  }
   const name = relative(DIST, file);
   for (const m of text.matchAll(/https?:\/\/[A-Za-z0-9.\-_~:/?#@!$&'()*+,;=%]*/g)) {
     const url = m[0].replace(/[)'",;]+$/, '');
@@ -38,6 +42,9 @@ for (const file of files) {
   }
   for (const re of BANNED) if (re.test(text)) problems.push(`${name}: ${re}`);
 }
+
+// exactly one copy of the allowed xterm handler: a second one (a new addon, say) is reviewed
+if (files.length > 0 && allowedHits !== 1) problems.push(`expected xterm's OSC 8 handler exactly once, found ${allowedHits}`);
 
 if (problems.length > 0) {
   console.error(`dist/ check failed:\n  ${problems.join('\n  ')}`);

@@ -39,7 +39,8 @@ describe('the validator rejects broken content', () => {
     expect(errorsAfter('quests/disk-full/quest.yaml', (s) => s.replace('money: 150', 'money: lots'))).toMatch(/money must be integer/);
   });
   it('quick commands must start with a command of the terminal and parse', () => {
-    expect(errorsAfter('quests/disk-full/scenario.yaml', (s) => s.replace('  - df -h\n', '  - htop\n'))).toMatch(/quick\[0\]: "htop" must start with a command/);
+    expect(errorsAfter('quests/disk-full/scenario.yaml', (s) => s.replace('  - df -h\n', '  - htop\n'))).toMatch(/quick\[0\]: "htop" must parse, and every stage/);
+    expect(errorsAfter('quests/disk-full/scenario.yaml', (s) => s.replace('  - df -h\n', '  - "df -h | htop"\n'))).toMatch(/quick\[0\]/);
     expect(errorsAfter('quests/disk-full/scenario.yaml', (s) => s.replace('  - df -h\n', '  - "df -h && rm -rf /"\n'))).toMatch(/quick\[0\]/);
     expect(errorsAfter('quests/disk-full/scenario.yaml', (s) => s.replace('  - df -h\n', '  - "df\\e[31m"\n'))).toMatch(/quick|control/);
   });

@@ -38,7 +38,7 @@ jobs:
       - name: Play the three quests in a browser
         run: |
           python3 -m venv "$RUNNER_TEMP/e2e"
-          "$RUNNER_TEMP/e2e/bin/pip" install --quiet --no-cache-dir playwright==1.65.2
+          "$RUNNER_TEMP/e2e/bin/pip" install --quiet --no-cache-dir --require-hashes -r tests/e2e/requirements.txt
           "$RUNNER_TEMP/e2e/bin/python" -m playwright install --with-deps --only-shell chromium
           "$RUNNER_TEMP/e2e/bin/python" -u tests/e2e/smoke.py --shots "$RUNNER_TEMP/shots"
       - name: Upload the site for GitHub Pages

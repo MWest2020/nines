@@ -80,8 +80,8 @@ tests/            Vitest: rules, sim, terminal input, quests played end to end, 
 Dependencies point one way: `game → battle, core, sim, rules, terminal, world, content/types`;
 `terminal → sim, rules`; `sim → rules`; `battle → core, rules`; `tools → battle, sim, rules, world` (to validate content with the same code
 the game runs). Nothing in
-`rules`, `sim`, `core`, `battle` or `world` imports Phaser or touches `window`, `document` or `localStorage`
-directly (`save.ts` takes a storage object).
+`rules`, `sim`, `core`, `battle`, `world` or `terminal` imports Phaser or touches `window`, `document` or `localStorage`
+directly (`save.ts` takes a storage object); `tests/guards.test.ts` checks it.
 
 ## The terminal simulator
 
@@ -524,7 +524,10 @@ Guards:
   (no `'unsafe-eval'`) blocks it and the fallback continues. xterm.js carries its default
   handler for OSC 8 hyperlinks (`confirm(...)` then `window.open()`); the check allows exactly
   that code by its shape. It cannot run: the overlay passes its own `linkHandler`, whose
-  activation does nothing, and no escape sequence reaches xterm (below). Vite's module-preload
+  activation does nothing, and no escape sequence reaches xterm (below). The check also
+  insists on exactly one copy of that handler. `dist/THIRD-PARTY-LICENSES.txt` (the runtime
+  dependencies' licence texts, written by `tools/vite-plugin-licenses.ts`) is plain text with
+  author URLs; nothing loads it. Vite's module-preload
   polyfill is off because it fetches module URLs.
 - Terminal output that comes from the player (a file they wrote with the editor, the line they
   typed) has control characters stripped before it reaches xterm.js; content cannot contain

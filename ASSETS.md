@@ -45,6 +45,9 @@ are pinned exactly in `package.json`; ARCHITECTURE.md (Dependencies) says why ea
 | ------- | ------- | ------- | ---------- |
 | phaser | 3.90.0 | MIT | the game engine (`dist/assets/phaser-*.js`) |
 | yaml | 2.9.1 | ISC | parses the player's pipeline file in the broken-pipeline quest |
-| @xterm/xterm | 6.0.0 | MIT | the terminal's output renderer and its stylesheet `css/xterm.css`, bundled into `dist/assets/index-*.js` and `index-*.css`; licence notice in `node_modules/@xterm/xterm/LICENSE` |
+| @xterm/xterm | 6.0.0 | MIT | the terminal's output renderer and its stylesheet `css/xterm.css`, bundled into `dist/assets/index-*.js` and `index-*.css` |
 
-The terminal uses the device's own monospace font: no font file ships.
+The minified bundles drop licence comments, so the build writes every runtime dependency's
+licence text to `dist/THIRD-PARTY-LICENSES.txt` (`tools/vite-plugin-licenses.ts`), which ships
+with the site and the app. The terminal uses the device's own monospace font: no font file
+ships.

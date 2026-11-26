@@ -666,8 +666,8 @@ export function loadContent(contentDir: string, schemaDir: string, options: Load
       // quick commands: lines this terminal can parse, starting with one of its commands
       (scenario.quick ?? []).forEach((line, i) => {
         const parsed = parseLine(line);
-        const first = parsed.ok ? parsed.pipeline[0]?.[0]?.text : undefined;
-        if (!parsed.ok || first === undefined || !has(COMMANDS, first)) err(sFile, `quick[${i}]: "${line}" must start with a command of this terminal and parse`);
+        const ok = parsed.ok && parsed.pipeline.every((stage) => stage[0] !== undefined && has(COMMANDS, stage[0].text));
+        if (!ok) err(sFile, `quick[${i}]: "${line}" must parse, and every stage must start with a command of this terminal`);
       });
       if (scenario.git?.pipeline) {
         const pf = normalize(`${scenario.git.root}/${scenario.git.pipeline.file}`);

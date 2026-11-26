@@ -6,7 +6,7 @@ in the terminal overlay, and fails on any request that leaves the page's origin 
 error. Run it after `npm run build`, one browser at a time, under the memory cap (AGENTS.md):
 
     timeout -s KILL 900 systemd-run --user --scope -q -p MemoryMax=1500M -p MemorySwapMax=0 \\
-      uv run -q --with playwright==1.65.2 python -u tests/e2e/smoke.py [--shots DIR]
+      uv run -q --with-requirements tests/e2e/requirements.txt python -u tests/e2e/smoke.py [--shots DIR]
 
 CHROME (an executable path) picks the browser; otherwise Playwright's own headless shell runs.
 """
@@ -313,7 +313,17 @@ def broken_pipeline(page: Page, shots: Path | None) -> None:
 def service_down(page: Page, shots: Path | None) -> None:
     run(page, "systemctl status nginx", "failed")
     run(page, "journalctl -u nginx", 'unknown directive "listn"')
+    # Esc on a changed buffer asks for a second Esc before it throws the change away
     run(page, "edit /etc/nginx/conf.d/shop.conf")
+    page.locator(".nt-editor").wait_for(state="visible")
+    page.locator(".nt-area").click()
+    page.keyboard.type("x")
+    page.keyboard.press("Escape")
+    assert page.locator(".nt-editor").is_visible()
+    assert "Esc again" in page.locator(".nt-status").inner_text()
+    page.keyboard.press("Escape")
+    page.locator(".nt-editor").wait_for(state="hidden")
+    run(page, "edit /etc/nginx/conf.d/shop.conf", "Closed /etc/nginx/conf.d/shop.conf without saving.")
     page.locator(".nt-editor").wait_for(state="visible")
     edit_file(page, SHOP_CONF_FIXED)
     run(page, "systemctl restart nginx")
@@ -349,6 +359,9 @@ def play(page: Page, village: Grid, room: Grid, shots: Path | None) -> None:
     quests = save["game"]["quests"]
     for q in ("disk-full", "broken-pipeline", "service-down"):
         assert quests.get(q) == "done", quests
+    # 200 + 150 + 175 in rewards, minus the €150 database mistake (made with €200 in hand)
+    assert save["game"]["money"] == 375, save["game"]["money"]
+    assert save["game"]["xp"] == {"cicd": 25, "linux": 20, "incident": 25}, save["game"]["xp"]
     print(f"  save: quests {quests}, money {save['game']['money']}, xp {save['game']['xp']}")
     if shots:
         page.screenshot(path=str(shots / "world-after.png"))

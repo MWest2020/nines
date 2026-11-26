@@ -38,6 +38,11 @@ describe('no network at runtime', () => {
     expect(pure.length).toBeGreaterThan(10);
     expect(pure.filter((f) => banned.test(readFileSync(f, 'utf8'))).map((f) => relative(ROOT, f))).toEqual([]);
   });
+  it('the pure modules import no Phaser and touch no DOM or storage', () => {
+    const banned = /from ['"]phaser['"]|\b(window|document|localStorage|navigator)\s*\./;
+    const pure = srcFiles.filter((f) => /[/\\]src[/\\](rules|sim|core|battle|world|terminal)[/\\]/.test(f));
+    expect(pure.filter((f) => banned.test(readFileSync(f, 'utf8'))).map((f) => relative(ROOT, f))).toEqual([]);
+  });
   it('index.html has a CSP that keeps requests on the origin', () => {
     const html = readFileSync(join(ROOT, 'index.html'), 'utf8');
     expect(html).toMatch(/default-src 'self'/);

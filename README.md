@@ -12,7 +12,7 @@ npm ci
 npm test          # unit tests, quests played end to end, content validation
 npm run build     # static site in dist/
 # the browser smoke test (Python Playwright; see AGENTS.md for the memory cap)
-uv run --with playwright==1.65.2 python tests/e2e/smoke.py
+uv run --with-requirements tests/e2e/requirements.txt python tests/e2e/smoke.py
 ```
 
 - [ARCHITECTURE.md](ARCHITECTURE.md): modules, the terminal simulator, content, saves, i18n, Android

@@ -20,7 +20,13 @@ export function openQuestTerminal(api: GameApi, quest: QuestEntry): Promise<void
   if (!quest.scenario || current) return Promise.resolve();
   const state = api.store.questState(quest.id);
   if (state === 'locked') return api.showDialogue([{ text: 'ui.terminal.locked' }]);
-  return new Promise((done) => open(api, quest, done));
+  return new Promise((done, fail) => {
+    try {
+      open(api, quest, done);
+    } catch (err) {
+      fail(err);
+    }
+  });
 }
 
 function open(api: GameApi, quest: QuestEntry, done: () => void): void {
@@ -29,26 +35,35 @@ function open(api: GameApi, quest: QuestEntry, done: () => void): void {
   const giver = findNpc(api.store.content, quest.quest.giver);
   const release = api.hold();
   let reward: Reward | null = null;
-  current = openTerminal(quest, {
-    t: api.t,
-    hintBoost: api.hintBoost(),
-    ...(giver ? { speaker: giver.key(giver.spec.name) } : {}),
-    applyEvents: (events) => {
-      const before = api.store.game.money;
-      api.applyTerminalEvents(quest.id, events);
-      return api.store.game.money - before;
-    },
-    complete: () => {
-      reward = api.completeQuest(quest.id);
-      return reward ? { money: reward.money + reward.income, xp: reward.xp } : null;
-    },
-    closed: () => {
-      current = null;
-      release();
-      const finish = reward ? api.showQuestDone(reward) : Promise.resolve();
-      void finish.then(done);
-    },
-  });
+  try {
+    current = openTerminal(quest, {
+      t: api.t,
+      hintBoost: api.hintBoost(),
+      ...(giver ? { speaker: giver.key(giver.spec.name) } : {}),
+      applyEvents: (events) => {
+        const before = api.store.game.money;
+        api.applyTerminalEvents(quest.id, events);
+        return api.store.game.money - before;
+      },
+      complete: () => {
+        reward = api.completeQuest(quest.id);
+        return reward ? { money: reward.money + reward.income, xp: reward.xp } : null;
+      },
+      closed: () => {
+        current = null;
+        release();
+        const finish = reward ? api.showQuestDone(reward) : Promise.resolve();
+        void finish.then(done);
+      },
+    });
+  } catch (err) {
+    // Never leave the game busy or a half-built overlay on screen. The error rejects the
+    // promise, and the bridge gives the world its control back.
+    document.querySelector('.nt-overlay')?.remove();
+    current = null;
+    release();
+    throw err;
+  }
 }
 
 /** True while a terminal is open. */

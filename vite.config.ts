@@ -1,12 +1,13 @@
 import { defineConfig } from 'vitest/config';
 import { ninesContent } from './tools/vite-plugin-content';
+import { thirdPartyLicenses } from './tools/vite-plugin-licenses';
 
 // base './' keeps every URL relative, so the same dist/ works from a sub-path (GitHub Pages)
 // and from the Capacitor WebView. Content is bundled at build time by the plugin; nothing
 // is fetched from outside the origin at runtime.
 export default defineConfig({
   base: './',
-  plugins: [ninesContent()],
+  plugins: [ninesContent(), thirdPartyLicenses(import.meta.dirname)],
   build: {
     target: 'es2022',
     outDir: 'dist',

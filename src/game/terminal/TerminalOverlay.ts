@@ -14,7 +14,7 @@ import { questKey, type QuestEntry } from '../../content/types';
 import type { Translate } from '../../core/i18n';
 import { createSession, type FiredEvent, prompt, run, type RunResult, saveFile, type Session, stripControl } from '../../sim/session';
 import { complete } from '../../terminal/complete';
-import { gutter, insertIndent, lineCol, lineCount, normalizeText, tabLines } from '../../terminal/editor';
+import { gutter, INDENT, insertIndent, isDirty, lineCol, lineCount, normalizeText, tabLines } from '../../terminal/editor';
 import { down, type History, newHistory, record, up } from '../../terminal/history';
 
 export interface TerminalHost {
@@ -88,6 +88,12 @@ export class TerminalOverlay {
   private closedAlready = false;
   /** False until the key that opened the terminal is released: its Enter must not run a line. */
   private ready = false;
+  /** `exit` was typed while a dialogue was up: close once the dialogues are read */
+  private closeAfterDialogs = false;
+  /** Esc was pressed once on a changed buffer: a second Esc discards */
+  private escArmed = false;
+  private editorOriginal = '';
+  private readonly quickBar: HTMLDivElement;
 
   constructor(
     private readonly quest: QuestEntry,
@@ -104,12 +110,44 @@ export class TerminalOverlay {
     this.root = el('div', 'nt-overlay');
     this.root.setAttribute('role', 'dialog');
     this.root.setAttribute('aria-modal', 'true');
-    this.root.setAttribute('aria-label', scenario.host);
+    this.root.setAttribute('aria-label', t('ui.terminal.label', { host: scenario.host }));
+    this.root.tabIndex = -1;
     // Keys typed here are the terminal's: never let them reach Phaser's window listener, which
-    // would move the player or swallow WASD and Space.
-    for (const type of ['keydown', 'keyup', 'keypress'] as const) this.root.addEventListener(type, (e) => e.stopPropagation());
+    // would move the player or swallow WASD and Space. Key-ups do reach it, so a direction held
+    // while the terminal opened is not stuck down when it closes.
+    for (const type of ['keydown', 'keypress'] as const) this.root.addEventListener(type, (e) => e.stopPropagation());
+    // The key that opened the terminal (Enter or Space, handled by Phaser during its keydown) is
+    // still down: its keypress, repeats and input must not type or run anything. A release, a
+    // fresh key or a tap arms the terminal.
     this.root.addEventListener('keyup', () => {
       this.ready = true;
+    });
+    this.root.addEventListener(
+      'keydown',
+      (e) => {
+        if (!e.repeat) this.ready = true;
+        else if (!this.ready) e.preventDefault();
+      },
+      true,
+    );
+    for (const type of ['keypress', 'beforeinput'] as const) {
+      this.root.addEventListener(
+        type,
+        (e) => {
+          if (!this.ready) e.preventDefault();
+        },
+        true,
+      );
+    }
+    this.root.addEventListener('pointerdown', () => {
+      this.ready = true;
+    });
+    // focus stays inside the overlay: a click on the backdrop gives it back to the input
+    this.root.addEventListener('mousedown', (e) => {
+      if (e.target === this.root) {
+        e.preventDefault();
+        this.focus();
+      }
     });
 
     const win = el('div', 'nt-window');
@@ -144,6 +182,8 @@ export class TerminalOverlay {
     });
     this.input.addEventListener('keydown', (e) => this.onKey(e));
     this.dialog = el('div', 'nt-dialog');
+    this.dialog.setAttribute('role', 'alertdialog');
+    this.dialog.setAttribute('aria-live', 'assertive');
     this.dialog.hidden = true;
     main.append(this.screen, this.dialog, form);
 
@@ -152,10 +192,12 @@ export class TerminalOverlay {
     this.objList = el('ul', 'nt-objectives');
     side.append(this.objList, el('h2', 'nt-sidehead', t('ui.terminal.hint')));
     this.hintList = el('div', 'nt-hints');
+    this.hintList.setAttribute('aria-live', 'polite');
     side.append(this.hintList);
     body.append(main, side);
 
     const quick = el('div', 'nt-quick');
+    this.quickBar = quick;
     quick.setAttribute('role', 'toolbar');
     quick.setAttribute('aria-label', t('ui.terminal.quick'));
     const key = (label: string, action: () => void, cls = 'nt-key') => {
@@ -220,6 +262,8 @@ export class TerminalOverlay {
       fontFamily: FONT,
       fontSize: 14,
       scrollback: 2000,
+      // an accessibility tree of the output, for screen readers
+      screenReaderMode: true,
       theme: { background: '#081008', foreground: '#88e090', cursor: '#081008', selectionBackground: '#306838' },
       // Output never carries OSC 8 links (content and player text have control characters
       // removed), and if one ever did, activating it does nothing: no window.open.
@@ -265,7 +309,8 @@ export class TerminalOverlay {
     const cw = cell.width / 20;
     const ch = cell.height;
     if (cw <= 0 || ch <= 0) return;
-    const cols = Math.max(20, Math.floor((box.width - 12) / cw));
+    // 6 px left padding, and xterm 6 draws its 14 px scrollbar over the content
+    const cols = Math.max(20, Math.floor((box.width - 6 - 14) / cw));
     const rows = Math.max(5, Math.floor((box.height - 8) / ch));
     if (cols !== this.term.cols || rows !== this.term.rows) this.term.resize(cols, rows);
   }
@@ -279,7 +324,6 @@ export class TerminalOverlay {
   }
 
   private onKey(e: KeyboardEvent): void {
-    this.ready = true;
     if (e.key === 'Tab') {
       e.preventDefault();
       this.tab();
@@ -342,7 +386,10 @@ export class TerminalOverlay {
     if (r.ui?.clear) this.term.clear();
     this.handle(r);
     if (r.ui?.editor) this.openEditor(r.ui.editor.path, r.ui.editor.content);
-    if (r.ui?.close && this.dialogs.length === 0) this.close();
+    if (r.ui?.close) {
+      if (this.dialog.hidden) this.close();
+      else this.closeAfterDialogs = true;
+    }
   }
 
   // ---- what a step did: consequences, hints, objectives, the win
@@ -403,10 +450,16 @@ export class TerminalOverlay {
     if (!d) {
       this.dialog.hidden = true;
       this.input.disabled = false;
+      this.setQuickEnabled(true);
+      if (this.closeAfterDialogs) {
+        this.close();
+        return;
+      }
       this.focus();
       return;
     }
     this.input.disabled = true;
+    this.setQuickEnabled(false);
     const parts: HTMLElement[] = [];
     if (d.speaker) parts.push(el('div', 'nt-speaker', d.speaker));
     parts.push(el('p', 'nt-say', d.text));
@@ -427,6 +480,10 @@ export class TerminalOverlay {
     b.focus();
   }
 
+  private setQuickEnabled(on: boolean): void {
+    for (const b of this.quickBar.querySelectorAll('button')) b.disabled = !on;
+  }
+
   // ---- the editor
 
   private openEditor(path: string, content: string): void {
@@ -434,6 +491,8 @@ export class TerminalOverlay {
     e.path = path;
     e.title.textContent = this.t('ui.editor.title', { path });
     e.area.value = normalizeText(content);
+    this.editorOriginal = e.area.value;
+    this.escArmed = false;
     e.box.hidden = false;
     e.area.setSelectionRange(0, 0);
     e.area.scrollTop = 0;
@@ -443,17 +502,27 @@ export class TerminalOverlay {
 
   private onEditorKey(e: KeyboardEvent): void {
     const a = this.editor.area;
+    if (e.key !== 'Escape') this.escArmed = false;
     if (e.key === 'Tab' && !e.ctrlKey && !e.altKey && !e.metaKey) {
       e.preventDefault();
-      const r = insertIndent(a.value, a.selectionStart, a.selectionEnd);
-      a.value = r.text;
-      a.setSelectionRange(r.cursor, r.cursor);
+      // insertText keeps the textarea's undo history; assigning value would clear it
+      if (!document.execCommand?.('insertText', false, INDENT)) {
+        const r = insertIndent(a.value, a.selectionStart, a.selectionEnd);
+        a.value = r.text;
+        a.setSelectionRange(r.cursor, r.cursor);
+      }
       this.renderEditor();
     } else if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
       e.preventDefault();
       this.closeEditor(true);
     } else if (e.key === 'Escape') {
       e.preventDefault();
+      // a changed buffer needs a second Esc, so one stray key does not throw the work away
+      if (isDirty(this.editorOriginal, a.value) && !this.escArmed) {
+        this.escArmed = true;
+        this.renderEditor();
+        return;
+      }
       this.closeEditor(false);
     }
   }
@@ -467,12 +536,12 @@ export class TerminalOverlay {
     const tabs = tabLines(text);
     const parts = [
       this.t('ui.editor.position', { line, col }),
-      tabs.length > 0 ? this.t('ui.editor.tabs', { lines: tabs.join(', ') }) : this.t('ui.editor.no_tabs'),
+      tabs.length === 0 ? this.t('ui.editor.no_tabs') : this.t(tabs.length === 1 ? 'ui.editor.tab_one' : 'ui.editor.tab_many', { lines: tabs.join(', ') }),
       this.t('ui.editor.tab_key'),
-      this.t('ui.editor.keys'),
+      this.escArmed ? this.t('ui.editor.esc_again') : this.t('ui.editor.keys'),
     ];
     e.status.textContent = parts.join(' · ');
-    e.status.classList.toggle('nt-warn', tabs.length > 0);
+    e.status.classList.toggle('nt-warn', tabs.length > 0 || this.escArmed);
   }
 
   private closeEditor(save: boolean): void {
@@ -481,7 +550,8 @@ export class TerminalOverlay {
     e.box.hidden = true;
     if (save) {
       const text = normalizeText(e.area.value);
-      this.print([this.t('ui.terminal.written', { path: e.path, lines: lineCount(text.replace(/\n$/, '')) })], SGR.dim);
+      const lines = lineCount(text.replace(/\n$/, ''));
+      this.print([this.t(lines === 1 ? 'ui.terminal.written_one' : 'ui.terminal.written', { path: e.path, lines })], SGR.dim);
       this.handle(saveFile(this.session, e.path, text));
     } else {
       this.print([this.t('ui.terminal.discarded', { path: e.path })], SGR.dim);
