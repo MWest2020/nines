@@ -54,7 +54,7 @@ browsers.
 
 ## Working agreements
 
-- Commit as `MWest2020 <mwest2020@hotmail.com>`, push over SSH. Small commits, one concern
+- Use the global git identity (`git config --global`); don't override `user.email`. Push over SSH. Small commits, one concern
   each. Work on a branch in a worktree; open a pull request; wait for green CI; merge with
   `gh pr merge --squash --delete-branch --match-head-commit <sha>`.
 - Tests: the parser and the condition language have tests for every change. A new command gets

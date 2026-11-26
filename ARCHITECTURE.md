@@ -610,9 +610,11 @@ the one-off event bonuses already paid (`<quest>/<event>`).
 - **World events** (`src/game/world/events.ts`, on `game.events`): `world:talk` (an NPC, its
   quests), `world:use` (a terminal, battle or shop object and its quest) and `world:enter` (map
   and position, for saves). Talk and use hand control over until the listener calls `done()`.
-  While nobody listens, the world shows a placeholder dialogue box (the NPC's first dialogue
-  entry whose condition holds; a quest's title and summary; the shop's items), so the world can
-  be played before the dialogue, terminal and battle chunks land. `WorldScene` takes a
+  `src/game/bridge.ts` answers them through the GameApi (the real dialogue box, the shop,
+  saving the position). Only when nobody listens, as in a scene test, does the world fall back
+  to its own placeholder dialogue box. The world reads strings (`api.t`, so the NL/EN toggle
+  reaches it) and progress (`api.store.game`) from the GameApi, does not move or act while
+  `api.isBusy()`, and reads Enter, Space and Escape through `freshKeys`. `WorldScene` takes a
   `WorldStart` (`map`, `x`, `y`, `facing`, or a spawn `point`); a saved spot that is no longer
   open ground falls back to `player-start`.
 - **HudScene**: money, menu, roadmap button, the dialogue box, the on-screen controls on touch

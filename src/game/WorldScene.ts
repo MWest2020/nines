@@ -5,9 +5,7 @@
 import Phaser from 'phaser';
 import content from 'virtual:nines-content';
 import type { MapEntry, QuestEntry } from '../content/types';
-import { createTranslator, defaultLocale, type Translate } from '../core/i18n';
 import { progressEnv } from '../core/progress';
-import { newGame, type GameState } from '../core/save';
 import { compile, test } from '../rules/expr';
 import { own } from '../rules/own';
 import { PROGRESS_FACTS } from '../rules/registries';
@@ -25,6 +23,8 @@ import {
   type Facing,
   type WorldMap,
 } from '../world/grid';
+import { type GameApi, getGameApi } from './api';
+import { freshKeys } from './ui/widgets';
 import { WORLD_EVENTS, type EnterEvent, type TalkEvent, type UseEvent, type WorldStart } from './world/events';
 import { PlaceholderDialogue } from './world/PlaceholderDialogue';
 import { allNpcs, type NpcEntry, PLAYER_KEY, standFrame, tilesetKey, walkAnim } from './world/sprites';
@@ -55,16 +55,13 @@ export class WorldScene extends Phaser.Scene {
   private busy = false;
   private turnedAt = 0;
   private dialogue: PlaceholderDialogue | null = null;
-  private t!: Translate;
-  /** The world reads progress for NPC lines; the real game state arrives with the save chunk. */
-  gameState: GameState = newGame('en');
+  /** strings, progress and the busy flag come from the one live game (src/game/api.ts) */
+  private api!: GameApi;
   private keys!: {
     up: Phaser.Input.Keyboard.Key[];
     down: Phaser.Input.Keyboard.Key[];
     left: Phaser.Input.Keyboard.Key[];
     right: Phaser.Input.Keyboard.Key[];
-    use: Phaser.Input.Keyboard.Key[];
-    back: Phaser.Input.Keyboard.Key[];
   };
 
   constructor() {
@@ -80,8 +77,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   create(): void {
-    const locale = defaultLocale(navigator.languages ?? [navigator.language]);
-    this.t = createTranslator(content.locales, locale);
+    this.api = getGameApi(this);
     this.entry = content.maps.find((m) => m.id === this.start.map) ?? content.maps.find((m) => m.id === DEFAULT_MAP) ?? content.maps[0]!;
     this.world = readMap(this.entry.id, this.entry.map);
 
@@ -178,11 +174,20 @@ export class WorldScene extends Phaser.Scene {
       down: keys(K.DOWN, K.S),
       left: keys(K.LEFT, K.A),
       right: keys(K.RIGHT, K.D),
-      use: keys(K.ENTER, K.SPACE),
-      back: keys(K.ESC),
     };
-    for (const k of this.keys.use) k.on('down', () => this.onUse());
-    for (const k of this.keys.back) k.on('down', () => this.dialogue?.close());
+    // freshKeys: Phaser can deliver one key event twice within a frame; act on each press once
+    kb.on(
+      'keydown',
+      freshKeys((e: KeyboardEvent) => {
+        if (e.code === 'Enter' || e.code === 'Space' || e.code === 'NumpadEnter') this.onUse();
+        else if (e.code === 'Escape') this.dialogue?.close();
+      }),
+    );
+  }
+
+  /** The world waits while it hands control to someone, or while a dialogue or screen is open. */
+  private waiting(): boolean {
+    return this.busy || (this.dialogue === null && this.api.isBusy());
   }
 
   // ---- moving
@@ -203,7 +208,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   override update(time: number): void {
-    if (this.moving || this.busy) return;
+    if (this.moving || this.waiting()) return;
     const dir = this.heldDirection();
     if (!dir) {
       if (this.player.sprite.anims.isPlaying) this.face(this.player, this.player.facing);
@@ -261,7 +266,7 @@ export class WorldScene extends Phaser.Scene {
       this.dialogue.advance();
       return;
     }
-    if (this.busy || this.moving) return;
+    if (this.waiting() || this.moving) return;
     const p = this.player;
     const at = ahead(p.x, p.y, p.facing);
     const npc = this.npcs.find((n) => n.x === at.x && n.y === at.y);
@@ -293,10 +298,11 @@ export class WorldScene extends Phaser.Scene {
       return;
     }
     // placeholder: the NPC's first dialogue entry whose condition holds
-    const env = progressEnv(this.gameState, content.quests.map((q) => q.quest));
+    const t = this.api.t;
+    const env = progressEnv(this.api.store.game, content.quests.map((q) => q.quest));
     const pick = npc.entry.npc.dialogue.find((d) => d.when === undefined || test(compile(d.when, PROGRESS_FACTS), env));
-    const lines = (pick?.lines ?? []).map((k) => this.t(npc.entry.keyPrefix + k));
-    this.dialogue = new PlaceholderDialogue(this, this.t(npc.entry.keyPrefix + npc.entry.npc.name), lines, this.release);
+    const lines = (pick?.lines ?? []).map((k) => t(npc.entry.keyPrefix + k));
+    this.dialogue = new PlaceholderDialogue(this, t(npc.entry.keyPrefix + npc.entry.npc.name), lines, this.release);
   }
 
   private questAt(object: string): QuestEntry | undefined {
@@ -312,13 +318,14 @@ export class WorldScene extends Phaser.Scene {
       return;
     }
     // placeholder: say what would open here
+    const t = this.api.t;
     if (kind === 'shop') {
-      const items = content.shop.items.map((i) => `${this.t(i.title)}  ${this.t('ui.money', { amount: i.price })}`);
-      this.dialogue = new PlaceholderDialogue(this, this.t('ui.shop.title'), [items.join('\n')], this.release);
+      const items = content.shop.items.map((i) => `${t(i.title)}  ${t('ui.money', { amount: i.price })}`);
+      this.dialogue = new PlaceholderDialogue(this, t('ui.shop.title'), [items.join('\n')], this.release);
       return;
     }
-    const title = quest ? this.t(`quest.${quest.id}.${quest.quest.title}`) : object;
-    const summary = quest ? this.t(`quest.${quest.id}.${quest.quest.summary}`) : '';
+    const title = quest ? t(`quest.${quest.id}.${quest.quest.title}`) : object;
+    const summary = quest ? t(`quest.${quest.id}.${quest.quest.summary}`) : '';
     this.dialogue = new PlaceholderDialogue(this, title, [summary], this.release);
   }
 }
