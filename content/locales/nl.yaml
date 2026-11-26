@@ -77,6 +77,7 @@ ui.roadmap.quest.done: "klaar"
 ui.credits.intro: "Gemaakt door de mensen die de quests en personages schreven."
 ui.credits.quests: "Quests: {list}"
 ui.credits.npcs: "Personages: {list}"
+ui.credits.sprite: "Sprite van {name}: {source} ({license})"
 ui.credits.own: "Pixelfont en interface getekend voor Nines. Elk bestand en zijn licentie staat in ASSETS.md."
 
 town.junior: "Juniordorp"

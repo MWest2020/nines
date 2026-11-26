@@ -55,6 +55,23 @@ export function button(scene: Phaser.Scene, x: number, y: number, label: string,
 }
 
 /**
+ * Phaser can hand the same DOM key event to a listener more than once when several keys arrive
+ * within one frame (it re-reads its queue), and a listener added while that happens also gets
+ * the earlier keys. Wrap a listener with this: it sees each event once, and only events that
+ * happened after it was set up (so the Enter that opened a screen does not also press its
+ * first button).
+ */
+export function freshKeys(fn: (e: KeyboardEvent) => void): (e: KeyboardEvent) => void {
+  const since = performance.now();
+  const seen = new WeakSet<KeyboardEvent>();
+  return (e) => {
+    if (e.timeStamp < since || seen.has(e)) return;
+    seen.add(e);
+    fn(e);
+  };
+}
+
+/**
  * Keyboard for a screen: arrows or WASD move focus, Enter or Space presses, Escape backs out.
  * Returns a function that removes the listeners.
  */
@@ -74,13 +91,13 @@ export function keyboardNav(scene: Phaser.Scene, handlers: { move: (d: Dir) => v
     Space: handlers.press,
     Escape: handlers.back,
   };
-  const onKey = (e: KeyboardEvent) => {
+  const onKey = freshKeys((e: KeyboardEvent) => {
     const f = Object.hasOwn(map, e.code) ? map[e.code] : undefined;
     if (f) {
       e.preventDefault();
       f();
     }
-  };
+  });
   kb.on('keydown', onKey);
   return () => kb.off('keydown', onKey);
 }

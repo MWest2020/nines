@@ -18,8 +18,8 @@ const P = { x: 4, y: 4, w: 232, h: 152 } as const;
 const ROAD_Y = P.y + 24;
 const ROWS_Y = P.y + 48;
 const ROW_H = 13;
-const LABEL_W = 68;
-const STONE_X = P.x + 84;
+const LABEL_W = 100;
+const STONE_X = P.x + 116;
 const STONE_DX = 20;
 const FOOT_Y = P.y + P.h - 43;
 

@@ -77,6 +77,7 @@ ui.roadmap.quest.done: "done"
 ui.credits.intro: "Made by the people who wrote its quests and characters."
 ui.credits.quests: "Quests: {list}"
 ui.credits.npcs: "Characters: {list}"
+ui.credits.sprite: "{name}'s sprite: {source} ({license})"
 ui.credits.own: "Pixel font and interface drawn for Nines. Every asset and its licence is listed in ASSETS.md."
 
 town.junior: "Junior Village"

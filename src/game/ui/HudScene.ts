@@ -11,7 +11,7 @@ import type { GameUi } from './install';
 import { getGameApi } from '../api';
 import { pixelText } from './pixelfont';
 import { C, dimmer, hex, panel, VIEW } from './theme';
-import { type Button, button, keyboardNav, navigate } from './widgets';
+import { type Button, button, freshKeys, keyboardNav, navigate } from './widgets';
 
 const BAR_H = 12;
 const ICON = { w: 14, h: 12 } as const;
@@ -46,12 +46,15 @@ export class HudScene extends Phaser.Scene {
     }, () => !this.ui.isBusy() && void this.ui.openTrail());
     this.dialogue = new DialogueBox(this);
     const kb = this.input.keyboard;
-    kb?.on('keydown', (e: KeyboardEvent) => {
-      if (this.dialogue.open && (e.code === 'Enter' || e.code === 'Space')) {
-        e.preventDefault();
-        this.dialogue.advance();
-      }
-    });
+    kb?.on(
+      'keydown',
+      freshKeys((e: KeyboardEvent) => {
+        if (this.dialogue.open && (e.code === 'Enter' || e.code === 'Space')) {
+          e.preventDefault();
+          this.dialogue.advance();
+        }
+      }),
+    );
     const off = this.ui.store.subscribe((_g, change) => this.onChange(change));
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, off);
     this.refresh();

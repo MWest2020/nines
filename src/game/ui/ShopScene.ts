@@ -10,7 +10,7 @@ import { C, hex, panel } from './theme';
 import { button, buttonWidth } from './widgets';
 
 const P = { x: 8, y: 6, w: 224, h: 148 } as const;
-const CARD_H = 60;
+const CARD_H = 70;
 
 export class ShopScene extends Screen {
   constructor() {
@@ -33,10 +33,10 @@ export class ShopScene extends Screen {
       const price = t('ui.shop.price', { price: item.price });
       out.push(pixelText(this, P.x + P.w - 6 - measure(price), y, price, C.gold));
       out.push(pixelText(this, tx, y, ellipsize(t(item.title), P.x + P.w - 12 - measure(price) - tx), C.paper));
-      const desc = wrap(t(item.description), P.x + P.w - 8 - tx).slice(0, 3);
+      const desc = wrap(t(item.description), P.x + P.w - 8 - tx).slice(0, 4);
       out.push(pixelText(this, tx, y + 11, desc.join('\n'), C.mist));
       const check = store.canBuy(item.id);
-      const rowY = y + CARD_H - 15;
+      const rowY = y + CARD_H - 14;
       if (owned) {
         out.push(pixelText(this, P.x + P.w - 8 - measure(t('ui.shop.owned')), rowY + 2, t('ui.shop.owned'), C.grass));
       } else {

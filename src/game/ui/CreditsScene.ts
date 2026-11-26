@@ -1,6 +1,7 @@
 // Credits, generated from the author fields in content (the bundle's `credits`): every person
-// who wrote a quest or a character, with what they made. Handles and URLs are shown as text,
-// never as links (no navigation away from the game). Up and down scroll when it is long.
+// who wrote a quest or a character, with what they made, and each character sprite with its
+// source and licence. Handles and URLs are shown as text, never as links (no navigation away
+// from the game). Up and down scroll when it is long.
 
 import type Phaser from 'phaser';
 import { npcKey, questKey } from '../../content/types';
@@ -49,6 +50,12 @@ export class CreditsScene extends Screen {
         });
       if (quests.length > 0) add(t('ui.credits.quests', { list: quests.join(', ') }), C.paper);
       if (npcs.length > 0) add(t('ui.credits.npcs', { list: npcs.join(', ') }), C.paper);
+      // a character's sprite sheet, with where it came from and its licence (ASSETS.md)
+      for (const f of c.for.filter((x) => x.startsWith('npc:'))) {
+        const npc = findNpc(store.content, f.slice(4));
+        const sprite = npc?.spec.sprite;
+        if (npc && sprite) add(t('ui.credits.sprite', { name: t(npc.key(npc.spec.name)), source: sprite.source, license: sprite.license }), C.mist);
+      }
     }
     out.push({ text: '', color: C.paper });
     add(t('ui.credits.own'), C.mist);
