@@ -28,7 +28,7 @@ phases:
       - {item: "Battle: ticket booking (Senior): holds with a TTL, conditional writes or row locks, idempotency", status: open, evidence: "https://github.com/MWest2020/nines/blob/main/docs/content-backlog.md"}
       - {item: "Battle: collaborative editor (Senior): OT vs CRDT, offline merge", status: open, evidence: "https://github.com/MWest2020/nines/blob/main/docs/content-backlog.md"}
 done_means:
-  - {item: "Junior Village: one Tiled map, player movement with collision, three NPCs, the server room interior; CC0 tiles recorded in ASSETS.md", status: open, evidence: "https://github.com/MWest2020/nines/blob/main/DESIGN.md"}
+  - {item: "Junior Village: one Tiled map, player movement with collision, three NPCs, the server room interior; CC0 tiles recorded in ASSETS.md", status: done, evidence: "https://github.com/MWest2020/nines/pull/8"}
   - {item: "The terminal overlay (xterm.js output, own input line, quick-command buttons, the built-in editor) runs the simulator; the three quests are completable on desktop", status: open, evidence: "https://github.com/MWest2020/nines/blob/main/ARCHITECTURE.md"}
   - {item: "Money from quests and a shop with the Raspberry Pi", status: open, evidence: "https://github.com/MWest2020/nines/blob/main/content/shop.yaml"}
   - {item: "The Career Trail screen shows the three completed nodes", status: open, evidence: "https://github.com/MWest2020/nines/blob/main/content/roadmap.yaml"}
