@@ -11,11 +11,11 @@ phases:
     name: "Architecture and skeleton"
     summary: "ARCHITECTURE.md, DESIGN.md, JSON Schemas, the parser and condition language with tests, the three MVP quests as content, CI"
     done_means:
-      - {item: "ARCHITECTURE.md: modules, the terminal-sim state model, the command parser, the condition language (parsed, never eval), content schemas, saves and versioning, i18n, offline content loading, the Capacitor build", status: done, evidence: "PR_URL"}
-      - {item: "DESIGN.md: CC0 Kenney packs with URLs, the palette, sprite and tile sizes, mock-ups of the terminal, dialogue box, Career Trail, shop and mobile controls", status: done, evidence: "PR_URL"}
-      - {item: "JSON Schemas for quest, scenario, npc and locale files (plus roadmap and shop) and a content validator run by npm test and CI", status: done, evidence: "PR_URL"}
-      - {item: "Skeleton: TypeScript, Vite, Phaser 3 and Vitest pinned exactly; the command parser and condition evaluator implemented and tested; the three MVP quests completable in the simulator tests", status: done, evidence: "PR_URL"}
-      - {item: "CI on every push and pull request (npm ci, content validation, tests, build), actions pinned to SHAs, green", status: done, evidence: "PR_URL"}
+      - {item: "ARCHITECTURE.md: modules, the terminal-sim state model, the command parser, the condition language (parsed, never eval), content schemas, saves and versioning, i18n, offline content loading, the Capacitor build", status: done, evidence: "https://github.com/MWest2020/nines/pull/1"}
+      - {item: "DESIGN.md: CC0 Kenney packs with URLs, the palette, sprite and tile sizes, mock-ups of the terminal, dialogue box, Career Trail, shop and mobile controls", status: done, evidence: "https://github.com/MWest2020/nines/pull/1"}
+      - {item: "JSON Schemas for quest, scenario, npc and locale files (plus roadmap and shop) and a content validator run by npm test and CI", status: done, evidence: "https://github.com/MWest2020/nines/pull/1"}
+      - {item: "Skeleton: TypeScript, Vite, Phaser 3 and Vitest pinned exactly; the command parser and condition evaluator implemented and tested; the three MVP quests completable in the simulator tests", status: done, evidence: "https://github.com/MWest2020/nines/pull/1"}
+      - {item: "CI on every push and pull request (npm ci, content validation, tests, build), actions pinned to SHAs, green", status: done, evidence: "https://github.com/MWest2020/nines/pull/1"}
   - {id: mvp, name: "MVP build", summary: "Junior Village with three NPCs and the server room, the three terminal quests, money and a shop with one homelab item, the Career Trail with three nodes, save/load, NL/EN, desktop and touch controls"}
   - {id: android, name: "Android", summary: "Capacitor project, signed AAB from env vars, portrait and landscape, the three quests completed on a real device, PLAY_STORE.md filled in"}
   - {id: cameo, name: "Fourth-quest cameo proof", summary: "a sample guest quest added as one /content folder in its own commit, with no code change, and CONTRIBUTING.md's full worked example"}
