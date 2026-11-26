@@ -1,0 +1,96 @@
+# Design interview: a rate limiter. The gate between Junior Village and Medior City.
+# Facts checked: token bucket vs fixed window vs sliding window; shared atomic counter; 429 +
+# Retry-After (RFC 6585); fail open vs closed. Debatable points say so in their explanation.
+schema: 1
+kind: design
+attacker: attacker
+intro: [intro.1, intro.2]
+trigger: {kind: gate, town: medior}
+rounds:
+  - id: clarify
+    type: clarify
+    prompt: [clarify.prompt.1]
+    stakes: 15
+    pick: 2
+    options:
+      - {id: key, grade: best, text: clarify.key.text, why: clarify.key.why}
+      - {id: scale, grade: best, text: clarify.scale.text, why: clarify.scale.why}
+      - {id: overflow, grade: fair, text: clarify.overflow.text, why: clarify.overflow.why}
+      - {id: language, grade: weak, text: clarify.language.text, why: clarify.language.why}
+      - {id: redis, grade: weak, text: clarify.redis.text, why: clarify.redis.why}
+  - id: algorithm
+    type: tradeoff
+    prompt: [algorithm.prompt.1, algorithm.prompt.2]
+    stakes: 15
+    options:
+      - {id: bucket, grade: best, text: algorithm.bucket.text, why: algorithm.bucket.why}
+      - {id: smooth, grade: weak, text: algorithm.smooth.text, why: algorithm.smooth.why}
+      - {id: fixed, grade: fair, text: algorithm.fixed.text, why: algorithm.fixed.why}
+      - {id: log, grade: fair, text: algorithm.log.text, why: algorithm.log.why}
+  - id: burst
+    type: tradeoff
+    prompt: [burst.prompt.1, burst.prompt.2]
+    stakes: 15
+    options:
+      - {id: right, grade: best, text: burst.right.text, why: burst.right.why}
+      - {id: all, grade: weak, text: burst.all.text, why: burst.all.why}
+      - {id: queued, grade: weak, text: burst.queued.text, why: burst.queued.why}
+      - {id: window, grade: weak, text: burst.window.text, why: burst.window.why}
+  - id: local
+    type: flaw
+    prompt: [local.prompt.1]
+    stakes: 15
+    proposal: [local.proposal.1, local.proposal.2, local.proposal.3]
+    options:
+      - {id: multiply, grade: best, text: local.multiply.text, why: local.multiply.why}
+      - {id: slow, grade: weak, text: local.slow.text, why: local.slow.why}
+      - {id: restart, grade: fair, text: local.restart.text, why: local.restart.why}
+      - {id: roundrobin, grade: weak, text: local.roundrobin.text, why: local.roundrobin.why}
+  - id: store
+    type: tradeoff
+    prompt: [store.prompt.1]
+    stakes: 15
+    options:
+      - {id: redis, grade: best, text: store.redis.text, why: store.redis.why}
+      - {id: sql, grade: weak, text: store.sql.text, why: store.sql.why}
+      - {id: split, grade: fair, text: store.split.text, why: store.split.why}
+      - {id: readwrite, grade: weak, text: store.readwrite.text, why: store.readwrite.why}
+  - id: estimate
+    type: estimate
+    prompt: [estimate.prompt.1, estimate.prompt.2]
+    stakes: 15
+    value: 1736
+    working: estimate.working
+    options:
+      - {id: lt100, grade: weak, min: 0, max: 100, text: estimate.lt100.text, why: estimate.lt100.why}
+      - {id: hundreds, grade: fair, min: 100, max: 1000, text: estimate.hundreds.text, why: estimate.hundreds.why}
+      - {id: thousands, grade: best, min: 1000, max: 10000, text: estimate.thousands.text, why: estimate.thousands.why}
+      - {id: tens, grade: weak, min: 10000, max: 100000, text: estimate.tens.text, why: estimate.tens.why}
+      - {id: huge, grade: weak, min: 100000, text: estimate.huge.text, why: estimate.huge.why}
+  - id: response
+    type: tradeoff
+    prompt: [response.prompt.1]
+    stakes: 15
+    options:
+      - {id: too-many, grade: best, text: response.too-many.text, why: response.too-many.why}
+      - {id: unavailable, grade: weak, text: response.unavailable.text, why: response.unavailable.why}
+      - {id: forbidden, grade: weak, text: response.forbidden.text, why: response.forbidden.why}
+      - {id: delay, grade: fair, text: response.delay.text, why: response.delay.why}
+  - id: outage
+    type: tradeoff
+    prompt: [outage.prompt.1]
+    stakes: 15
+    options:
+      - {id: open, grade: best, text: outage.open.text, why: outage.open.why}
+      - {id: per-endpoint, grade: best, text: outage.per-endpoint.text, why: outage.per-endpoint.why}
+      - {id: closed, grade: weak, text: outage.closed.text, why: outage.closed.why}
+      - {id: retry, grade: weak, text: outage.retry.text, why: outage.retry.why}
+hints:
+  - {id: algorithm, round: algorithm, when: 'attempts >= 1', text: hint.algorithm}
+  - {id: local, round: local, when: 'attempts >= 1', text: hint.local}
+  - {id: estimate, round: estimate, when: 'attempts >= 1 || misses >= 3', text: hint.estimate}
+  - {id: outage, round: outage, when: 'attempts >= 1', text: hint.outage}
+  - {id: breathe, when: 'confidence <= 40', text: hint.breathe}
+outro:
+  won: [won.1]
+  lost: [lost.1]

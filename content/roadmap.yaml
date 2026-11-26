@@ -14,6 +14,7 @@ branches:
   - {id: iac, title: branch.iac}
   - {id: observability, title: branch.observability}
   - {id: incident, title: branch.incident}
+  - {id: design, title: branch.design}
 nodes:
   - {id: linux-files, branch: linux, stage: junior, title: node.linux.files, requires: []}
   - {id: linux-disk, branch: linux, stage: junior, title: node.linux.disk, requires: []}
@@ -21,6 +22,9 @@ nodes:
   - {id: git-basics, branch: git, stage: junior, title: node.git.basics, requires: []}
   - {id: cicd-pipeline, branch: cicd, stage: junior, title: node.cicd.pipeline, requires: []}
   - {id: incident-first, branch: incident, stage: junior, title: node.incident.first, requires: []}
+  - {id: incident-pager, branch: incident, stage: junior, title: node.incident.pager, requires: [incident-first]}
+  - {id: cicd-release-scope, branch: cicd, stage: junior, title: node.cicd.release_scope, requires: [cicd-pipeline]}
+  - {id: design-rate-limiter, branch: design, stage: junior, title: node.design.rate_limiter, requires: []}
   - {id: observability-logs, branch: observability, stage: medior, title: node.observability.logs, requires: [incident-first]}
   - {id: containers-pods, branch: containers, stage: medior, title: node.containers.pods, requires: [linux-services]}
   - {id: networking-dns, branch: networking, stage: medior, title: node.networking.dns, requires: [linux-files]}

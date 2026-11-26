@@ -1,0 +1,88 @@
+# Production incident: a bad deploy at 3 AM. Bas (service-down) is on the line, Ravi
+# (broken-pipeline) wants to skip CI. Facts checked: acknowledge, mitigate before root cause,
+# rollback over an untested hotfix, error-budget arithmetic, blameless postmortems.
+schema: 1
+kind: incident
+attacker: attacker
+intro: [intro.1, intro.2]
+trigger: {kind: pager, when: 'quest("service-down") == "done" && quest("broken-pipeline") == "done"', chance: 20}
+rounds:
+  - id: first
+    type: tradeoff
+    prompt: [first.prompt.1]
+    stakes: 15
+    options:
+      - {id: ack, grade: best, text: first.ack.text, why: first.ack.why}
+      - {id: code, grade: weak, text: first.code.text, why: first.code.why}
+      - {id: restart, grade: weak, text: first.restart.text, why: first.restart.why}
+      - {id: wait, grade: weak, text: first.wait.text, why: first.wait.why}
+  - id: change
+    type: tradeoff
+    prompt: [change.prompt.1, change.prompt.2]
+    stakes: 15
+    options:
+      - {id: deploys, grade: best, text: change.deploys.text, why: change.deploys.why}
+      - {id: resources, grade: fair, text: change.resources.text, why: change.resources.why}
+      - {id: database, grade: fair, text: change.database.text, why: change.database.why}
+      - {id: social, grade: weak, text: change.social.text, why: change.social.why}
+  - id: steps
+    type: order
+    prompt: [steps.prompt.1]
+    stakes: 20
+    items:
+      - {id: declare, text: steps.declare.text, why: steps.declare.why, rank: 1}
+      - {id: rollback, text: steps.rollback.text, why: steps.rollback.why, rank: 2}
+      - {id: support, text: steps.support.text, why: steps.support.why, rank: 2}
+      - {id: verify, text: steps.verify.text, why: steps.verify.why, rank: 3}
+      - {id: cause, text: steps.cause.text, why: steps.cause.why, rank: 4}
+      - {id: postmortem, text: steps.postmortem.text, why: steps.postmortem.why, rank: 5}
+  - id: hotfix
+    type: flaw
+    prompt: [hotfix.prompt.1, hotfix.prompt.2]
+    stakes: 15
+    proposal: [hotfix.proposal.1, hotfix.proposal.2, hotfix.proposal.3]
+    options:
+      - {id: untested, grade: best, text: hotfix.untested.text, why: hotfix.untested.why}
+      - {id: branch, grade: weak, text: hotfix.branch.text, why: hotfix.branch.why}
+      - {id: never, grade: weak, text: hotfix.never.text, why: hotfix.never.why}
+      - {id: fine, grade: weak, text: hotfix.fine.text, why: hotfix.fine.why}
+  - id: budget
+    type: estimate
+    prompt: [budget.prompt.1, budget.prompt.2]
+    stakes: 20
+    value: 16.7
+    working: budget.working
+    options:
+      - {id: tiny, grade: weak, min: 0, max: 5, text: budget.tiny.text, why: budget.tiny.why}
+      - {id: some, grade: best, min: 5, max: 25, text: budget.some.text, why: budget.some.why}
+      - {id: big, grade: weak, min: 25, max: 50, text: budget.big.text, why: budget.big.why}
+      - {id: most, grade: weak, min: 50, max: 100, text: budget.most.text, why: budget.most.why}
+      - {id: blown, grade: weak, min: 100, text: budget.blown.text, why: budget.blown.why}
+  - id: after
+    type: tradeoff
+    prompt: [after.prompt.1, after.prompt.2]
+    stakes: 15
+    options:
+      - {id: watch, grade: best, text: after.watch.text, why: after.watch.why}
+      - {id: dig, grade: fair, text: after.dig.text, why: after.dig.why}
+      - {id: quiet, grade: weak, text: after.quiet.text, why: after.quiet.why}
+      - {id: redeploy, grade: weak, text: after.redeploy.text, why: after.redeploy.why}
+  - id: blame
+    type: flaw
+    prompt: [blame.prompt.1, blame.prompt.2]
+    stakes: 20
+    proposal: [blame.proposal.1, blame.proposal.2]
+    options:
+      - {id: blameless, grade: best, text: blame.blameless.text, why: blame.blameless.why}
+      - {id: fine, grade: weak, text: blame.fine.text, why: blame.fine.why}
+      - {id: reviewer, grade: weak, text: blame.reviewer.text, why: blame.reviewer.why}
+      - {id: too-short, grade: weak, text: blame.too-short.text, why: blame.too-short.why}
+hints:
+  - {id: change, round: change, when: 'attempts >= 1', text: hint.change}
+  - {id: steps, round: steps, when: 'attempts >= 1', text: hint.steps}
+  - {id: hotfix, round: hotfix, when: 'attempts >= 1', text: hint.hotfix}
+  - {id: budget, round: budget, when: 'attempts >= 1 || misses >= 2', text: hint.budget}
+  - {id: calm, when: 'confidence <= 40', text: hint.calm}
+outro:
+  won: [won.1]
+  lost: [lost.1]

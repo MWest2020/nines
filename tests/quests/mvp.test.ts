@@ -9,14 +9,14 @@ import { content, session, sh, steps } from '../helpers';
 
 const scenario = (id: string): ScenarioSpec => {
   const q = content().quests.find((x) => x.id === id);
-  if (!q) throw new Error(`no quest ${id}`);
+  if (!q?.scenario) throw new Error(`no terminal quest ${id}`);
   return q.scenario;
 };
 
 describe('content bundle', () => {
   it('has the three MVP quests with both languages', () => {
     const b = content();
-    expect(b.quests.map((q) => q.id)).toEqual(['broken-pipeline', 'disk-full', 'service-down']);
+    expect(b.quests.filter((q) => q.scenario).map((q) => q.id)).toEqual(['broken-pipeline', 'disk-full', 'service-down']);
     for (const q of b.quests) {
       expect(b.locales.en[questKey(q.id, q.quest.title)]).toBeTruthy();
       expect(b.locales.nl[questKey(q.id, q.quest.title)]).toBeTruthy();

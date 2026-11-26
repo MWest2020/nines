@@ -105,6 +105,45 @@ describe('the validator rejects broken content', () => {
   it('machines must make sense', () => {
     expect(errorsAfter('quests/disk-full/scenario.yaml', (s) => s.replace('dirs: [/tmp, /var/tmp, /var/cache/nginx]', 'dirs: [/tmp, /var/tmp, /var/cache/nginx, /home/dev/NOTES.txt/inner]'))).toMatch(/lies below the file/);
   });
+  it('battles: a quest folder has a scenario or a battle, never both', () => {
+    copy();
+    cpSync(join(dir, 'quests', 'disk-full', 'scenario.yaml'), join(dir, 'quests', 'night-pager', 'scenario.yaml'));
+    expect(loadContent(dir, SCHEMA_DIR).errors.join('\n')).toMatch(/not both/);
+  });
+  it('battles: shape, locale keys and explanations are checked', () => {
+    const f = 'quests/rate-limiter-interview/battle.yaml';
+    expect(errorsAfter(f, (s) => s.replace('type: clarify', 'type: quiz'))).toMatch(/battle.yaml: .*rounds\/0/);
+    expect(errorsAfter(f, (s) => s.replace('why: clarify.key.why}', '}'))).toMatch(/must have required property 'why'/);
+    expect(errorsAfter(f, (s) => s.replace('why: clarify.key.why', 'why: clarify.key.wy'))).toMatch(/unknown locale key "clarify.key.wy"/);
+    expect(errorsAfter('quests/rate-limiter-interview/locales/nl.yaml', (s) => s.replace(/^outage\.retry\.why: .*$/m, ''))).toMatch(/missing key "outage.retry.why"/);
+    expect(errorsAfter(f, (s) => s.replace('    pick: 2\n', '    pick: 2\n    script: "alert(1)"\n'))).toMatch(/additional properties/);
+  });
+  it('battles: grades, ranges and orders must make sense', () => {
+    const f = 'quests/rate-limiter-interview/battle.yaml';
+    expect(errorsAfter(f, (s) => s.replace('{id: bucket, grade: best', '{id: bucket, grade: fair'))).toMatch(/round "algorithm": needs an option graded best/);
+    expect(errorsAfter(f, (s) => s.replace('value: 1736', 'value: 580'))).toMatch(/value 580 is not in the range graded best/);
+    expect(errorsAfter(f, (s) => s.replace('min: 1000, max: 10000', 'min: 1200, max: 10000'))).toMatch(/must end where "thousands" starts/);
+    expect(errorsAfter('quests/night-pager/battle.yaml', (s) => s.replace('why: steps.declare.why, rank: 1}', 'why: steps.declare.why, rank: 3}'))).toMatch(/ranks must not go down/);
+  });
+  it('battles: a perfect play must win and the worst play must lose', () => {
+    expect(errorsAfter('quests/friday-scope/battle.yaml', (s) => s.replaceAll('stakes: 20', 'stakes: 10'))).toMatch(/a perfect play ends lost/);
+  });
+  it('battles: triggers and hints refer to things that exist', () => {
+    expect(errorsAfter('quests/rate-limiter-interview/battle.yaml', (s) => s.replace('town: medior', 'town: atlantis'))).toMatch(/unknown town "atlantis"/);
+    expect(errorsAfter('quests/rate-limiter-interview/battle.yaml', (s) => s.replace('town: medior', 'town: senior'))).toMatch(/must be a quest of the stage before it/);
+    expect(errorsAfter('quests/night-pager/battle.yaml', (s) => s.replace('quest(\"service-down\")', 'quest(\"servce-down\")'))).toMatch(/no such quest/);
+    expect(errorsAfter('quests/night-pager/battle.yaml', (s) => s.replace('round: budget', 'round: budgett'))).toMatch(/no round "budgett"/);
+    expect(errorsAfter('quests/night-pager/battle.yaml', (s) => s.replace("when: 'confidence <= 40'", "when: 'fails >= 2'"))).toMatch(/unknown name "fails"/);
+  });
+  it('the franchise battle catchphrase and battle words are refused, in both languages', () => {
+    const en = 'quests/night-pager/locales/en.yaml';
+    const nl = 'quests/night-pager/locales/nl.yaml';
+    expect(errorsAfter(en, (s) => s.replace('PAGER 03:07', 'A wild production incident appeared! 03:07'))).toMatch(/IP rule/);
+    expect(errorsAfter(nl, (s) => s.replace('PAGER 03:07', 'Een wild productie-incident verschijnt! 03:07'))).toMatch(/IP rule/);
+    expect(errorsAfter(en, (s) => s.replace('Textbook.', "It's super effective!"))).toMatch(/IP rule/);
+    expect(errorsAfter(en, (s) => s.replace('Textbook.', 'The pager fainted.'))).toMatch(/IP rule/);
+    expect(errorsAfter(en, (s) => s.replace('Textbook.', 'FIGHT  BAG  RUN'))).toMatch(/IP rule/);
+  });
   it('sprites must be PNGs of the right size', () => {
     copy();
     edit('quests/disk-full/npc.yaml', (s) => s.replace('tint: "#c86848"', 'sprite: {file: femke.png, frame: 16, source: "test", license: CC0-1.0}'));

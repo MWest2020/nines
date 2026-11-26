@@ -1,0 +1,78 @@
+# Stakeholder: a demanding product manager and a scope-creep request on a Friday release.
+# The good answers negotiate scope and risk: a smaller slice, a feature flag, a plan B.
+# Requires broken-pipeline: Ravi's pipeline is the one this release goes through.
+schema: 1
+kind: stakeholder
+attacker: attacker
+intro: [intro.1, intro.2]
+trigger: {kind: npc}
+rounds:
+  - id: ask
+    type: clarify
+    prompt: [ask.prompt.1]
+    stakes: 20
+    pick: 2
+    options:
+      - {id: why, grade: best, text: ask.why.text, why: ask.why.why}
+      - {id: scope, grade: best, text: ask.scope.text, why: ask.scope.why}
+      - {id: provider, grade: fair, text: ask.provider.text, why: ask.provider.why}
+      - {id: who, grade: weak, text: ask.who.text, why: ask.who.why}
+      - {id: weekend, grade: weak, text: ask.weekend.text, why: ask.weekend.why}
+  - id: offer
+    type: tradeoff
+    prompt: [offer.prompt.1, offer.prompt.2]
+    stakes: 20
+    options:
+      - {id: slice, grade: best, text: offer.slice.text, why: offer.slice.why}
+      - {id: yes, grade: weak, text: offer.yes.text, why: offer.yes.why}
+      - {id: no, grade: fair, text: offer.no.text, why: offer.no.why}
+      - {id: postpone, grade: fair, text: offer.postpone.text, why: offer.postpone.why}
+  - id: size
+    type: estimate
+    prompt: [size.prompt.1, size.prompt.2]
+    stakes: 20
+    value: 8
+    working: size.working
+    options:
+      - {id: hours, grade: weak, min: 0, max: 1, text: size.hours.text, why: size.hours.why}
+      - {id: days, grade: weak, min: 1, max: 4, text: size.days.text, why: size.days.why}
+      - {id: weeks, grade: best, min: 4, max: 16, text: size.weeks.text, why: size.weeks.why}
+      - {id: months, grade: fair, min: 16, text: size.months.text, why: size.months.why}
+  - id: testing
+    type: flaw
+    prompt: [testing.prompt.1, testing.prompt.2]
+    stakes: 20
+    proposal: [testing.proposal.1, testing.proposal.2]
+    options:
+      - {id: integration, grade: best, text: testing.integration.text, why: testing.integration.why}
+      - {id: process, grade: fair, text: testing.process.text, why: testing.process.why}
+      - {id: down, grade: weak, text: testing.down.text, why: testing.down.why}
+      - {id: trust, grade: weak, text: testing.trust.text, why: testing.trust.why}
+  - id: rollout
+    type: order
+    prompt: [rollout.prompt.1]
+    stakes: 20
+    items:
+      - {id: ci, text: rollout.ci.text, why: rollout.ci.why}
+      - {id: deploy, text: rollout.deploy.text, why: rollout.deploy.why}
+      - {id: staff, text: rollout.staff.text, why: rollout.staff.why}
+      - {id: canary, text: rollout.canary.text, why: rollout.canary.why}
+      - {id: everyone, text: rollout.everyone.text, why: rollout.everyone.why}
+      - {id: cleanup, text: rollout.cleanup.text, why: rollout.cleanup.why}
+  - id: pushback
+    type: tradeoff
+    prompt: [pushback.prompt.1, pushback.prompt.2]
+    stakes: 20
+    options:
+      - {id: hold, grade: best, text: pushback.hold.text, why: pushback.hold.why}
+      - {id: ship, grade: weak, text: pushback.ship.text, why: pushback.ship.why}
+      - {id: manual, grade: fair, text: pushback.manual.text, why: pushback.manual.why}
+      - {id: silent, grade: weak, text: pushback.silent.text, why: pushback.silent.why}
+hints:
+  - {id: ask, round: ask, when: 'attempts >= 1', text: hint.ask}
+  - {id: offer, round: offer, when: 'attempts >= 1', text: hint.offer}
+  - {id: rollout, round: rollout, when: 'attempts >= 1 || misses >= 2', text: hint.rollout}
+  - {id: calm, when: 'confidence <= 40', text: hint.calm}
+outro:
+  won: [won.1]
+  lost: [lost.1]

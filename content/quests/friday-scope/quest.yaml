@@ -1,0 +1,18 @@
+# A battle quest: a demanding product manager, Friday afternoon. Talking to Daan starts it.
+schema: 1
+id: friday-scope
+author: {name: "Nines team"}
+title: title
+summary: summary
+stage: junior
+branch: cicd
+track: any
+roadmap_node: cicd-release-scope
+requires: [broken-pipeline]
+giver: daan
+start: {map: junior-village, object: meeting-room}
+reward: {money: 200, xp: 30}
+dialogue:
+  offer: [offer.1, offer.2]
+  active: [active.1]
+  done: [done.1]

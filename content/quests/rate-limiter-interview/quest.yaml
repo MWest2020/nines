@@ -1,0 +1,18 @@
+# A battle quest: battle.yaml instead of scenario.yaml. Winning it opens the road to Medior City.
+schema: 1
+id: rate-limiter-interview
+author: {name: "Nines team"}
+title: title
+summary: summary
+stage: junior
+branch: design
+track: any
+roadmap_node: design-rate-limiter
+requires: [disk-full, service-down, broken-pipeline]
+giver: ingrid
+start: {map: junior-village, object: gate-medior}
+reward: {money: 300, xp: 40}
+dialogue:
+  offer: [offer.1, offer.2]
+  active: [active.1]
+  done: [done.1]

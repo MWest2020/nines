@@ -1,0 +1,10 @@
+schema: 1
+id: daan
+author: {name: "Nines team"}
+name: npc.name
+tint: "#e89858"
+spawn: {map: junior-village, slot: npc-4, facing: down}
+dialogue:
+  - when: 'quest("friday-scope") == "done"'
+    lines: [npc.after]
+  - lines: [npc.idle]
