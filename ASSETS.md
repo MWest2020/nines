@@ -16,4 +16,8 @@ Kenney packs: record the pack name, its URL and the version you downloaded, and 
 | File | Source | Author | Licence | Notes |
 | ---- | ------ | ------ | ------- | ----- |
 
-(No assets yet. The planned packs are listed in DESIGN.md.)
+(No asset files yet. The planned packs are listed in DESIGN.md.)
+
+Drawn in code rather than shipped as files, all own work for Nines, released CC0 1.0: the pixel
+font (`src/game/ui/font.ts`, glyphs as text rows), the UI panels, Career Trail stones and HUD icons
+(`src/game/ui/`), and the Raspberry Pi in the shop (`src/game/ui/ShopScene.ts`).
