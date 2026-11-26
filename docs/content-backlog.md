@@ -1,17 +1,26 @@
 # Content backlog: battles still to write
 
-Four system-design topics that need a battle (ARCHITECTURE.md, Battles; CONTRIBUTING.md for
+System-design topics that need a battle (ARCHITECTURE.md, Battles; CONTRIBUTING.md for
 the folder layout). Each paragraph lists what the battle must test, at software-engineering
 interview level, and the traps worth turning into wrong options. Write our own questions: these
 are topics, not text to copy from anywhere. Where something is debatable, the explanation in
-the battle must say so. The rate limiter (Junior) is done: `content/quests/rate-limiter-interview/`.
+the battle must say so.
+
+Done: the rate limiter (Junior), `content/quests/rate-limiter-interview/`; nearby places search
+(Junior) and the URL shortener (Medior), `content/quests/nearby-places/` and
+`content/quests/url-shortener/` (https://github.com/MWest2020/nines/pull/11). Their paragraphs
+below stay as the brief they were written from. Still to write: ticket booking and the
+collaborative editor.
 
 Every battle uses the five round types where they fit: `clarify` (what to ask first),
 `tradeoff` (a choice with its reason), `flaw` (spot the flaw in a proposal), `estimate`
 (back-of-envelope ranges) and `order`. Each needs a `why` for every option, in English and
 Dutch.
 
-## Nearby places search · Junior · design
+## Nearby places search · Junior · design · done
+
+Written as `content/quests/nearby-places/` (Ravi, Junior Village, https://github.com/MWest2020/nines/pull/11).
+
 
 Clarify first: radius search ("cafés within 1 km") or the k nearest; how many places (say 100
 million) and how often they change (rarely: the system is read-heavy, so the index can be built
@@ -36,7 +45,13 @@ distance (haversine); a degree of longitude shrinks with the cosine of the latit
 around 50 bytes each for the index is about 5 GB, which fits in memory on one machine;
 replicate it for reads.
 
-## URL shortener · Medior · design
+## URL shortener · Medior · design · done
+
+Written as `content/quests/url-shortener/` (Ingrid, at the gate until Medior City has a map,
+https://github.com/MWest2020/nines/pull/11). One correction to the text below: a cached "not
+found" absorbs repeated misses (a popular dead link), not scanners, whose random codes are each
+a new miss; scanners are a job for the rate limiter or a Bloom filter of existing codes.
+
 
 Clarify: how many new links per day, the read-to-write ratio (often around 100 to 1), custom
 aliases, expiry, whether click analytics are needed and whether a link's target can change.
