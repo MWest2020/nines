@@ -651,6 +651,15 @@ def bank_pentest(page: Page, shots: Path | None) -> None:
     run(page, "cat ~/engagement/scope.txt", "OUT OF SCOPE")
     run(page, "cat /etc/nginx/sites-enabled/staging", "autoindex on")
     run(page, "ls -l /srv/www/staging/exports", "db-backup-2026-11-20.sql.gz")
+    # Mark's write-up rated it "critical and high": now the panel says what is wrong
+    run(page, "edit ~/engagement/finding-01.txt")
+    page.locator(".nt-editor").wait_for(state="visible")
+    edit_file(page, PENTEST_FINDING.replace("Severity: high", "Severity: Critical / High"))
+    note = page.locator(".nt-objectives .nt-note")
+    note.wait_for(state="visible", timeout=5000)
+    assert note.inner_text() == "Severity line has two values: high, critical. Pick one.", note.inner_text()
+    if shots:
+        page.screenshot(path=str(shots / "terminal-severity-note.png"))
     run(page, "edit ~/engagement/finding-01.txt")
     page.locator(".nt-editor").wait_for(state="visible")
     edit_file(page, PENTEST_FINDING)

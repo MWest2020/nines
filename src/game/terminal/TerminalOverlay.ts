@@ -558,12 +558,13 @@ export class TerminalOverlay {
         // shape as well as colour: a filled dot when done, a ring when open
         // a procedure a contractor skips is crossed out, with a dash for a mark
         if (o.skipped && !o.done) li.className = 'nt-skipped';
-        li.append(el('span', 'nt-mark', o.done ? '●' : o.skipped ? '–' : '○'), el('span', '', this.t(questKey(this.quest.id, o.text))));
+        const body = el('span', 'nt-objtext', this.t(questKey(this.quest.id, o.text)));
+        li.append(el('span', 'nt-mark', o.done ? '●' : o.skipped ? '–' : '○'), body);
         if (o.skipped && !o.done) li.append(el('span', 'nt-skipnote', this.t('ui.terminal.skipped')));
-        // a free-text check says exactly what is still wrong (src/sim/check.ts)
+        // a free-text check says exactly what is still wrong (src/sim/check.ts), under the objective
         if (o.note && !o.skipped) {
           const key = o.note.scope === 'quest' ? questKey(this.quest.id, o.note.key) : o.note.key;
-          li.append(el('span', 'nt-note', this.t(key, o.note.params)));
+          body.append(el('span', 'nt-note', this.t(key, o.note.params)));
         }
         return li;
       }),
