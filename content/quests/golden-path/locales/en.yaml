@@ -5,7 +5,7 @@ offer.2: "A golden path: one command, and you get a namespace and a Deployment t
 active.1: "The whiteboard is still full of YAML. Shall we finish the template?"
 done.1: "Quotas with defaults, limits that behave, non-root, deny by default, and a road teams want to take. Let's ship it."
 npc.name: "Kim"
-npc.nopath: "Just got here? See Joyce, the career coach by the Career Centre, first. Once you've picked a path, come and build some roads with me."
+npc.nopath: "Just got here? See Petra, the career coach by the Career Office, first. Once you've picked a path, come and build some roads with me."
 npc.mentor.1: "Platform Engineer, then. I'm your mentor: we build the road the other teams drive on."
 npc.mentor.2: "The trick is making the right way the easy way. Let's start with a template."
 npc.side: "Not your path, but welcome. Every team ends up on someone's platform, so take this one as a side quest."

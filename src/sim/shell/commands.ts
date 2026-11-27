@@ -579,13 +579,16 @@ const kubectl: Command = (ctx, args) => {
         : [{ path: p, shown: file }];
       const out: string[] = [];
       let bad = false;
+      const rolls: string[] = [];
       for (const target of targets) {
         const r = applyManifest(ctx, target.path, target.shown, ns);
         out.push(r.line);
         bad ||= r.bad;
-        // a changed pod template rolls the Deployment out, as on a real cluster
-        if (r.rollout) rollout(ctx, r.rollout);
+        if (r.rollout && !rolls.includes(r.rollout)) rolls.push(r.rollout);
       }
+      // a changed pod template rolls the Deployment out, as on a real cluster: after the whole
+      // apply, so a ConfigMap applied in the same command is already there for the new pods
+      for (const name of rolls) rollout(ctx, name);
       return bad ? { out, exit: 1, fail: true } : ok(out);
     }
     case 'logs': {

@@ -817,7 +817,7 @@ City); `karma` (-100..100), `strikes` (times caught since the last community ser
   has two such doors at (39,14) and (39,15). A save that stands on a map the player cannot walk to
   through open doors (hand-edited, say) starts at `player-start` instead, so no save skips a gate.
 - **The career coach** (`src/game/ui/CareerScene.ts`, `core/game.ts` `choosePath` and
-  `changePath`): an NPC with `role: coach` (Joyce, `content/npcs/joyce`) says her lines, then the
+  `changePath`): an NPC with `role: coach` (Petra, `content/npcs/petra`) says her lines, then the
   bridge opens the career screen: one path per page with its pitch (left and right turn the
   pages), Choose, and a confirmation. Once a path is chosen the same screen offers a switch for
   `CAREER_CHANGE_FEE` (€300; issue 24's default), which keeps XP, quests and karma. When the
@@ -1012,7 +1012,7 @@ Pinned exactly, each version published at least two weeks before it was added (c
   it, every button is at least 48 CSS px, and in portrait the hints open from the header count.
 - `tests/e2e/medior_smoke.py` (Python Playwright, the helpers of the two scripts above): serves
   `dist/` under `/nines/` and, in one page, walks into the shut gate (the save stays in Junior
-  Village), wins the gate interview, walks through the gate into Medior City, talks to Joyce,
+  Village), wins the gate interview, walks through the gate into Medior City, talks to Petra,
   finds her career screen from the canvas pixels, pages to Systems Engineer with the arrow keys,
   chooses it and confirms (the save has the path), walks into The Stack and plays Wim's "One disk
   left" in the terminal. It fails on any request outside the origin and on any page error. CI

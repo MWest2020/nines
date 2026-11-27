@@ -8,7 +8,7 @@ done.2: "Je schreef het serienummer op, niet 'sdb'. Apparaatnamen worden bij het
 npc.name: "Wim"
 npc.idle: "RAID houdt je in de lucht als een schijf sterft. Het beschermt je niet als iemand een map weggooit. Daar zijn back-ups voor."
 npc.mentor: "Dus je koos systems. Mooi: iemand moet weten wat er onder al die containers zit. Ik heb werk voor je."
-npc.coach: "Nog geen pad gekozen? Joyce, de loopbaancoach, staat buiten bij het Career Centre. Kom terug als je haar gesproken hebt."
+npc.coach: "Nog geen pad gekozen? Petra, de loopbaancoach, staat buiten bij het loopbaanbureau. Kom terug als je haar gesproken hebt."
 npc.after: "De rebuild was in twee uur klaar. We hebben nu ook alerts op gerealloceerde sectoren, dus volgende keer horen we het voordat de kernel een schijf opgeeft."
 motd: "fs-02. De RAID 1 van de fileshare draait op één schijf. Zoek de kapotte schijf, controleer de back-up en vul ~/tickets/DC-REQUEST.txt in. Wims notities: ~/notes.txt."
 obj.backup: "de back-up van vannacht is gecontroleerd"

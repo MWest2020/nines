@@ -2,7 +2,8 @@
 # git for good (removing it in a new commit does not take it out of the history), so it is moved
 # to the CI's secret store, which hands it to the job as an environment variable and masks it in
 # the log, and the leaked value is revoked; a dependency cache keyed on the lockfile (the cache is
-# reused until the dependencies change, and a key that never changes would serve stale packages);
+# reused until the dependencies change; a key that never changes keeps the first cache forever, so
+# new packages are downloaded on every run; npm ci still installs exactly the lockfile);
 # and that a pipeline change only counts once it is committed and the run passes.
 schema: 1
 host: ci-02
@@ -42,7 +43,9 @@ files:
             - npm ci --cache .npm --prefer-offline
 
     Key it on the lockfile: it changes exactly when the dependencies do. package.json also
-    changes for a new script, and a fixed key would keep serving old packages.
+    changes for a new script (a needless cold cache), and a key that never changes keeps the
+    first cache forever, so every new package is downloaded again on every run. npm only reads
+    the cache when told where it is: --cache .npm.
 
     ## Secrets
     Never write a secret into this file: the file is in git, and git keeps every version.
@@ -105,7 +108,7 @@ quick:
 objectives:
   - {id: no-token, text: obj.no_token, done_when: '!file_contains("/home/dev/payments-web/.nines-ci.yml", "dpl_live_7f3a9c21e8b44d06")'}
   - {id: secret, text: obj.secret, done_when: 'file_contains("/home/dev/payments-web/.nines-ci.yml", "secrets:") && file_contains("/home/dev/payments-web/.nines-ci.yml", "DEPLOY_TOKEN")'}
-  - {id: cache, text: obj.cache, done_when: 'file_contains("/home/dev/payments-web/.nines-ci.yml", "cache:") && file_contains("/home/dev/payments-web/.nines-ci.yml", "key: package-lock.json")'}
+  - {id: cache, text: obj.cache, done_when: 'file_contains("/home/dev/payments-web/.nines-ci.yml", "cache:") && file_contains("/home/dev/payments-web/.nines-ci.yml", "key: package-lock.json") && file_contains("/home/dev/payments-web/.nines-ci.yml", "--cache .npm")'}
   - {id: green, text: obj.green, done_when: 'pipeline_valid && git_clean && pipeline_status == "passed"'}
   - {id: revoke, text: obj.revoke, done_when: 'file_contains("/home/dev/ops/revoke-request.txt", "dpl_live_7f3a9c21e8b44d06")'}
 hints:

@@ -6,8 +6,8 @@ name: npc.name
 tint: "#485860"
 spawn: {map: medior-city, slot: npc-7, facing: down}
 dialogue:
-  - when: 'karma > -20'
-    lines: [npc.too_clean]
   - when: 'quest("parking-garage") == "done"'
     lines: [npc.after]
+  - when: 'karma > -20'
+    lines: [npc.too_clean]
   - lines: [npc.idle]

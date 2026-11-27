@@ -343,7 +343,7 @@ town, east of Junior Village along the same road: bigger and busier than the vil
 the same CC0 Kenney sheets (no new sheets) and our own tiles by `tools/maps/build-maps.mjs`.
 
 **The map** (44 x 34). A three-lane boulevard runs west to east with zebra crossings, parked taxis
-and a van. North of it, west to east: the Career Centre (Joyce stands in front), The Stack
+and a van. North of it, west to east: the Career Office (Petra stands in front), The Stack
 (co-working and colocation, the one interior), the Grachtgarant tower (a fictional insurer;
 Marieke in front) and the Byte Bakery. A back alley behind the buildings, reached through the gap
 between The Stack and the tower, is where Mo waits. South: the plaza with a fountain, a café
@@ -359,7 +359,7 @@ raised floor behind a glass wall on the right (Wim's file server, Grachtgarant's
 with `town: medior`: shut and drawn while the rate-limiter interview is not won, gone the moment
 it is. The road back is the city's west edge, which leads to the spot next to the gate.
 
-**The career coach.** Joyce introduces the six paths and opens her screen: one path per page,
+**The career coach.** Petra introduces the six paths and opens her screen: one path per page,
 its title and pitch, "Choose this path", and a confirmation that says the mentor waits in town,
 other paths stay open as side quests and a switch costs €300 later. After the choice she names
 the mentor and where to find them. Our own screen: the ink panel and gold rule of every Nines

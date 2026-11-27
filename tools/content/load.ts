@@ -31,7 +31,7 @@ import {
   type TiledMap,
   type TiledTileLayer,
 } from '../../src/content/types';
-import { GID_MASK, isFacing, isNpcSlot, objectTile, reachable, readMap, tileLayer, type WorldMap } from '../../src/world/grid';
+import { GID_MASK, isFacing, isNpcSlot, objectTile, openMaps, reachable, readMap, tileLayer, type WorldMap } from '../../src/world/grid';
 import { compile, type Node, type Registry } from '../../src/rules/expr';
 import { has } from '../../src/rules/own';
 import { COMMANDS } from '../../src/sim/shell/commands';
@@ -875,6 +875,15 @@ export function loadContent(contentDir: string, schemaDir: string, options: Load
       const standOn = (o.type === 'spawn' && !isNpcSlot(o.name)) || o.type === 'door';
       const ok = standOn ? at(o.x, o.y) : at(o.x, o.y - 1) || at(o.x, o.y + 1) || at(o.x - 1, o.y) || at(o.x + 1, o.y);
       if (!ok) err(file, `${o.type} "${o.name}" at (${o.x},${o.y}) cannot be reached on foot`);
+    }
+  }
+  // a gated town's map is out of reach while every gate is shut: no door around the gate
+  if (worlds.size > 0 && roadmap) {
+    const shut = openMaps([...worlds.values()], () => false);
+    for (const q of quests) {
+      const t = q.battle?.trigger;
+      const town = t?.kind === 'gate' ? roadmap.towns.find((x) => x.id === t.town) : undefined;
+      if (town?.map && shut.has(town.map)) errors.push(`content/maps: ${town.map} can be reached without winning the gate to ${town.id} (a door into it has no town: ${town.id})`);
     }
   }
   for (const q of quests) {

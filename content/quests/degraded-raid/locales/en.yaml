@@ -8,7 +8,7 @@ done.2: "You wrote the serial, not 'sdb'. Device names are handed out at boot; a
 npc.name: "Wim"
 npc.idle: "RAID keeps you running when a disk dies. It does not keep you safe when someone deletes a folder. That is what backups are for."
 npc.mentor: "So you picked systems. Good: someone has to know what is under all those containers. I'll have work for you."
-npc.coach: "Haven't picked a path yet? Joyce, the career coach, is outside by the Career Centre. Come back once you've talked to her."
+npc.coach: "Haven't picked a path yet? Petra, the career coach, is outside by the Career Office. Come back once you've talked to her."
 npc.after: "The rebuild finished in two hours. We also set up alerts on reallocated sectors now, so next time we hear before the kernel gives up on a disk."
 motd: "fs-02. The file share's RAID 1 runs on one disk. Find the failed disk, check the backup, and fill in ~/tickets/DC-REQUEST.txt. Wim's notes: ~/notes.txt."
 obj.backup: "last night's backup is checked"

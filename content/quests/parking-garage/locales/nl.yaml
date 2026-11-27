@@ -16,7 +16,7 @@ hint.list: "Eén kenteken per regel in ~/exits/allow.txt. Kijk naar het risicopa
 event.payments: "Kentekens en kaartnummers van anderen. Niet de klus, en niet aan jou om te lezen."
 event.list_gone: "Je hebt de uitrijlijst verwijderd. Elk bestelbusje staat nu vast voor de slagboom. De automaat zet hem terug."
 risk.camera: "de camera boven de automaat neemt je op"
-risk.camera_off: "de camera ging op zwart terwijl er iemand bij de automaat stond"
+risk.camera_off: "de camera ging op zwart terwijl er iemand bij de automaat stond: ook dat valt op"
 risk.snooped: "je hebt het betaallog gelezen"
 risk.beeping: "de automaat piept bij elk mislukt commando"
 risk.dawdling: "je staat al eeuwen bij de betaalautomaat"

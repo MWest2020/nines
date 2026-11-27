@@ -360,13 +360,13 @@ function mediorCity() {
   m.put('detail', W - 2, 16, U(221), true);
   m.put('detail', W - 3, 13, TT(83), true); // a signpost: Senior Summit, later
 
-  // north side, west to east: the Career Centre, The Stack (co-working and colocation), the
+  // north side, west to east: the Career Office, The Stack (co-working and colocation), the
   // Grachtgarant tower, the Byte Bakery
   building(m, 3, 5, 8, 4, ROOF_SAND, WALLS.clay);
   for (let x = 3; x < 11; x++) m.put('detail', x, 9, x === 3 ? U(328) : x === 10 ? U(332) : U(329)); // awning
   m.put('detail', 4, 10, U(386));
   m.put('detail', 5, 10, U(387));
-  m.put('detail', 6, 10, U(284), true); // the Career Centre's door (no interior)
+  m.put('detail', 6, 10, U(284), true); // the Career Office's door (no interior)
   m.put('detail', 7, 10, U(284), true);
   m.put('detail', 8, 10, U(387));
   m.put('detail', 9, 10, U(388));
@@ -460,7 +460,7 @@ function mediorCity() {
   m.object('back-to-village-2', 'door', 0, 15, { to_map: 'junior-village', to_point: 'medior-road-exit' });
   m.object('stack-exit', 'spawn', 17, 11, { facing: 'down' });
   m.object('stack-door', 'door', 17, 10, { to_map: 'the-stack', to_point: 'entrance' });
-  m.object('npc-1', 'spawn', 8, 12); // Joyce, the career coach, at the Career Centre
+  m.object('npc-1', 'spawn', 8, 12); // Petra, the career coach, at the Career Office
   m.object('npc-2', 'spawn', 6, 22); // Lars, at the café terrace
   m.object('npc-3', 'spawn', 17, 24); // Amara, by the fountain
   m.object('npc-4', 'spawn', 20, 26); // Kim, on the plaza

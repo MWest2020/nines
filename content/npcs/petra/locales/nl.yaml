@@ -1,5 +1,5 @@
-npc.name: "Joyce"
-intro.1: "Welkom in Mediorstad! Ik ben Joyce, de loopbaancoach. Een junior lost op wat voor zijn neus ligt; een medior kiest een richting en wordt daar goed in."
+npc.name: "Petra"
+intro.1: "Welkom in Mediorstad! Ik ben Petra, de loopbaancoach. Een junior lost op wat voor zijn neus ligt; een medior kiest een richting en wordt daar goed in."
 intro.2: "Hier beginnen zes paden. Elk heeft een mentor in de stad met een eerste klus voor je. Bekijk ze allemaal en kies dan het pad dat bij je past."
 mentor.swe: "Software engineering dus. Lars is je mentor: hij zit op het caféterras op het plein, meestal met een pull request open."
 mentor.sre: "Site reliability dus. Amara is je mentor: je vindt haar bij de fontein, met een oog op de dashboards."

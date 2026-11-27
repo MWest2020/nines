@@ -16,7 +16,7 @@ hint.list: "One plate per line in ~/exits/allow.txt. Check the heat panel before
 event.payments: "Other people's plates and card endings. Not the job, and not yours to read."
 event.list_gone: "You deleted the exit list. Every delivery van is now stuck behind the barrier. The station restores it."
 risk.camera: "the camera over the station is recording you"
-risk.camera_off: "the camera went dark while someone stood at the station"
+risk.camera_off: "the camera went dark while someone stood at the station: that gets noticed too"
 risk.snooped: "you read the payment log"
 risk.beeping: "the station beeps at every failed command"
 risk.dawdling: "you've stood at the pay station for ages"

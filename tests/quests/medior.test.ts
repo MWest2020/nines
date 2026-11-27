@@ -45,13 +45,13 @@ describe('Medior City: who stands where, and what opens when', () => {
     // every path id in the roadmap is covered
     expect(Object.keys(first).sort()).toEqual(rules().roadmap.paths.map((p) => p.id).sort());
   });
-  it('Joyce, the career coach, introduces the paths, then names the mentor of the one chosen', () => {
-    const npc = content().npcs.find((n) => n.id === 'joyce')!;
+  it('Petra, the career coach, introduces the paths, then names the mentor of the one chosen', () => {
+    const npc = content().npcs.find((n) => n.id === 'petra')!;
     expect(npc).toMatchObject({ role: 'coach', spawn: { map: 'medior-city', slot: 'npc-1' } });
-    expect(conversation(medior(), content(), 'joyce')?.lines).toEqual(['npc.joyce.intro.1', 'npc.joyce.intro.2']);
+    expect(conversation(medior(), content(), 'petra')?.lines).toEqual(['npc.petra.intro.1', 'npc.petra.intro.2']);
     for (const p of rules().roadmap.paths) {
-      const lines = conversation(medior({ path: p.id }), content(), 'joyce')!.lines;
-      expect(lines).toEqual([`npc.joyce.mentor.${p.id}`, 'npc.joyce.again']);
+      const lines = conversation(medior({ path: p.id }), content(), 'petra')!.lines;
+      expect(lines).toEqual([`npc.petra.mentor.${p.id}`, 'npc.petra.again']);
     }
     expect(content().npcs.filter((n) => n.role === 'coach')).toHaveLength(1);
   });
@@ -160,20 +160,20 @@ describe('the car park (parking-garage, a hustle)', () => {
     expect(stateOf(medior({ karma: -20 }), rules(), 'parking-garage')).toBe('available');
     expect(conversation(medior({ karma: 0 }), content(), 'mo')?.lines).toEqual(['quest.parking-garage.npc.too_clean']);
   });
-  it('careful: camera off, nothing snooped, signed out: 25%; sloppy hits the cap', () => {
+  it('careful: nothing snooped, signed out, quick: 30% with the camera dark (a dark camera is noticed too); sloppy: 70%', () => {
     const s = open('parking-garage');
     sh(s, 'cat ~/README.txt');
     saveFile(s, '/home/service/camera/settings.txt', 'recording: off\nview: pay station and barrier\n');
     sh(s, 'rm ~/.session/technician.txt');
     const win = saveFile(s, allow, `${editorText(s, allow)}MO-554-X\n`);
     expect(win.won).toBe(true);
-    expect(win.risk).toEqual({ percent: 25, factors: [{ id: 'camera-off', text: 'risk.camera_off', add: 5 }] });
+    expect(win.risk).toEqual({ percent: 30, factors: [{ id: 'camera-off', text: 'risk.camera_off', add: 20 }] });
     const t2 = open('parking-garage');
     const peek = run(t2, 'cat ~/log/payments.log');
     expect(peek.events).toMatchObject([{ id: 'payments', karma: -5 }]);
     const sloppy = saveFile(t2, allow, `${editorText(t2, allow)}MO-554-X\n`);
     expect(sloppy.risk?.factors.map((f) => f.id)).toEqual(['camera', 'snooped', 'session']);
-    expect(sloppy.risk?.percent).toBe(80);
+    expect(sloppy.risk?.percent).toBe(70);
   });
   it('pays like a hustle: clean pays €400 and karma -15, caught fines; a job like this is never completed directly', () => {
     const g = medior({ karma: -20, quests: { 'rate-limiter-interview': 'done', 'parking-garage': 'active' } });

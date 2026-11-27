@@ -56,10 +56,10 @@ events:
     say: event.list_gone
     reset: true
 risk:
-  base: 20
+  base: 10
   factors:
     - {id: camera, when: 'file_contains("/home/service/camera/settings.txt", "recording: on")', add: 25, text: risk.camera}
-    - {id: camera-off, when: 'file_contains("/home/service/camera/settings.txt", "recording: off")', add: 5, text: risk.camera_off}
+    - {id: camera-off, when: 'file_contains("/home/service/camera/settings.txt", "recording: off")', add: 20, text: risk.camera_off}
     - {id: snooped, when: 'opened("/home/service/log/payments.log")', add: 20, text: risk.snooped}
     - {id: beeping, when: 'fails >= 3', add: 15, text: risk.beeping}
     - {id: dawdling, when: 'commands >= 15', add: 15, text: risk.dawdling}

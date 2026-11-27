@@ -11,7 +11,7 @@ It plays, in one page:
      Junior Village;
   2. the rate-limiter interview with Ingrid to a win (perfect answers);
   3. the walk through the opened gate into Medior City (the save says so);
-  4. Joyce, the career coach: her lines, then the career screen (found from the canvas pixels),
+  4. Petra, the career coach: her lines, then the career screen (found from the canvas pixels),
      paging to Systems Engineer with the arrow keys, Choose, the confirmation, Yes (the save has
      the path), and her line about the mentor;
   5. into The Stack and Wim's first quest, "One disk left", played in the terminal by typing.
@@ -191,7 +191,7 @@ def main() -> None:
                         break
                     page.keyboard.press("Enter")
                     page.wait_for_timeout(800)
-                check(career_open(page), "after Joyce's lines the career screen opens")
+                check(career_open(page), "after Petra's lines the career screen opens")
                 for _ in range(4):  # swe, sre, devops, platform -> systems
                     page.keyboard.press("ArrowRight")
                     page.wait_for_timeout(200)
@@ -204,7 +204,7 @@ def main() -> None:
                 page.wait_for_timeout(600)
                 check(game_save(page).get("path") == "systems", "the save has the path: systems")
                 # her line about the mentor
-                check(dialogue_open(page), "Joyce names the mentor")
+                check(dialogue_open(page), "Petra names the mentor")
                 read_dialogue(page)
                 check(not career_open(page), "the screen is closed and the world is free")
 

@@ -87,10 +87,10 @@ rounds:
     items:
       - {id: namespace, text: apply.namespace.text, why: apply.namespace.why, rank: 1}
       - {id: quota, text: apply.quota.text, why: apply.quota.why, rank: 2}
-      - {id: account, text: apply.account.text, why: apply.account.why, rank: 3}
-      - {id: policy, text: apply.policy.text, why: apply.policy.why, rank: 3}
-      - {id: deployment, text: apply.deployment.text, why: apply.deployment.why, rank: 4}
-      - {id: check, text: apply.check.text, why: apply.check.why, rank: 5}
+      - {id: account, text: apply.account.text, why: apply.account.why, rank: 2}
+      - {id: policy, text: apply.policy.text, why: apply.policy.why, rank: 2}
+      - {id: deployment, text: apply.deployment.text, why: apply.deployment.why, rank: 3}
+      - {id: check, text: apply.check.text, why: apply.check.why, rank: 4}
 hints:
   - {id: ask, round: ask, when: 'attempts >= 1', text: hint.ask}
   - {id: quota, round: quota, when: 'attempts >= 1', text: hint.quota}

@@ -3,7 +3,10 @@
 # and its readiness probe fails; a pod that is not Ready gets no traffic from its Service (it is
 # left out of the endpoints), while a failing liveness probe would restart it instead; kubectl
 # describe pod shows the probe's failure; the fix belongs in the manifest, and applying a changed
-# pod template rolls the Deployment out by itself (no rollout restart needed). Deleting the
+# pod template rolls the Deployment out by itself (no rollout restart needed). The Deployment uses
+# Recreate (a schema migration), so no old pod is left serving; with the default RollingUpdate a
+# new pod that never becomes Ready would stall the rollout and the old pods would keep serving,
+# which is the other half of what a readiness probe is for (done.2 says so). Deleting the
 # readiness probe also makes the pods Ready, because nothing checks them any more: the second
 # objective asks to keep it.
 schema: 1
@@ -18,7 +21,9 @@ files:
   /home/dev/handover.txt: |
     From: Jesse (billing team)
     - invoice-api 2.0 went out to the namespace "billing" an hour ago. kubectl here talks to it.
-    - The pods start, but the invoice page says "no healthy upstream". The old 1.9 pods are gone.
+    - The pods start, but the invoice page says "no healthy upstream". 2.0 migrates the invoice
+      tables, so 1.9 and 2.0 cannot run side by side: the Deployment uses Recreate, which stops
+      every old pod first. The 1.9 pods are gone.
     - Manifests: ~/invoice-k8s. Release notes: ~/invoice-k8s/CHANGELOG.md.
     - The files are the truth: change them, then kubectl apply.
   /home/dev/invoice-k8s/CHANGELOG.md: |
@@ -40,6 +45,9 @@ files:
       namespace: billing
     spec:
       replicas: 3
+      # 2.0 migrates the schema: no 1.9 pod may run next to a 2.0 pod
+      strategy:
+        type: Recreate
       selector:
         matchLabels:
           app: invoice-api

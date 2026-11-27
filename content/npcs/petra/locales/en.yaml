@@ -1,5 +1,5 @@
-npc.name: "Joyce"
-intro.1: "Welcome to Medior City! I'm Joyce, the career coach. A Junior fixes what is in front of them; a Medior picks a direction and gets good at it."
+npc.name: "Petra"
+intro.1: "Welcome to Medior City! I'm Petra, the career coach. A Junior fixes what is in front of them; a Medior picks a direction and gets good at it."
 intro.2: "Six paths start here. Each has a mentor in town with a first job for you. Have a look at them all, then pick the one that sounds like you."
 mentor.swe: "Software engineering it is. Lars is your mentor: he's at the café terrace on the plaza, usually with a pull request open."
 mentor.sre: "Site reliability it is. Amara is your mentor: find her by the fountain, keeping an eye on the dashboards."

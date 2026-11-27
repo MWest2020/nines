@@ -1,8 +1,8 @@
-# The career coach in front of the Career Centre (DESIGN.md, Career paths: the choice at Medior
+# The career coach in front of the Career Office (DESIGN.md, Career paths: the choice at Medior
 # City). role: coach opens the career screen after her lines; once a path is chosen she names
 # its mentor, and the same screen offers a paid switch (issue #24's default).
 schema: 1
-id: joyce
+id: petra
 author: {name: "Nines team"}
 name: npc.name
 tint: "#e89858"
