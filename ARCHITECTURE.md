@@ -112,7 +112,7 @@ The terminal is not a shell. It is a small simulator of one machine per quest, d
 | Mounts | `mounts: {path, device, size, baseUsed}[]` | A path belongs to the longest mount path that contains it. Used = `baseUsed` (space the scenario does not list) + the sizes of the files on that mount. `df` and `disk_usage()` read this, so `rm` and `mv` free space naturally, including moving a file to another mount. |
 | Services | `services: Record<name, {description, state, enabled, logs[]}>` | `state` is `active`, `inactive` or `failed`. `logs` is the journal. A restart evaluates the scenario's `restart.succeeds_if` condition: true makes it `active` and appends success lines, false makes it `failed` and appends failure lines. |
 | Pods | `pods: {name, namespace, deployment, status, restarts, age, logs[]}[]` | Derived from `deployments` in the scenario. `kubectl rollout restart` replaces a deployment's pods with new, deterministically named ones whose status follows `restart.succeeds_if`. `kubectl describe pod` derives the phase, container state, last state, envFrom (`config_map`) and events from the status. |
-| Cluster | `cluster: Record<absPath, content>` | What the cluster runs: the manifests listed in the scenario's `cluster` at their starting content, plus every file `kubectl apply -f` sent (a directory applies its `*.yaml`/`*.yml` files). Saving a manifest changes the disk, not the cluster; `applied_contains(path, text)` reads the cluster's copy. Apply checks only the shape (`kind`, `metadata.name`, no tab in the indentation) and prints `created`, `configured` or `unchanged`. |
+| Cluster | `cluster: Record<objectKey, content>` | What the cluster runs, per object (`configmap/shop/shop-api-config`: kind, `metadata.namespace` or the `-n` namespace, `metadata.name`): the manifests listed in the scenario's `cluster` at their starting content, then whatever `kubectl apply -f` sent for that object, from any file (a directory applies its `*.yaml`/`*.yml` files). Saving a manifest changes the disk, not the cluster; `applied_value(object, key)` and `applied_contains(object, text)` read the cluster's copy. Apply checks only the shape (`kind`, `metadata.name`, no tab in the indentation), ignores comments and blank lines, and prints `created`, `configured` or `unchanged` with kubectl's resource name (`deployment.apps/x`). |
 | Git | `git: {root, branch, head, index, commits}` | `head` and `index` map repo-relative paths to a content signature. The working tree is the filesystem. `status` diffs the three; `add` copies working tree to index; `commit` copies index to head. |
 | Pipeline | `pipeline: {status: none\|passed\|failed, runs}` | When the scenario names a pipeline file, every commit "runs CI": the committed file goes through the `nines-ci` validator and the result is printed and stored. |
 | Bookkeeping | `cwd`, `oldpwd`, `counters {commands, fails}`, `ran[]`, `restarted[]`, `flags`, `firedEvents[]`, `shownHints[]`, `generation` | What the player did, for hints and conditions. `ran` holds command names and, for systemctl, kubectl and git, "name subcommand" (`git commit`). |
@@ -157,7 +157,7 @@ may change the working copy of the state.
 | `mv` | rename, move into a dir, several sources into a dir |
 | `systemctl` | `status`, `restart` (and `start`) |
 | `journalctl` | `-u unit`, `-n N`, `-xe` accepted, `--no-pager` |
-| `kubectl` | `get pods [-n ns \| -A]`, `describe pod[s] [name] [-n ns]`, `logs pod\|deployment/x [--tail N]`, `apply -f file\|dir`, `rollout restart deployment/x` |
+| `kubectl` | `get pods [-n ns \| -A]`, `describe pod[s] [name or prefix] [-n ns]`, `logs [-f] pod\|deployment/x [--tail N]`, `apply -f file\|dir`, `rollout restart deployment/x` |
 | `git` | `status`, `add <paths> \| . \| -A`, `commit -m msg [-a]` |
 | `edit` (`nano`, `vi`, `vim`) | opens the built-in editor (a UI action); saving calls `saveFile` |
 | `clear`, `exit` | UI actions |
@@ -345,7 +345,8 @@ with the state they read:
 | `size(path)` | number, bytes in a file or below a dir |
 | `exists(path)`, `removed(path)` | boolean; `removed` = existed at the start and is gone |
 | `file_contains(path, text)` | boolean |
-| `applied_contains(path, text)` | boolean: the manifest at `path`, as the cluster last received it, contains `text` |
+| `applied_contains(object, text)` | boolean: the cluster's copy of `object` (`kind/namespace/name`) contains `text` |
+| `applied_value(object, key)` | string: the value of the first `key: value` line in the cluster's copy (quotes and a trailing comment removed), or `""` |
 | `service(name)` | `active` \| `inactive` \| `failed` |
 | `restarted(name)` | boolean, service or deployment |
 | `pods_running(deployment)` | boolean, all pods Running |
@@ -438,7 +439,7 @@ services:
 deployments:
   api: {status: CrashLoopBackOff, restarts: 4, logs: [..], restart: {succeeds_if: '...'},
         namespace?, replicas?, image?, config_map?}   # image and config_map show in kubectl describe
-cluster?: [/home/dev/shop-k8s/configmap.yaml]   # manifests the cluster runs at the start
+cluster?: [/home/dev/shop-k8s/configmap.yaml]   # manifests whose objects the cluster runs at the start
 git: {root: /home/dev/shop, pipeline: {file: .nines-ci.yml, validator: nines-ci}}
 objectives: [{id, text, done_when}]          # all true = quest complete
 hints: [{id, when, text}]
@@ -630,8 +631,9 @@ City).
   the chain. Version 2 (MVP build) added `seed`, `ticks` and `claimed`; `MIGRATIONS[1]` fills
   them in. Version 3 (27 Nov 2026) added `tokens`, `hints` and `path`; `MIGRATIONS[2]` gives an
   old save the new game's 3 tokens, counts no hint against any quest (they were free until now)
-  and chooses no path. Bad values repair to those defaults (a negative or fractional token count
-  to 3, non-string hint keys dropped). A save from a newer version loads as `{kind: 'newer'}`: the game tells the player
+  and chooses no path. Bad values are repaired (a missing, negative or fractional token count
+  to 0, never a gift; non-string hint keys dropped); the store drops a `path` the roadmap does not
+  have. A save from a newer version loads as `{kind: 'newer'}`: the game tells the player
   to update and does not autosave, so the newer save is never overwritten. `core/persist.ts`
   also checks before every write, so a newer version saving from another tab stops this one
   writing. When the browser refuses storage, the game plays on in memory.
@@ -788,8 +790,10 @@ City).
   `tech_debt` from meme side-quests is stored for later world events, which will use progress
   conditions (`tech_debt >= 3`).
 - **AI tokens** (`core/tokens.ts`, pure; DESIGN.md, AI tokens): asking for an unlocked hint costs
-  `HINT_COST` (1) token and records the hint's locale key under `hints[quest]`; a quest's money
-  and XP are paid at `rewardPercent(hints) = max(40, 100 − 20 × hints)` percent, rounded down
+  `HINT_COST` (1) token and records the hint's locale key under `hints[quest]` (with no tokens
+  and less money than the cheapest credits it costs no token but is still recorded); a quest's
+  money and XP are paid at `rewardPercent(hints) = max(40, 100 − 20 × hints)` percent, counting
+  only keys the quest still has, rounded down
   (`scaled`), never negative. A paid hint stays paid (a terminal opened again shows it free); a
   done quest's hints are free. Homelab income and tech debt are not scaled. The `Reward` carries
   `percent`, `hints` and the `full` amounts for the UI. Tokens come from a new game (3) and from

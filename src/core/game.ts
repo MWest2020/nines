@@ -15,7 +15,7 @@ import type { BranchId, ContentBundle, LocaleId, QuestEntry, Stage } from '../co
 import { own } from '../rules/own';
 import { questState } from './progress';
 import type { GameState } from './save';
-import { addTokens, hintsTaken, rewardPercent, scaled } from './tokens';
+import { addTokens, paidHints, rewardPercent, scaled } from './tokens';
 
 /** The parts of the content bundle the rules read. */
 export type Rules = Pick<ContentBundle, 'quests' | 'roadmap' | 'shop'>;
@@ -110,7 +110,7 @@ export function completeQuest(game: GameState, rules: Rules, id: string): Comple
   if (state === 'locked' || state === 'done') return { ok: false, game, reason: state };
   const q = entry.quest;
   const income = incomePerQuest(game, rules);
-  const hints = hintsTaken(game, id).length;
+  const hints = paidHints(game, rules, id);
   const percent = rewardPercent(hints);
   const money = scaled(q.reward.money, percent);
   const xp = scaled(q.reward.xp, percent);

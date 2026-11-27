@@ -110,7 +110,8 @@ export class TrailScene extends Screen {
         const cx = STONE_X + j * dx;
         stone(g, cx, y, nd.state);
         this.items.push({ kind: 'node', node: nd });
-        this.focusable(this.ring(out, cx - 6, y - 6, 13, 13, () => this.setFocus(this.items.findIndex((it) => it.kind === 'node' && it.node.id === nd.id))));
+        // the focus ring fits its row: 13 px tall, 11 when six rows share the panel
+        this.focusable(this.ring(out, cx - 6, y - (rowH - 1) / 2, 13, rowH, () => this.setFocus(this.items.findIndex((it) => it.kind === 'node' && it.node.id === nd.id))));
       });
     });
 

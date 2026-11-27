@@ -26,7 +26,10 @@ export const SCENARIO_FACTS: Registry = {
     exists: { args: ['string'], returns: 'boolean', pathArgs: [0] },
     removed: { args: ['string'], returns: 'boolean', pathArgs: [0] },
     file_contains: { args: ['string', 'string'], returns: 'boolean', pathArgs: [0] },
-    applied_contains: { args: ['string', 'string'], returns: 'boolean', pathArgs: [0] },
+    /** the cluster's copy of an object ("configmap/shop/shop-api-config") contains the text */
+    applied_contains: { args: ['string', 'string'], returns: 'boolean' },
+    /** the value of a `key: value` line in the cluster's copy of an object, or "" */
+    applied_value: { args: ['string', 'string'], returns: 'string' },
     service: { args: ['string'], returns: 'string', values: SERVICE_STATES },
     restarted: { args: ['string'], returns: 'boolean' },
     pods_running: { args: ['string'], returns: 'boolean' },

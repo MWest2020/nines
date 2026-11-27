@@ -36,7 +36,8 @@ export class GameStore {
     game: GameState,
     readonly slot: SaveSlot,
   ) {
-    this.state = game;
+    // a path the roadmap does not have (a hand-edited save, a renamed path) is no choice at all
+    this.state = game.path !== null && !content.roadmap.paths.some((p) => p.id === game.path) ? { ...game, path: null } : game;
     this.translate = createTranslator(content.locales, game.locale);
   }
 

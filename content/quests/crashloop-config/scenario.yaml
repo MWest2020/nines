@@ -55,7 +55,7 @@ files:
       DB_HOST: postgres.shop.svc.cluster.local
       DB_PORT: "5432"
       LOG_LEVEL: verbose
-# what the cluster runs at the start: both manifests, as they are on disk
+# what the cluster runs at the start: the objects in both manifests, as they are on disk
 cluster: [/home/dev/shop-k8s/deployment.yaml, /home/dev/shop-k8s/configmap.yaml]
 deployments:
   shop-api:
@@ -70,15 +70,13 @@ deployments:
       - "2026-11-27T08:41:09Z INFO  reading configuration from the environment"
       - "2026-11-27T08:41:09Z FATAL invalid LOG_LEVEL \"verbose\": must be one of debug, info, warn, error"
     restart:
-      # New pods start healthy once the cluster's ConfigMap has a valid LOG_LEVEL, quoted or not:
-      # "verbose" gone and one of the four values the log names there (the rest of the file
-      # contains none of them).
+      # New pods start healthy once the cluster's ConfigMap (from whichever file it was applied)
+      # has one of the four values the log names; quotes and a trailing comment do not matter.
       succeeds_if: >-
-        !applied_contains("/home/dev/shop-k8s/configmap.yaml", "verbose")
-        && (applied_contains("/home/dev/shop-k8s/configmap.yaml", "info")
-        || applied_contains("/home/dev/shop-k8s/configmap.yaml", "debug")
-        || applied_contains("/home/dev/shop-k8s/configmap.yaml", "warn")
-        || applied_contains("/home/dev/shop-k8s/configmap.yaml", "error"))
+        applied_value("configmap/shop/shop-api-config", "LOG_LEVEL") == "info"
+        || applied_value("configmap/shop/shop-api-config", "LOG_LEVEL") == "debug"
+        || applied_value("configmap/shop/shop-api-config", "LOG_LEVEL") == "warn"
+        || applied_value("configmap/shop/shop-api-config", "LOG_LEVEL") == "error"
       logs_on_success:
         - "2026-11-27T09:02:31Z INFO  starting shop-api 1.8.0"
         - "2026-11-27T09:02:31Z INFO  reading configuration from the environment"
@@ -102,7 +100,7 @@ hints:
   - {id: logs, when: 'ran("kubectl get") && !ran("kubectl logs") && (fails >= 1 || commands >= 6)', text: hint.logs}
   - {id: edit, when: 'ran("kubectl logs") && !ran("edit") && (fails >= 2 || commands >= 9)', text: hint.edit}
   - {id: apply, when: 'ran("edit") && !ran("kubectl apply") && (restarted("shop-api") || commands >= 12)', text: hint.apply}
-  - {id: restart, when: 'ran("kubectl apply") && !applied_contains("/home/dev/shop-k8s/configmap.yaml", "verbose") && !pods_running("shop-api") && (fails >= 3 || commands >= 14)', text: hint.restart}
+  - {id: restart, when: 'ran("kubectl apply") && applied_value("configmap/shop/shop-api-config", "LOG_LEVEL") != "verbose" && !pods_running("shop-api") && (fails >= 3 || commands >= 14)', text: hint.restart}
 events:
   - id: manifest-gone
     when: 'removed("/home/dev/shop-k8s/configmap.yaml")'

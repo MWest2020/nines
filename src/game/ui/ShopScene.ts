@@ -46,7 +46,7 @@ export class ShopScene extends Screen {
       const price = t('ui.shop.price', { price: item.price });
       out.push(pixelText(this, P.x + P.w - 6 - measure(price), y, price, C.gold));
       out.push(pixelText(this, tx, y, ellipsize(t(item.title), P.x + P.w - 12 - measure(price) - tx), C.paper));
-      const desc = wrap(t(item.description), P.x + P.w - 8 - tx).slice(0, 4);
+      const desc = wrap(t(item.description, { tokens: item.effects.tokens ?? 0 }), P.x + P.w - 8 - tx).slice(0, 4);
       out.push(pixelText(this, tx, y + 11, desc.join('\n'), C.mist));
       const check = store.canBuy(item.id);
       const rowY = y + CARD_H - 14;

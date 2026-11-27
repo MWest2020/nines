@@ -70,18 +70,32 @@ describe('CrashLoopBackOff', () => {
   it('is won by fixing the manifest, applying it and restarting the rollout', () => {
     const s = session(scenario());
     saveFile(s, CM, cm(s).replace('LOG_LEVEL: verbose', 'LOG_LEVEL: "warn"'));
-    expect(sh(s, 'kubectl apply -f ~/shop-k8s/')).toBe('configmap/shop-api-config configured\ndeployment/shop-api unchanged');
+    expect(sh(s, 'kubectl apply -f ~/shop-k8s/')).toBe('configmap/shop-api-config configured\ndeployment.apps/shop-api unchanged');
     const r = run(s, 'kubectl -n shop rollout restart deploy/shop-api');
     expect(r.justWon).toBe(true);
     const pods = run(s, 'kubectl get pods -n shop').out.slice(1);
     expect(pods.every((l) => /1\/1\s+Running/.test(l))).toBe(true);
     expect(sh(s, `kubectl logs ${pods[0]!.split(/\s+/)[0]} -n shop`)).toMatch(/listening on :8080/);
   });
-  it('an invalid value still fails', () => {
+  it('only the four values the log names win: not warning, not a value hidden in a comment', () => {
+    for (const bad of ['chatty', 'warning', 'information', 'loud # not info', '"errors"']) {
+      const s = session(scenario());
+      saveFile(s, CM, cm(s).replace('LOG_LEVEL: verbose', `LOG_LEVEL: ${bad}`));
+      sh(s, `kubectl apply -f ${CM}`);
+      expect(run(s, 'kubectl rollout restart deployment/shop-api -n shop').won, bad).toBe(false);
+    }
+    for (const good of ['debug', "'error'", 'info # was verbose']) {
+      const s = session(scenario());
+      saveFile(s, CM, cm(s).replace('LOG_LEVEL: verbose', `LOG_LEVEL: ${good}`));
+      sh(s, `kubectl apply -f ${CM}`);
+      expect(run(s, 'kubectl rollout restart deployment/shop-api -n shop').won, good).toBe(true);
+    }
+  });
+  it('the cluster runs objects, not files: a fixed copy elsewhere works too', () => {
     const s = session(scenario());
-    saveFile(s, CM, cm(s).replace('LOG_LEVEL: verbose', 'LOG_LEVEL: chatty'));
-    sh(s, `kubectl apply -f ${CM}`);
-    expect(run(s, 'kubectl rollout restart deployment/shop-api -n shop').won).toBe(false);
+    saveFile(s, '/tmp/cm.yaml', cm(s).replace('LOG_LEVEL: verbose', 'LOG_LEVEL: info'));
+    expect(sh(s, 'kubectl apply -f /tmp/cm.yaml')).toBe('configmap/shop-api-config configured');
+    expect(run(s, 'kubectl rollout restart deployment/shop-api -n shop').won).toBe(true);
   });
   it('hints walk a stuck player from the pods to the logs, the file, apply and restart', () => {
     const s = session(scenario());

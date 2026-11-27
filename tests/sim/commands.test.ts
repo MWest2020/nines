@@ -271,8 +271,11 @@ describe('kubectl', () => {
       ...FIXTURE,
       files: { ...FIXTURE.files, '/home/dev/k8s/cm.yaml': cm, '/home/dev/k8s/new.yaml': 'kind: Secret\nmetadata:\n  name: "db"\n', '/home/dev/k8s/notes.txt': 'x' },
       cluster: ['/home/dev/k8s/cm.yaml'],
-      objectives: [{ id: 'cm', text: 'obj', done_when: 'applied_contains("/home/dev/k8s/cm.yaml", "LOG_LEVEL: info")' }],
+      objectives: [{ id: 'cm', text: 'obj', done_when: 'applied_value("configmap/shop/api-config", "LOG_LEVEL") == "info"' }],
     });
+    expect(sh(k8s, 'kubectl apply -f k8s/cm.yaml')).toBe('configmap/api-config unchanged');
+    // a comment or a blank line is no change
+    saveFile(k8s, '/home/dev/k8s/cm.yaml', `# tidied\n${cm}\n`);
     expect(sh(k8s, 'kubectl apply -f k8s/cm.yaml')).toBe('configmap/api-config unchanged');
     saveFile(k8s, '/home/dev/k8s/cm.yaml', cm.replace('verbose', 'info'));
     // saved but not applied: the cluster still runs the old config
@@ -280,8 +283,12 @@ describe('kubectl', () => {
     expect(sh(k8s, 'kubectl apply -f /home/dev/k8s/cm.yaml')).toBe('configmap/api-config configured');
     expect(run(k8s, 'pwd').won).toBe(true);
     expect(sh(k8s, 'kubectl apply --filename=k8s/new.yaml')).toBe('secret/db created');
+    // the object counts, not the file: the same Secret from another file, and in another namespace
+    saveFile(k8s, '/tmp/db.yaml', 'kind: Secret\nmetadata:\n  name: db\ndata:\n  x: eQ==\n');
+    expect(sh(k8s, 'kubectl apply -f /tmp/db.yaml')).toBe('secret/db configured');
+    expect(sh(k8s, 'kubectl apply -f /tmp/db.yaml -n other')).toBe('secret/db created');
     // a directory applies its YAML files, in name order
-    expect(sh(k8s, 'kubectl apply -f k8s')).toBe('configmap/api-config unchanged\nsecret/db unchanged');
+    expect(sh(k8s, 'kubectl apply -f k8s')).toBe('configmap/api-config unchanged\nsecret/db configured');
     expect(sh(k8s, 'kubectl apply')).toBe('error: must specify one of -f and -k');
     expect(sh(k8s, 'kubectl apply -f nope.yaml')).toBe('error: the path "nope.yaml" does not exist');
     expect(sh(k8s, 'kubectl apply -f k8s/notes.txt')).toBe('error: error validating "k8s/notes.txt": error validating data: kind or metadata.name not set');
@@ -290,6 +297,25 @@ describe('kubectl', () => {
     expect(tab.exit).toBe(1);
     expect(tab.out).toEqual(['error: error parsing k8s/cm.yaml: error converting YAML to JSON: yaml: line 7: found character that cannot start any token']);
     expect(run(k8s, 'pwd').won).toBe(true); // a failed apply changes nothing
+  });
+  it('describe by name prefix; logs -f follows; Deployment kinds print with their group', () => {
+    const k8s = session({ ...FIXTURE, deployments: { api: { namespace: 'shop', replicas: 2, status: 'Running', logs: ['up'] } } });
+    const out = sh(k8s, 'kubectl describe pod api -n shop');
+    expect(out.match(/^Name:/gm)).toHaveLength(2);
+    expect(sh(k8s, 'kubectl logs -f deployments/api -n shop').split('\n')).toEqual([
+      expect.stringMatching(/^Found 2 pods, using pod\/api-/),
+      'up',
+      '(Following is not simulated here; these are the last lines.)',
+    ]);
+    const d = session({ ...FIXTURE, files: { ...FIXTURE.files, '/home/dev/d.yaml': 'apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: api\n' } });
+    expect(sh(d, 'kubectl apply -f d.yaml')).toBe('deployment.apps/api created');
+  });
+  it('a Pending pod has no node and no container state', () => {
+    const k8s = session({ ...FIXTURE, deployments: { api: { status: 'Pending' } } });
+    const out = sh(k8s, 'kubectl describe pods');
+    expect(out).toMatch(/^Node:\s+<none>$/m);
+    expect(out).not.toMatch(/State:/);
+    expect(out).toMatch(/FailedScheduling/);
   });
   it('namespaces and errors', () => {
     const s = fresh();

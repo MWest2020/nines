@@ -37,6 +37,7 @@ import { has } from '../../src/rules/own';
 import { COMMANDS } from '../../src/sim/shell/commands';
 import { BATTLE_FACTS, PROGRESS_FACTS, SCENARIO_FACTS } from '../../src/rules/registries';
 import { normalize } from '../../src/sim/path';
+import { manifestId } from '../../src/sim/manifest';
 import { createSession } from '../../src/sim/session';
 import { parseLine } from '../../src/sim/shell/parse';
 import { answerRound, compileBattle, startBattle } from '../../src/battle/engine';
@@ -701,8 +702,11 @@ export function loadContent(contentDir: string, schemaDir: string, options: Load
         if (!ok) err(sFile, `quick[${i}]: "${line}" must parse, and every stage must start with a command of this terminal`);
       });
       for (const m of scenario.cluster ?? []) {
+        if (normalize(m) !== m) err(sFile, `cluster manifest "${m}" is not normalised`);
         const f = scenario.files?.[m];
-        if (f === undefined || (typeof f !== 'string' && f.content === undefined)) err(sFile, `cluster manifest ${m} must be listed under files with content`);
+        const text = typeof f === 'string' ? f : f?.content;
+        if (text === undefined) err(sFile, `cluster manifest ${m} must be listed under files with content`);
+        else if (!manifestId(text)) err(sFile, `cluster manifest ${m} needs kind and metadata.name`);
       }
       if (scenario.git?.pipeline) {
         const pf = normalize(`${scenario.git.root}/${scenario.git.pipeline.file}`);
@@ -728,6 +732,7 @@ export function loadContent(contentDir: string, schemaDir: string, options: Load
           if (name === 'restarted' && !services.includes(arg) && !deployments.includes(arg)) return `no such service or deployment`;
           if (name === 'flag' && !flags.includes(arg)) return `no event in this scenario sets that flag`;
           if (name === 'ran' && !has(COMMANDS, arg.split(' ')[0] ?? '')) return `not a command of this terminal`;
+          if ((name === 'applied_value' || name === 'applied_contains') && !/^[a-z]+\/[a-z0-9-]+\/[a-z0-9][a-z0-9.-]*$/.test(arg)) return `name an object as kind/namespace/name, e.g. configmap/shop/shop-api-config`;
           return null;
         });
       }

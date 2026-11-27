@@ -201,15 +201,15 @@ def edit_file(page: Page, text: str) -> None:
     page.locator(".nt-editor").wait_for(state="hidden")
 
 
-def finish(page: Page, title_part: str, reward: str | None = None) -> None:
+def finish(page: Page, title_part: str, reward: str | list[str] | None = None) -> None:
     """The win: the overlay celebrates, Continue closes it, the giver's done lines follow."""
     dialog = page.locator(".nt-dialog")
     dialog.wait_for(state="visible", timeout=5000)
     text = dialog.inner_text()
     assert "Quest complete" in text, text
     assert "Reward" in text, text
-    if reward is not None:
-        assert reward in text, text
+    for part in [reward] if isinstance(reward, str) else reward or []:
+        assert part in text, (part, text)
     page.keyboard.press("Enter")  # the Continue button has focus
     page.locator(".nt-overlay").wait_for(state="detached", timeout=5000)
     # The giver's "done" lines follow in the HUD dialogue box. Press Enter until the world is
@@ -324,7 +324,7 @@ def broken_pipeline(page: Page, shots: Path | None) -> None:
     finish(page, "Broken pipeline")
 
 
-def service_down(page: Page, shots: Path | None, reward: str | None = None) -> None:
+def service_down(page: Page, shots: Path | None, reward: str | list[str] | None = None) -> None:
     run(page, "systemctl status nginx", "failed")
     run(page, "journalctl -u nginx", 'unknown directive "listn"')
     # Esc on a changed buffer asks for a second Esc before it throws the change away
@@ -558,12 +558,24 @@ def crashloop_config(page: Page, shots: Path | None) -> None:
     edit_file(page, CONFIGMAP_FIXED)
     run(page, "kubectl apply -f ~/shop-k8s/configmap.yaml", "configmap/shop-api-config configured")
     run(page, "kubectl rollout restart deployment/shop-api -n shop")
-    # 80% of 175 after one hint, plus the Pi's 10 (never scaled)
-    finish(page, "CrashLoopBackOff", reward="€150")
+    # 80% of 175 after one hint; the Pi's 10 on its own line (never scaled)
+    finish(page, "CrashLoopBackOff", reward=["€140 and 20 XP", "1 AI hint: 80% of the full reward", "+€10 from your homelab"])
+
+
+def leave_pager(page: Page) -> None:
+    """The 3 AM pager (night-pager) may go off on a map change once its quests are done; the
+    roll depends on the new game's random seed. Leave the call: leaving costs nothing."""
+    page.wait_for_timeout(800)
+    if page.locator(".nb-battle").count() > 0:
+        page.keyboard.press("Escape")
+        page.locator(".nb-battle").wait_for(state="detached", timeout=5000)
+        page.wait_for_timeout(400)
+        print("  the pager went off on the way; left the call")
 
 
 def buy_ai_credits(page: Page, p: Player, village: Grid, shots: Path | None) -> None:
     """AI credits: the shop's second page, bought with the keyboard; three tokens for €40."""
+    leave_pager(page)
     before = save_game(page)
     spot, facing = village.stand_by("homelab-store", p.pos)
     p.go_to(village, spot)
@@ -614,7 +626,7 @@ def play(page: Page, village: Grid, room: Grid, shots: Path | None) -> None:
     # 4. the Pi pays 10 more after the next quest: 175 + 10
     print("quest: service-down")
     open_terminal(page, p, room, "rack-app-01")
-    service_down(page, shots, reward="€185")
+    service_down(page, shots, reward=["€175", "+€10 from your homelab"])
 
     # the three MVP quests are done and paid, and the Pi is owned
     save = save_game(page)

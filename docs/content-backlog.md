@@ -46,8 +46,8 @@ own scenarios and questions; never exam dumps or official question text. Done: C
 
 - **Container Orchestration (28%)**, node `k8s-orchestration`: a battle with Mila on Services
   and storage. Pod IPs change, so what gives a stable name (a Service, its ClusterIP and DNS
-  name); ClusterIP vs NodePort vs LoadBalancer; a PersistentVolumeClaim vs an emptyDir (what
-  survives a pod restart); why a Secret is only base64 (encoding, not encryption) and what
+  name); ClusterIP vs NodePort vs LoadBalancer; a PersistentVolumeClaim vs an emptyDir (an
+  emptyDir survives a container restart but not the pod being deleted or rescheduled); why a Secret is only base64 (encoding, not encryption) and what
   RBAC is for. Traps: "a Deployment gives the pods a fixed IP".
 - **Cloud Native Application Delivery (16%)**, node `k8s-delivery`: a terminal quest with a bad
   image tag (ImagePullBackOff): `kubectl describe` shows the pull error, fix the tag in the

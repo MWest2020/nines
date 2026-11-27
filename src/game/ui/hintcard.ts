@@ -24,6 +24,7 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
 export function offerText(t: Translate, offer: HintOffer): string {
   if (offer.kind === 'broke') return t('ui.hint.broke');
   if (offer.kind !== 'ask') return '';
+  if (offer.cost === 0) return t('ui.hint.offer_house', { penalty: offer.percent - offer.after });
   return offer.after < offer.percent
     ? t('ui.hint.offer', { cost: offer.cost, penalty: offer.percent - offer.after, tokens: offer.tokens })
     : t('ui.hint.offer_floor', { cost: offer.cost, after: offer.after, tokens: offer.tokens });

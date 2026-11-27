@@ -84,7 +84,7 @@ describe('the shop fits its text', () => {
     const b = content();
     for (const lang of LOCALES) {
       for (const item of b.shop.items) {
-        const lines = wrap(b.locales[lang][item.description]!, 174);
+        const lines = wrap(b.locales[lang][item.description]!.replaceAll('{tokens}', String(item.effects.tokens ?? 0)), 174);
         expect(lines.length, `${lang} ${item.id}: ${lines.join(' / ')}`).toBeLessThanOrEqual(4);
       }
     }
@@ -167,6 +167,13 @@ describe('the game store', () => {
     expect(changes.length).toBe(n);
     const r = store.completeQuest('service-down');
     expect(r.ok && r.reward).toMatchObject({ money: 140, xp: 20, percent: 80, hints: 1 });
+  });
+
+  it('drops a path the roadmap does not have when the store loads', () => {
+    const st = memoryStorage();
+    const opened = openSave(st, 'en', 1);
+    expect(new GameStore(content(), { ...opened.game, path: 'wizard' }, opened.slot).game.path).toBeNull();
+    expect(new GameStore(content(), { ...opened.game, path: 'sre' }, opened.slot).game.path).toBe('sre');
   });
 
   it('AI credits: bought again and again, never owned', () => {

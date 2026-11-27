@@ -151,7 +151,8 @@ export function deserialize(raw: string | null, fallbackLocale: LocaleId): LoadO
       seed: Number.isInteger(game['seed']) ? (game['seed'] as number) >>> 0 : seedFrom(raw),
       ticks: Number.isInteger(game['ticks']) && (game['ticks'] as number) >= 0 ? (game['ticks'] as number) : 0,
       claimed: strings(game['claimed']),
-      tokens: Number.isInteger(game['tokens']) && (game['tokens'] as number) >= 0 ? (game['tokens'] as number) : base.tokens,
+      // a broken count repairs to 0, never to a gift (MIGRATIONS[2] gives a version-2 save its 3)
+      tokens: Number.isInteger(game['tokens']) && (game['tokens'] as number) >= 0 ? (game['tokens'] as number) : 0,
       hints: Object.fromEntries(
         Object.entries(isObj(game['hints']) ? game['hints'] : {})
           .map(([q, v]) => [q, strings(v)] as const)

@@ -33,7 +33,7 @@ export interface TerminalHost {
   applyEvents(events: readonly FiredEvent[]): number;
   /** the last objective was met: pay the reward. Null when it was paid before. `hints` AI hints
    *  brought it down to `percent` of the full reward. */
-  complete(): { money: number; xp: number; percent: number; hints: number } | null;
+  complete(): { money: number; income: number; xp: number; percent: number; hints: number } | null;
   /** the overlay has closed and removed itself */
   closed(won: boolean): void;
 }
@@ -471,10 +471,12 @@ export class TerminalOverlay {
     );
   }
 
-  private rewardText(r: { money: number; xp: number; percent: number; hints: number }): string {
-    const base = this.t('ui.quest.reward', { money: r.money, xp: r.xp });
-    if (r.hints === 0) return base;
-    return `${base} ${this.t(r.hints === 1 ? 'ui.reward.hints_one' : 'ui.reward.hints_many', { hints: r.hints, percent: r.percent })}`;
+  /** The quest's own reward (scaled by AI hints), the hint line, then the homelab's unscaled income. */
+  private rewardText(r: { money: number; income: number; xp: number; percent: number; hints: number }): string {
+    const parts = [this.t('ui.quest.reward', { money: r.money, xp: r.xp })];
+    if (r.hints > 0) parts.push(this.t(r.hints === 1 ? 'ui.reward.hints_one' : 'ui.reward.hints_many', { hints: r.hints, percent: r.percent }));
+    if (r.income > 0) parts.push(this.t('ui.toast.income', { amount: r.income }));
+    return parts.join(' ');
   }
 
   // ---- dialogue inside the overlay: consequences and the win

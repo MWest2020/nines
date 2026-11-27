@@ -13,6 +13,7 @@ import { validateNinesCi } from '../ci';
 import { gitChanges, pipelineFile } from '../facts';
 import { basename, dirname, isUnder, join, relativeTo, resolve } from '../path';
 import { formatHuman, kblocks } from '../size';
+import { manifestId, objectKey, resourceName, significant } from '../manifest';
 import { makePods, podSuffix, signature, type SimState } from '../state';
 import { isDir, listDir, mountFor, mountUsed, move, remove, sizeOf, subtree } from '../vfs';
 import { type FlagSpec, type Flags, parseFlags } from './parse';
@@ -530,7 +531,7 @@ const kubectl: Command = (ctx, args) => {
   const r = flags(ctx, 'kubectl', args, {
     bool: 'Ap',
     value: 'nof',
-    long: { namespace: 'value', 'all-namespaces': 'bool', tail: 'value', previous: 'bool', output: 'value', filename: 'value' },
+    long: { namespace: 'value', 'all-namespaces': 'bool', tail: 'value', previous: 'bool', output: 'value', filename: 'value', follow: 'bool' },
   });
   if (isResult(r)) return r;
   const { f, rest } = r;
@@ -557,7 +558,10 @@ const kubectl: Command = (ctx, args) => {
     case 'describe': {
       if (!['pods', 'pod', 'po'].includes(rest[1] ?? '')) return usage();
       const name = rest[2];
-      const pods = ctx.s.pods.filter((p) => (all || p.namespace === ns) && (name === undefined || p.name === name));
+      // like kubectl: an exact name, else every pod whose name starts with it
+      const here = ctx.s.pods.filter((p) => all || p.namespace === ns);
+      const exact = here.filter((p) => p.name === name);
+      const pods = name === undefined ? here : exact.length > 0 ? exact : here.filter((p) => p.name.startsWith(name));
       if (pods.length === 0) return name === undefined ? ok([ctx.t('sh.no_pods', { ns })]) : fail([ctx.t('sh.pod_not_found', { pod: name })]);
       return ok(pods.flatMap((p, i) => [...(i > 0 ? [''] : []), ...describePod(p, own(ctx.spec.deployments, p.deployment))]), { pager: true });
     }
@@ -573,22 +577,29 @@ const kubectl: Command = (ctx, args) => {
       const out: string[] = [];
       let bad = false;
       for (const target of targets) {
-        const r = applyManifest(ctx, target.path, target.shown);
+        const r = applyManifest(ctx, target.path, target.shown, ns);
         out.push(r.line);
         bad ||= r.bad;
       }
       return bad ? { out, exit: 1, fail: true } : ok(out);
     }
     case 'logs': {
-      const target = rest[1];
+      // -f is a filename for apply, so here it arrives holding the target: logs -f <pod> follows
+      const follow = typeof f['f'] === 'string' || f['follow'] === true;
+      const target = rest[1] ?? (typeof f['f'] === 'string' ? f['f'] : undefined);
       if (!target) return usage();
-      const pod = target.includes('/')
-        ? ctx.s.pods.find((p) => p.namespace === ns && `deployment/${p.deployment}` === target.replace(/^deploy\//, 'deployment/'))
-        : ctx.s.pods.find((p) => p.namespace === ns && p.name === target);
+      const dep = /^(?:deployments?|deploy)\/(.+)$/.exec(target)?.[1];
+      const matches = dep !== undefined ? ctx.s.pods.filter((p) => p.namespace === ns && p.deployment === dep) : [];
+      const pod = dep !== undefined ? matches[0] : ctx.s.pods.find((p) => p.namespace === ns && p.name === target);
       if (!pod) return fail([ctx.t('sh.pod_not_found', { pod: target })]);
       const tailRaw = f['tail'];
       const n = typeof tailRaw === 'string' ? Number(tailRaw) : -1;
-      return ok(n >= 0 ? (n === 0 ? [] : pod.logs.slice(-n)) : [...pod.logs]);
+      return ok([
+        // kubectl says which pod it picked when a deployment has several
+        ...(matches.length > 1 ? [`Found ${matches.length} pods, using pod/${pod.name}`] : []),
+        ...(n >= 0 ? (n === 0 ? [] : pod.logs.slice(-n)) : pod.logs),
+        ...(follow ? [ctx.t('sh.follow_note')] : []),
+      ]);
     }
     case 'rollout': {
       if (rest[1] !== 'restart') return usage();
@@ -628,7 +639,7 @@ function describePod(p: SimState['pods'][number], spec: DeploymentSpec | undefin
       : p.status === 'Error'
         ? ['    State:          Terminated', '      Reason:       Error', '      Exit Code:    1']
         : p.status === 'Pending'
-          ? ['    State:          Waiting', '      Reason:       ContainerCreating']
+          ? [] // not scheduled yet: no node, so no container state
           : ['    State:          Waiting', `      Reason:       ${p.status}`];
   if (p.status === 'CrashLoopBackOff') state.push('    Last State:     Terminated', '      Reason:       Error', '      Exit Code:    1');
   const seen = (n: number) => (n > 1 ? `20s (x${n} over ${p.age})` : p.age);
@@ -649,6 +660,7 @@ function describePod(p: SimState['pods'][number], spec: DeploymentSpec | undefin
   return [
     `Name:             ${p.name}`,
     `Namespace:        ${p.namespace}`,
+    ...(p.status === 'Pending' ? ['Node:             <none>'] : []),
     `Labels:           app=${p.deployment}`,
     `Status:           ${phase}`,
     `Controlled By:    ReplicaSet/${rs}`,
@@ -667,22 +679,24 @@ function describePod(p: SimState['pods'][number], spec: DeploymentSpec | undefin
 }
 
 /**
- * kubectl apply -f for one file: the cluster now runs this content. Only the shape is checked
- * (kind, metadata.name, no tabs in the indentation, as YAML forbids them); the content is what a
- * scenario's applied_contains() reads.
+ * kubectl apply -f for one file: the cluster now runs this content for the object the file
+ * names (kind, metadata.namespace or the -n namespace, metadata.name), whichever file it came
+ * from. Only the shape is checked (kind and name, no tabs in the indentation, as YAML forbids
+ * them); comments and blank lines never make a change. The content is what a scenario's
+ * applied_value() and applied_contains() read.
  */
-function applyManifest(ctx: Ctx, path: string, shown: string): { line: string; bad: boolean } {
+function applyManifest(ctx: Ctx, path: string, shown: string, ns: string): { line: string; bad: boolean } {
   const node = ctx.s.fs[path];
   const text = node?.type === 'file' ? (node.content ?? '') : '';
   const tab = text.split('\n').findIndex((l) => /^[ ]*\t/.test(l));
   if (tab >= 0) return { bad: true, line: ctx.t('sh.kubectl_yaml_tab', { path: shown, line: tab + 1 }) };
-  const kind = /^kind:[ ]*([A-Za-z]+)[ ]*$/m.exec(text)?.[1];
-  const name = /^metadata:[ ]*\n(?:[ ]+.*\n)*?[ ]+name:[ ]*["']?([a-z0-9][a-z0-9.-]*)["']?[ ]*$/m.exec(text)?.[1];
-  if (!kind || !name) return { bad: true, line: ctx.t('sh.kubectl_invalid', { path: shown }) };
-  const before = own(ctx.s.cluster, path);
-  setOwn(ctx.s.cluster, path, text);
-  const how = before === undefined ? 'created' : before === text ? 'unchanged' : 'configured';
-  return { bad: false, line: `${kind.toLowerCase()}/${name} ${how}` };
+  const id = manifestId(text);
+  if (!id) return { bad: true, line: ctx.t('sh.kubectl_invalid', { path: shown }) };
+  const key = objectKey(id, ns);
+  const before = own(ctx.s.cluster, key);
+  setOwn(ctx.s.cluster, key, text);
+  const how = before === undefined ? 'created' : significant(before) === significant(text) ? 'unchanged' : 'configured';
+  return { bad: false, line: `${resourceName(id.kind)}/${id.name} ${how}` };
 }
 
 // ------------------------------------------------------------------ git

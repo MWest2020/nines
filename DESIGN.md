@@ -238,13 +238,16 @@ ARCHITECTURE.md (AI tokens); `src/core/tokens.ts` holds the numbers.
 | A hint paid before | free from then on, also in a terminal opened again |
 | Hints on a done quest | free: nothing is at stake any more |
 | No tokens | no hint; the card says where to buy some |
+| No tokens and less money than the cheapest AI credits | the hint is on the house (no token), but it still lowers the reward: nobody is stuck for good |
 | AI credits (shop) | €40 for 3 tokens; bought as often as you like, never "owned" |
 | Raspberry Pi | hints unlock one try sooner (its little local model notices sooner that you are stuck); reading one still costs a token |
 
 Why these numbers: a Junior quest pays €125 to €300 and 20 to 40 XP, so one hint costs about a
 €13 token plus €25 to €60 and some XP. Noticeable, never ruinous; three hints still pay 40%, so a
 stuck player always finishes with something. The starting 3 tokens let a new player try the
-AI before learning what it costs. Battles work the same way: a battle is a quest, its hints are
+AI before learning what it costs. From the third hint on a quest the reward stays at the
+floor, so later hints cost only the token: a quest that has beaten you three times should
+still end. Battles work the same way: a battle is a quest, its hints are
 paid in the war room, and the win pays the scaled reward.
 
 **Never before the price.** A hint that has unlocked shows as a card, not as text:
@@ -261,8 +264,9 @@ paid in the war room, and the win pays the scaled reward.
 
 At the floor the line says the quest already pays its minimum; without tokens: "Out of AI
 tokens. The Homelab Store sells credits. Or, radical idea: read the logs." The card has a lilac
-rule (the palette's AI colour) and a button at least 48 px tall. The win says what the AI cost:
-"Reward: €150 and 20 XP 1 AI hint: 80% of the full reward."
+rule (the palette's AI colour) and a button at least 48 px tall. The win says what the AI cost,
+with the homelab's unscaled income on its own: "Reward: €140 and 20 XP 1 AI hint: 80% of the
+full reward. +€10 from your homelab"
 
 **Tone.** Fun, not preachy: the AI is "usually right, always confident, and it keeps a cut of
 your reward". We never tell the player that asking is wrong; the price does the talking.
@@ -320,7 +324,9 @@ Mark, 27 Nov 2026: "a k8s learning path: junior is associate, medior CKAD and se
 per exam domain. Our own questions only: we follow the published domains and never copy exam
 questions, dumps or official question text.
 
-**Sources** (read 27 Nov 2026; the Linux Foundation and CNCF pages agree unless noted):
+**Sources** (read 27 Nov 2026; the Linux Foundation and CNCF pages agree on domains and weights
+unless noted; the Kubernetes version is stated on the Linux Foundation pages, the CNCF pages
+point to its FAQ):
 
 - KCNA: https://training.linuxfoundation.org/certification/kubernetes-cloud-native-associate/ and https://www.cncf.io/training/certification/kcna/ (online, multiple choice, 90 minutes, no prerequisite)
 - CKAD: https://training.linuxfoundation.org/certification/certified-kubernetes-application-developer-ckad/ and https://www.cncf.io/training/certification/ckad/ (performance-based, command line, 2 hours, Kubernetes v1.37)
@@ -369,7 +375,8 @@ rack at the back right of the server room. shop-api's two pods crash-loop after 
 change. The player finds the pods in the `shop` namespace, reads `kubectl describe pod` (the
 back-off, exit code 1, the environment from the ConfigMap) and `kubectl logs` (an invalid
 `LOG_LEVEL`), fixes `~/shop-k8s/configmap.yaml`, sends it with `kubectl apply -f` (saving the
-file alone changes nothing in the cluster) and starts fresh pods with `kubectl rollout restart`.
+file alone changes nothing in the cluster; the cluster keeps objects, so a fixed copy applied
+from elsewhere counts too, and only the four values the log names win) and starts fresh pods with `kubectl rollout restart`.
 The last hint says why: a container reads its environment when it starts; crash-looping ones
 would pick up the fix at their next restart attempt, but the back-off can take minutes, and a
 running pod would never pick it up.

@@ -2,7 +2,8 @@
 // AI credits from the shop; the career path; the version-2 to version-3 save migration.
 import { describe, expect, it } from 'vitest';
 import { buy, canBuy, choosePath, completeQuest, recordBattle, type Rules } from '../../src/core/game';
-import { deserialize, type GameState, MIGRATIONS, newGame, SAVE_VERSION, serialize, START_TOKENS } from '../../src/core/save';
+import { memoryStorage, openSave } from '../../src/core/persist';
+import { deserialize, type GameState, MIGRATIONS, newGame, SAVE_KEY, SAVE_VERSION, serialize, START_TOKENS } from '../../src/core/save';
 import { FLOOR_PERCENT, HINT_COST, hintOffer, hintsTaken, PENALTY_PERCENT, rewardPercent, scaled, takeHint } from '../../src/core/tokens';
 import { content } from '../helpers';
 
@@ -68,13 +69,29 @@ describe('asking the AI for a hint', () => {
     const again = takeHint(once, rules(), 'disk-full', 'hint.df');
     expect(again).toEqual({ ok: true, game: once, charged: 0 });
   });
-  it('no tokens, no hint', () => {
-    const broke = fresh({ tokens: 0 });
+  it('no tokens, no hint, while AI credits are affordable', () => {
+    const broke = fresh({ tokens: 0, money: 40 });
     expect(hintOffer(broke, rules(), 'disk-full', 'hint.df')).toEqual({ kind: 'broke', cost: 1, tokens: 0 });
     expect(takeHint(broke, rules(), 'disk-full', 'hint.df')).toEqual({ ok: false, game: broke, reason: 'tokens' });
-    const spent = hinted(fresh(), 'disk-full', 'hint.df', 'hint.du', 'hint.gz');
+    const spent = hinted(fresh({ money: 100 }), 'disk-full', 'hint.df', 'hint.du', 'hint.gz');
     expect(spent.tokens).toBe(0);
     expect(takeHint(spent, rules(), 'service-down', 'hint.status')).toMatchObject({ ok: false, reason: 'tokens' });
+  });
+  it('never stuck for good: no tokens and no money for credits, the hint is on the house but still counts', () => {
+    const poor = fresh({ tokens: 0, money: 39 });
+    expect(hintOffer(poor, rules(), 'service-down', 'hint.status')).toEqual({ kind: 'ask', cost: 0, tokens: 0, percent: 100, after: 80 });
+    const r = takeHint(poor, rules(), 'service-down', 'hint.status');
+    expect(r).toMatchObject({ ok: true, charged: 0 });
+    if (!r.ok) return;
+    expect(r.game.tokens).toBe(0);
+    const done = completeQuest(r.game, rules(), 'service-down');
+    expect(done.ok && done.reward.percent).toBe(80);
+  });
+  it('a paid key the quest no longer has never lowers the reward', () => {
+    const g = fresh({ hints: { 'service-down': ['hint.renamed', 'hint.status'] } });
+    expect(hintOffer(g, rules(), 'service-down', 'hint.journal')).toMatchObject({ percent: 80, after: 60 });
+    const r = completeQuest(g, rules(), 'service-down');
+    expect(r.ok && r.reward).toMatchObject({ percent: 80, hints: 1 });
   });
   it('refuses a hint the quest does not have', () => {
     expect(takeHint(fresh(), rules(), 'disk-full', 'hint.algorithm')).toMatchObject({ ok: false, reason: 'unknown' });
@@ -199,9 +216,28 @@ describe('save format 3', () => {
   it('repairs bad token, hint and path values', () => {
     const bad = { format: 'nines-save', version: 3, game: { ...v2.game, tokens: -4, hints: { 'disk-full': ['hint.df', 7, 'hint.df'], x: 'nope', y: [] }, path: 12 } };
     const out = deserialize(JSON.stringify(bad), 'en');
-    expect(out.kind === 'ok' && out.game).toMatchObject({ tokens: START_TOKENS, hints: { 'disk-full': ['hint.df'] }, path: null });
+    // a broken count repairs to 0, never to a gift
+    expect(out.kind === 'ok' && out.game).toMatchObject({ tokens: 0, hints: { 'disk-full': ['hint.df'] }, path: null });
     const frac = deserialize(JSON.stringify({ ...bad, game: { ...bad.game, tokens: 2.5 } }), 'en');
-    expect(frac.kind === 'ok' && frac.game.tokens).toBe(START_TOKENS);
+    expect(frac.kind === 'ok' && frac.game.tokens).toBe(0);
+  });
+  it('keeps __proto__ and constructor keys in hints as plain data', () => {
+    const raw = JSON.stringify({ format: 'nines-save', version: 3, game: { ...v2.game, tokens: 1, hints: JSON.parse('{"__proto__": ["x"], "constructor": ["y"]}') } });
+    const out = deserialize(raw, 'en');
+    expect(out.kind).toBe('ok');
+    if (out.kind !== 'ok') return;
+    expect(Object.keys(out.game.hints).sort()).toEqual(['__proto__', 'constructor']);
+    expect(({} as Record<string, unknown>)['x']).toBeUndefined();
+    expect(Object.getPrototypeOf(out.game.hints)).toBe(Object.prototype);
+    expect(deserialize(serialize(out.game), 'en')).toEqual(out);
+    expect(hintsTaken(out.game, 'constructor')).toEqual(['y']);
+  });
+  it('a version-4 save is newer: never read as 3, never written over', () => {
+    const st = memoryStorage({ [SAVE_KEY]: JSON.stringify({ format: 'nines-save', version: 4, game: { tokens: 99 } }) });
+    const { slot, game } = openSave(st, 'en', 1);
+    expect(slot.status).toBe('newer');
+    expect(slot.save({ ...game, tokens: 1 })).toBe(false);
+    expect(JSON.parse(st.data.get(SAVE_KEY)!).version).toBe(4);
   });
   it('a version-1 save walks the whole chain', () => {
     const v1 = { format: 'nines-save', version: 1, game: { locale: 'en', money: 10 } };
