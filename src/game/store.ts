@@ -11,6 +11,7 @@ import { createTranslator, type Translate } from '../core/i18n';
 import type { SaveSlot } from '../core/persist';
 import { progressEnv } from '../core/progress';
 import type { GameState } from '../core/save';
+import * as karma from '../core/karma';
 import * as tokens from '../core/tokens';
 import { type Conversation, conversation } from '../core/talk';
 import type { FiredEvent } from '../sim/session';
@@ -20,6 +21,8 @@ export type Change =
   | { kind: 'money'; delta: number }
   | { kind: 'purchase'; item: string; price: number }
   | { kind: 'hint'; quest: string; charged: number }
+  | { kind: 'caught'; quest: string; fine: number; arrested: boolean }
+  | { kind: 'contractor'; on: boolean }
   | { kind: 'quest'; id: string }
   | { kind: 'locale'; locale: LocaleId }
   | { kind: 'other' };
@@ -38,6 +41,9 @@ export class GameStore {
   ) {
     // a path the roadmap does not have (a hand-edited save, a renamed path) is no choice at all
     this.state = game.path !== null && !content.roadmap.paths.some((p) => p.id === game.path) ? { ...game, path: null } : game;
+    // on probation, community service must be open: a repaired or hand-edited save could hold
+    // probation with the service already done, which would shut clearance work for good
+    if (this.state.probation) this.state = karma.reopenService(this.state, content);
     this.translate = createTranslator(content.locales, game.locale);
   }
 
@@ -85,17 +91,39 @@ export class GameStore {
     return r;
   }
 
-  /** Apply what a terminal step fired (RunResult.events). Returns the total money change. */
-  applyEvents(questId: string, events: readonly FiredEvent[]): number {
+  /** Apply what a terminal step fired (RunResult.events): the total money and karma change, and
+   *  the agency's fine when a karma drop brought it. */
+  applyEvents(questId: string, events: readonly FiredEvent[]): { money: number; karma: number; agency: { fine: number } | null } {
     let game = this.state;
     let total = 0;
+    let karmaTotal = 0;
+    let agency: { fine: number } | null = null;
     for (const ev of events) {
-      const r = rules.applyEvent(game, questId, { id: ev.id, money: ev.money, ...(ev.setFlag ? { setFlag: ev.setFlag } : {}) });
+      const r = rules.applyEvent(game, this.content, questId, { id: ev.id, money: ev.money, karma: ev.karma, ...(ev.setFlag ? { setFlag: ev.setFlag } : {}) });
       game = r.game;
       total += r.money;
+      karmaTotal += r.karma;
+      agency ??= r.agency;
     }
     this.commit(game, total !== 0 ? { kind: 'money', delta: total } : { kind: 'other' }, true);
-    return total;
+    return { money: total, karma: karmaTotal, agency };
+  }
+
+  // ---- hustles and the contractor (core/karma.ts)
+
+  /** Finish a hustle: roll its risk, then pay or fine (saved at once either way). */
+  finishHustle(id: string, risk: number): rules.HustleResult {
+    const r = rules.finishHustle(this.state, this.content, id, risk);
+    if (r.ok) {
+      const change: Change = r.outcome === 'clean' ? { kind: 'reward', reward: r.reward } : { kind: 'caught', quest: id, fine: r.fine, arrested: r.arrested !== null };
+      this.commit(r.game, change, true);
+    }
+    return r;
+  }
+
+  /** Work as an independent contractor, or as an employee again. */
+  setContractor(on: boolean): void {
+    this.commit(karma.setContractor(this.state, on), { kind: 'contractor', on }, true);
   }
 
   /** hintBoost for createSession and startBattle: what the owned homelab gear adds. */

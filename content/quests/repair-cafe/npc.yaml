@@ -1,0 +1,11 @@
+# Henk runs the Repair Café stall in the park. A placeholder sprite tinted in the palette's leaf green.
+schema: 1
+id: henk
+author: {name: "Nines team"}
+name: npc.name
+tint: "#88c070"
+spawn: {map: junior-village, slot: npc-8, facing: down}
+dialogue:
+  - when: 'quest("repair-cafe") == "done"'
+    lines: [npc.after]
+  - lines: [npc.idle]

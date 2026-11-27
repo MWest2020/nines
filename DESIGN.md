@@ -11,7 +11,7 @@ creature collecting or battling, no "trainer" or "gym" framing, no badges handed
 leaders, no pocket-monster-style encyclopedia, no white rounded dialogue box with a coloured
 double border, no right-hand pop-up menu with a black triangle cursor, no A/B button labels, no
 sound effects that imitate theirs. Progress is a career: XP per skill branch, money, homelab
-gear, a Career Trail, and one of five career paths. The trail is our own idea of a skill map; roadmap.sh inspired the concept
+gear, a Career Trail, karma, and one of six career paths. The trail is our own idea of a skill map; roadmap.sh inspired the concept
 of nodes lighting up, and we copy none of its content, layout or branding.
 
 Battles (below) are conversations with colleagues about engineering, not creature fights; this
@@ -274,8 +274,8 @@ your reward". We never tell the player that asking is wrong; the price does the 
 ### Career paths
 
 Mark, 27 Nov 2026: "the player needs money, picks a path to learn, grows. Paths are swe, sre,
-devops, platform engineer and systems engineer." Five paths replace the two tracks (SRE,
-Platform) of the first brief. They live in `content/roadmap.yaml` (`paths`, each with a title
+devops, platform engineer and systems engineer." Five paths replaced the two tracks (SRE,
+Platform) of the first brief; the same day he added a sixth, ethical hacker (Karma, below). They live in `content/roadmap.yaml` (`paths`, each with a title
 and a one-line pitch in both languages), and every quest lists the paths it counts towards
 (`paths` in quest.yaml; the validator checks they exist).
 
@@ -286,12 +286,13 @@ and a one-line pitch in both languages), and every quest lists the paths it coun
 | DevOps Engineer (`devops`) | You get changes to production safely and often: pipelines, releases, and teams that ship together. | cicd, iac, containers, incident |
 | Platform Engineer (`platform`) | You build the road other teams drive on: Kubernetes, golden paths, and self-service that just works. | kubernetes, containers, iac, observability |
 | Systems Engineer (`systems`) | You know the machine: Linux, networks, storage and hardware, all the way down to the cables. | linux, networking, incident |
+| Ethical Hacker (`ethical`) | You break in with permission: scoped pentests, CTFs, and findings written up so the hole gets fixed, not used. | linux, networking, incident (a `security` branch comes with its Medior content) |
 
 The Dutch pitches are in `content/locales/nl.yaml`.
 
 **The choice at Medior City.** Junior Village is the same for everyone: every quest there is
 open, whatever its tags. On arriving in Medior City (after the gate interview) a career coach
-asks which path you want, showing the five pitches; the choice is stored in the save (`path`,
+asks which path you want, showing the six pitches; the choice is stored in the save (`path`,
 `core/game.ts choosePath`, refused before the road to Medior City is open and once made).
 What a path unlocks:
 
@@ -316,6 +317,14 @@ Medior City has a map the choice exists only in the rules and the save.
 | friday-scope | battle (stakeholder) | swe, devops |
 | nearby-places, ticket-booking-interview, collab-editor-interview | battle (design) | swe |
 | url-shortener | battle (design) | swe, sre |
+| bank-pentest | terminal (pentest) | ethical, systems |
+| vending-prices | terminal (hustle) | ethical, systems: same skills, other side of the law |
+| bakery-hotfix | terminal (contractor variant) | devops, sre, swe |
+| repair-cafe | terminal (community service) | all six |
+
+**The sixth slot.** Ethical hacker takes the sixth path. Kubernetes stays a branch every path can
+walk, as the default of https://github.com/MWest2020/nines/issues/23 says. If Mark wants a
+Kubernetes path after all, it would be a seventh.
 
 ### Kubernetes learning path
 
@@ -380,6 +389,129 @@ from elsewhere counts too, and only the four values the log names win) and start
 The last hint says why: a container reads its environment when it starts; crash-looping ones
 would pick up the fix at their next restart attempt, but the back-off can take minutes, and a
 running pod would never pick it up.
+
+### Karma, side hustles, the contractor and the ethical hacker
+
+Mark, 27 Nov 2026: "karma paths: a guy behind a building who asks you to hack something. Money,
+but get caught (a bad hack) and it's a fine or an arrest (a big fine or negative karma), so no
+bank jobs (other jobs, yes; very negative karma is the FBI or the CIA). Or an independent
+contractor: skip procedures, but you pay for the damage. And a career path ethical hacker."
+
+The engine is in `src/core/karma.ts` (numbers and rules) and `src/core/game.ts` (paying,
+`finishHustle`); content reaches it only through data: a quest's `kind`, `available_when` and
+`reward.karma`, a scenario event's `karma`, a scenario's `risk` and an objective's `procedure`.
+
+**Karma, as built.**
+
+| Rule | Value |
+| ---- | ----- |
+| Range, start | -100 to +100, starts at 0 (a save from before karma starts at 0 too) |
+| Content asks | progress facts `karma`, `probation`, `strikes`, `contractor` in any progress condition: a quest's `available_when`, NPC dialogue. Negative numbers may be written (`karma <= -20`) |
+| Clearance jobs (bank, enterprise) | `available_when: 'karma >= 0 && !probation'`: a clean record. Polderbank's pentest asks it |
+| Shady jobs | the fixer works with `karma <= 20`: too clean and he does not know you. Later side jobs can ask lower karma (`karma <= -20`) |
+| A hustle done clean | its reward and its `reward.karma` (the vending job: €350, karma -20) |
+| Caught | a €150 fine, karma -10, a strike; the job stays open (a new roll next time) and pays nothing |
+| Arrested (the second strike) | another €500 and karma -15, and probation |
+| The agency | karma dropping to -60 or below while not on probation: the TLA (the Three-Letter Agency; in Dutch the DDL, Dienst Drie Letters) asks questions: a €400 fine and probation |
+| Probation | shuts what asks `!probation` (bank and enterprise jobs). Other work goes on: nobody is locked out of the game |
+| Community service (`kind: service`) | open on probation or below zero; ends probation, wipes the strikes and brings karma back to at least 0; pays karma, no money, and its XP (and the homelab's income) only the first time, so it cannot be farmed. A new dip below zero or a new probation opens it again; loading a save on probation reopens it too |
+| Pentests | karma up (`reward.karma`: Polderbank +10). Opening data you did not need, or leaving the scope, costs karma (events) |
+| Fines | never take money below zero |
+
+Why these numbers: a Junior quest pays €125 to €300. A clean hustle pays €350, a good quest's
+worth, for karma -20, which is enough to shut the bank until community service. Played
+carefully the risk is 20%; a catch keeps the job open with a new roll, so a careful player gets
+the €350 in the end, minus about €30 in expected fines and a 4% chance of a second catch (an
+arrest: €650 more and probation), so about €290 on average. Played sloppily (95%) it is worth
+less than nothing and an arrest is likely. Community service then costs a few minutes and pays
+no money: the karma is the price.
+
+**The meter.** The Career Trail's header shows "Karma +10", a bar from -100 to +100 with a tick
+at 0, and the meter's name; the HUD toasts every change ("Karma -20: Hoodie in a stock photo").
+
+| Karma | Name (EN) | Naam (NL) |
+| ----- | --------- | --------- |
+| 60 and up | Responsible disclosure saint | Heilige van de responsible disclosure |
+| 20 to 59 | Trusted (LinkedIn verified) | Betrouwbaar (LinkedIn-geverifieerd) |
+| -19 to 19 | Neutral, like a fresh VM | Neutraal, als een verse VM |
+| -59 to -20 | Hoodie in a stock photo | Hoodie op een stockfoto |
+| -60 and below | On the TLA's whiteboard | Op het whiteboard van de DDL |
+
+The agency is comically generic on purpose: a made-up name that is its own joke, no logo, no
+badge, no real service. Agent Jansen does the talking.
+
+**Side hustles.** Vince stands behind the office, out of sight of the street, next to a crate
+with a laptop (a shared kiosk). His jobs are quests of `kind: hustle`: big money, karma down.
+Each hustle's scenario has a `risk`: a base chance plus factors, conditions on the machine that
+add (or, for careful play, subtract) percentage points while they hold. The terminal shows the
+heat live in its side panel ("Chance of getting caught: 30%", and why). When the last objective
+is met the game rolls: the risk, capped at 95%, against a roll from 0 to 99 seeded by the save,
+the quest and how often the player was caught before (`riskRoll`, never unseeded dice). The
+same save finishing the same way always gets the same answer; closing the terminal to retry
+never rerolls; only getting caught moves the dice on.
+
+*The vending machine job* (`content/quests/vending-prices`): SnackoMat wants Munchr Vending's
+2027 prices. Munchr left an internal folder on its public file share (a fictional company and a
+fictional share, mounted on the kiosk). Read the README, find the price list, write two prices
+in the drop file. What raises the heat: going through the HR folder (a recursive grep over the
+share walks through it too, and that costs 5 karma), three failed commands (the kiosk beeps),
+twenty commands (the barista stares), taking the file instead of reading it, and still being
+signed in with your own library card when you drop. Careful play is 20%; sloppy play hits the cap.
+
+*Safety.* The hack is abstract: no real technique, tool, exploit or payload, nothing that
+teaches an intrusion. Reading a folder that someone left in a public place is the whole trick,
+and the game says plainly that doing it for real is a crime (computervredebreuk in the
+Netherlands) and what to do instead: report it through the company's security.txt or bug
+bounty. A hustle's first ending, caught or not, ends on that line (once per job, so retries do
+not preach), and Vince himself mentions security.txt.
+
+**The independent contractor.** A setting in the menu, "Work as: employee / contractor",
+stored in the save (`contractor`). As a contractor, on a job whose scenario has procedures to
+skip (not a battle, a hustle, community service, or a job without procedures, which pays and
+bills as usual; https://github.com/MWest2020/nines/issues/28):
+
+| Rule | Value |
+| ---- | ----- |
+| Procedures | objectives marked `procedure: true` (a change ticket, a commit for review) do not count: crossed out, "skipped (contractor)" |
+| Money | 150% of the job's money, after the AI-hint scaling; XP unchanged, the homelab's income unscaled |
+| Damage | every penalty (a scenario event, the built-in outage) billed at 3 times, never below zero |
+| When | the mode when the terminal opens holds for that session (the menu is shut while it is open) |
+
+So "consequences, not blocks" gets sharper: the contractor is never stopped either, but `rm` on
+the wrong thing costs triple. *The bakery hotfix* (`content/quests/bakery-hotfix`, from Femke
+after Disk full) shows it: a price written with a comma takes a bakery's web shop down. On
+payroll: fix it, fill in change ticket CHG-1042, commit the fix (€200). As a contractor: fix it
+(€300), but deleting today's orders costs €360 instead of €120.
+
+**Ethical hacker.** The sixth path: authorised pentests and CTF-style quests, responsible
+disclosure, karma up. Its quests start from a signed scope, and the rules are the trade's: read
+the scope first, report don't fix, stop at customer data, evidence not trophies.
+
+*Pentest: Polderbank staging* (`content/quests/bank-pentest`, Junior, from Sanne in front of the
+office; the bank's rack in the server room). Engagement PB-2026-11 is signed in
+`~/engagement/scope.txt`: in scope the machine's `/etc` and its web root, out of scope
+`/srv/customer-exports` and any change. The misconfiguration: nginx serves `/exports/` with
+`autoindex on`, a directory listing, and a database backup lies in that folder, so anyone on
+the internet can list and download it (the access log shows an outside address already did).
+The player proves it with `ls -l` (name, size, place) without opening the backup, and writes
+finding-01: the setting and the web path, a severity (high), and the fix (autoindex off, the
+backup out of the web root). Reading the server before the scope gets a word from Sanne; a
+recursive grep over `/srv` walks into the customer data (€100 and karma -10); opening the
+backup with a reading command (cat, less, tail, grep, edit) costs 5 karma, while `ls -l` or
+`du` on it is just evidence; changing their config is put back and costs €50. It pays €300, 30 XP
+and karma +10, and needs a clean record.
+
+**Community service.** *Repair Café* (`content/quests/repair-cafe`): Henk's stall in the park.
+The booking page has been down since a power cut (stopped cleanly, not failed); start it and
+write in the logbook what you did. Humble on purpose.
+
+**The `touched()` fact.** Scope, snooping and peeking need to know what the player reached, so
+scenarios have `touched(path)`: true when a command named that path, or something inside it, as
+an operand (cd, cat, ls, less, edit, a pipe stage too; flag values and grep's pattern are not
+operands), or when a recursive command (grep -r, du, rm -r; with no folder, the working
+directory) walked a folder above it. And `opened(path)`: true only when a reading command (cat,
+less, tail, grep, edit, mv) opened the file, or grep -r read through a folder above it. Listing
+or sizing a file touches it without opening it.
 
 ### Share my progress (design only, not built)
 

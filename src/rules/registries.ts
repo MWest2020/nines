@@ -35,6 +35,12 @@ export const SCENARIO_FACTS: Registry = {
     pods_running: { args: ['string'], returns: 'boolean' },
     ran: { args: ['string'], returns: 'boolean' },
     flag: { args: ['string'], returns: 'boolean' },
+    /** a command named this path, or something inside it, as an operand (cd, cat, ls, edit...),
+     *  or swept over it recursively (grep -r, du, rm -r on a folder above it) */
+    touched: { args: ['string'], returns: 'boolean', pathArgs: [0] },
+    /** a reading command (cat, less, tail, grep, edit, mv) opened this file or one inside this
+     *  folder, or grep -r read through a folder above it; ls and du only touch */
+    opened: { args: ['string'], returns: 'boolean', pathArgs: [0] },
   },
 };
 
@@ -43,6 +49,14 @@ export const PROGRESS_FACTS: Registry = {
   vars: {
     money: { args: [], returns: 'number' },
     tech_debt: { args: [], returns: 'number' },
+    /** -100..100, starts at 0 (core/karma.ts) */
+    karma: { args: [], returns: 'number' },
+    /** arrested or questioned by the agency: clearance jobs stay shut until community service */
+    probation: { args: [], returns: 'boolean' },
+    /** times caught since the last community service */
+    strikes: { args: [], returns: 'number' },
+    /** working as an independent contractor */
+    contractor: { args: [], returns: 'boolean' },
   },
   funcs: {
     quest: { args: ['string'], returns: 'string', values: QUEST_STATES },

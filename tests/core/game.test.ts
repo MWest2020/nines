@@ -139,26 +139,26 @@ describe('battle results feed the same rewards', () => {
 describe('scenario events', () => {
   it('a penalty costs every time but never takes money below zero', () => {
     let g = fresh(200);
-    let r = applyEvent(g, 'disk-full', { id: 'db', money: -150 });
+    let r = applyEvent(g, rules(), 'disk-full', { id: 'db', money: -150 });
     expect([r.game.money, r.money]).toEqual([50, -150]);
     g = frozen(r.game);
-    r = applyEvent(g, 'disk-full', { id: 'db', money: -150 });
+    r = applyEvent(g, rules(), 'disk-full', { id: 'db', money: -150 });
     expect([r.game.money, r.money]).toEqual([0, -50]);
   });
 
   it('a bonus pays once per quest and event, and a flag is stored', () => {
     const g = fresh();
-    const a = applyEvent(g, 'disk-full', { id: 'tidy', money: 50, setFlag: 'tidy' });
+    const a = applyEvent(g, rules(), 'disk-full', { id: 'tidy', money: 50, setFlag: 'tidy' });
     expect(a.game.money).toBe(50);
     expect(a.game.flags).toEqual({ tidy: true });
-    const b = applyEvent(frozen(a.game), 'disk-full', { id: 'tidy', money: 50 });
+    const b = applyEvent(frozen(a.game), rules(), 'disk-full', { id: 'tidy', money: 50 });
     expect([b.game.money, b.money]).toEqual([50, 0]);
-    expect(applyEvent(frozen(a.game), 'service-down', { id: 'tidy', money: 50 }).game.money).toBe(100);
+    expect(applyEvent(frozen(a.game), rules(), 'service-down', { id: 'tidy', money: 50 }).game.money).toBe(100);
   });
 
   it('a penalty right after spending everything leaves exactly zero', () => {
     const spent = frozen(buy(fresh(200), rules(), 'raspberry-pi').game);
-    const r = applyEvent(spent, 'disk-full', { id: 'db', money: -150 });
+    const r = applyEvent(spent, rules(), 'disk-full', { id: 'db', money: -150 });
     expect(Object.is(r.game.money, 0)).toBe(true);
     expect(Object.is(r.money, 0)).toBe(true);
   });
@@ -201,7 +201,7 @@ describe('saves', () => {
   it('round-trip a game in progress through the versioned format', () => {
     let g = done(fresh(), 'disk-full', 'service-down');
     g = frozen(buy(g, rules(), 'raspberry-pi').game);
-    g = frozen(applyEvent(g, 'disk-full', { id: 'x', money: 5, setFlag: 'f' }).game);
+    g = frozen(applyEvent(g, rules(), 'disk-full', { id: 'x', money: 5, setFlag: 'f' }).game);
     g = frozen(setLocale(tick(g), 'nl'));
     const raw = serialize(g);
     expect(JSON.parse(raw)).toMatchObject({ format: 'nines-save', version: SAVE_VERSION });
@@ -217,15 +217,15 @@ describe('saves', () => {
   });
 
   it('migrate a version-1 save to the current version', () => {
-    expect(SAVE_VERSION).toBe(3);
-    expect(Object.keys(MIGRATIONS)).toEqual(['1', '2']);
+    expect(SAVE_VERSION).toBe(4);
+    expect(Object.keys(MIGRATIONS)).toEqual(['1', '2', '3']);
     const v1 = {
       format: 'nines-save',
       version: 1,
       game: { locale: 'nl', money: 350, xp: { linux: 20 }, quests: { 'disk-full': 'done' }, items: [], flags: {}, tech_debt: 0, player: { map: 'junior-village', x: 3, y: 4, facing: 'up' } },
     };
     const out = deserialize(JSON.stringify(v1), 'en');
-    expect(out).toEqual({ kind: 'ok', game: { ...v1.game, seed: seedFrom(JSON.stringify(v1.game)), ticks: 0, claimed: [], tokens: START_TOKENS, hints: {}, path: null } });
+    expect(out).toEqual({ kind: 'ok', game: { ...v1.game, seed: seedFrom(JSON.stringify(v1.game)), ticks: 0, claimed: [], tokens: START_TOKENS, hints: {}, path: null, karma: 0, strikes: 0, caught: 0, probation: false, contractor: false } });
     // each old save keeps its own seed
     const other = deserialize(JSON.stringify({ ...v1, game: { ...v1.game, money: 1 } }), 'en');
     expect(other.kind === 'ok' && out.kind === 'ok' && other.game.seed !== out.game.seed).toBe(true);
@@ -396,6 +396,9 @@ describe('conversations', () => {
     g = frozen(startQuest(g, rules(), 'disk-full').game);
     expect(conversation(g, content(), 'femke')?.lines).toEqual(['quest.disk-full.active.1']);
     g = done(g, 'disk-full');
+    // then Femke has the bakery hotfix (the contractor's quest variant), and after it her own lines
+    expect(conversation(g, content(), 'femke')).toMatchObject({ offer: 'bakery-hotfix' });
+    g = done(g, 'bakery-hotfix');
     expect(conversation(g, content(), 'femke')).toEqual({ speaker: 'quest.disk-full.npc.name', lines: ['quest.disk-full.npc.after'] });
   });
 

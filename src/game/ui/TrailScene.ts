@@ -6,6 +6,7 @@
 
 import type Phaser from 'phaser';
 import type { NodeState, TrailNode, TrailView } from '../../core/game';
+import { ARREST_AFTER, KARMA_MAX, KARMA_MIN, karmaTier } from '../../core/karma';
 import { findNpc } from '../../core/talk';
 import { questKey } from '../../content/types';
 import { ellipsize, measure } from './font';
@@ -49,8 +50,10 @@ const diamond = (cx: number, cy: number, r: number) => [
 export class TrailScene extends Screen {
   /** index of the town whose paths are shown; null = pick the furthest open town */
   private town: number | null = null;
+  /** focus has been placed on this town's first stone; a redraw keeps the focus where it is */
+  private placed = false;
   private detail: Phaser.GameObjects.BitmapText[] = [];
-  private items: ({ kind: 'town'; index: number } | { kind: 'node'; node: TrailNode } | { kind: 'close' })[] = [];
+  private items: ({ kind: 'town'; index: number } | { kind: 'node'; node: TrailNode } | { kind: 'karma' } | { kind: 'close' })[] = [];
 
   constructor() {
     super('trail');
@@ -58,6 +61,7 @@ export class TrailScene extends Screen {
 
   override create(): void {
     this.town = null;
+    this.placed = false;
     super.create();
   }
 
@@ -72,6 +76,8 @@ export class TrailScene extends Screen {
     this.items = [];
     const out: Phaser.GameObjects.GameObject[] = [panel(this, P.x, P.y, P.w, P.h, 13)];
     out.push(pixelText(this, P.x + 6, P.y + 2, t('ui.roadmap.title'), C.paper));
+    const close = t('ui.close');
+    out.push(...this.karmaMeter(P.x + 6 + measure(t('ui.roadmap.title')) + 8, P.x + P.w - 10 - buttonWidth(close)));
 
     // the road with its towns
     const g = this.add.graphics();
@@ -129,17 +135,44 @@ export class TrailScene extends Screen {
     this.detail = [0, 1, 2].map((i) => pixelText(this, P.x + 6, FOOT_Y + 13 + i * 10, '', i === 0 ? C.paper : C.mist));
     out.push(...this.detail);
 
-    const close = t('ui.close');
     this.items.push({ kind: 'close' });
     out.push(...this.addButton(button(this, P.x + P.w - 6 - buttonWidth(close), P.y + 1, close, () => this.close())));
 
-    // start on the first stone of the chosen town when there is one
-    if (this.focus === 0 || this.focus >= this.items.length) {
+    // start on the first stone of the chosen town when there is one, else on the town itself
+    if (!this.placed || this.focus >= this.items.length) {
       const first = this.items.findIndex((it) => it.kind === 'node');
-      this.focus = first >= 0 ? first : this.town;
+      const here = this.items.findIndex((it) => it.kind === 'town' && it.index === this.town);
+      this.focus = first >= 0 ? first : Math.max(0, here);
+      this.placed = true;
     }
     this.showDetail(view);
     return out;
+  }
+
+  /**
+   * The karma meter in the header (DESIGN.md, Karma): "Karma -20", a bar from -100 to +100 with
+   * a tick at 0 and a marker, and the meter's meme name, between x0 and x1.
+   */
+  private karmaMeter(x0: number, x1: number): Phaser.GameObjects.GameObject[] {
+    const { store, t } = this.api;
+    const k = store.game.karma;
+    const color = k >= 20 ? C.leaf : k > -20 ? C.mist : C.orange;
+    const label = t('ui.karma.meter', { karma: k > 0 ? `+${k}` : String(k) });
+    const text = pixelText(this, x0, P.y + 2, label, color);
+    const bx = x0 + measure(label) + 4;
+    const bw = 41;
+    // focusable: the details below spell out the meter's name, probation, strikes and the mode
+    this.items.push({ kind: 'karma' });
+    const ring = this.ring([], x0 - 2, P.y, Math.min(x1, bx + bw + 2) - x0 + 4, 13, () => this.setFocus(this.items.findIndex((it) => it.kind === 'karma')));
+    this.focusable(ring);
+    const g = this.add.graphics();
+    g.fillStyle(hex(C.ink), 1).fillRect(bx, P.y + 4, bw, 5);
+    g.lineStyle(1, hex(C.slate), 1).strokeRect(bx + 0.5, P.y + 4.5, bw - 1, 4);
+    g.fillStyle(hex(C.grey), 1).fillRect(bx + (bw - 1) / 2, P.y + 3, 1, 7); // zero
+    const mx = Math.round(bx + 1 + ((k - KARMA_MIN) / (KARMA_MAX - KARMA_MIN)) * (bw - 3));
+    g.fillStyle(hex(color), 1).fillRect(mx - 1, P.y + 2, 3, 9);
+    const tier = ellipsize(t(`ui.karma.tier.${karmaTier(k)}`) + (store.game.probation ? t('ui.karma.on_probation') : ''), Math.max(0, x1 - (bx + bw + 4)));
+    return [text, g, pixelText(this, bx + bw + 4, P.y + 2, tier, color), ...ring.objects];
   }
 
   /** A focus outline drawn around an item, and a hit zone that picks it. */
@@ -149,6 +182,7 @@ export class TrailScene extends Screen {
     const outline = this.add.graphics();
     out.push(zone, outline);
     return {
+      objects: [zone, outline],
       x,
       y,
       w,
@@ -164,7 +198,7 @@ export class TrailScene extends Screen {
   private pickTown(i: number): void {
     if (i === this.town) return;
     this.town = i;
-    this.focus = 0;
+    this.placed = false;
     this.redraw();
   }
 
@@ -189,6 +223,12 @@ export class TrailScene extends Screen {
               state: t(`ui.roadmap.quest.${nd.litBy[0]!.state}`),
             })
           : t('ui.roadmap.no_quest');
+    } else if (it?.kind === 'karma') {
+      const g = store.game;
+      const k = g.karma > 0 ? `+${g.karma}` : String(g.karma);
+      lines[0] = t('ui.karma.detail', { karma: k, tier: t(`ui.karma.tier.${karmaTier(g.karma)}`) });
+      lines[1] = t(g.probation ? 'ui.karma.detail_probation' : 'ui.karma.detail_clean', { strikes: g.strikes, max: ARREST_AFTER });
+      lines[2] = t(g.contractor ? 'ui.karma.detail_contractor' : 'ui.karma.detail_employee');
     } else if (it?.kind === 'town') {
       const tw = view.towns[it.index]!;
       lines[0] = t(tw.title);

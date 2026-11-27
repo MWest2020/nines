@@ -1,0 +1,49 @@
+# repaircafe-pc: the Repair Café's old laptop. The booking page went down in last night's power
+# cut and did not come back: the unit was stopped cleanly and is not enabled at boot. Start it,
+# and write in the logbook what you did. Humble on purpose: community service.
+schema: 1
+host: repaircafe-pc
+user: volunteer
+home: /home/volunteer
+motd: motd
+mounts:
+  - {path: /, device: /dev/sda1, size: 120G, base_used: 30G}
+dirs: [/tmp]
+files:
+  /home/volunteer/logbook.txt: |
+    REPAIR CAFE LOGBOOK
+    Sat 22 Nov: fixed 3 toasters, 1 bike light. Booking page OK. (Henk)
+    Tue 25 Nov: power cut at 21:03. (Henk)
+    Today: what I did: ?
+  /home/volunteer/README.txt: |
+    The booking page is the booking-web service.
+    Please don't install anything. Last time someone installed a crypto miner "to help". (Henk)
+services:
+  booking-web:
+    description: Repair Cafe booking page
+    state: inactive
+    enabled: false
+    logs:
+      - "Nov 25 21:03:11 repaircafe-pc systemd[1]: Stopping booking-web.service - Repair Cafe booking page..."
+      - "Nov 25 21:03:11 repaircafe-pc systemd[1]: booking-web.service: Deactivated successfully."
+      - "Nov 25 21:03:11 repaircafe-pc systemd[1]: Stopped booking-web.service - Repair Cafe booking page."
+    restart:
+      succeeds_if: 'true'
+      logs_on_success:
+        - "Nov 26 09:00:00 repaircafe-pc systemd[1]: Started booking-web.service - Repair Cafe booking page."
+quick:
+  - systemctl status booking-web
+  - "cat ~/README.txt"
+  - "edit ~/logbook.txt"
+  - help
+objectives:
+  - {id: booking, text: obj.booking, done_when: 'service("booking-web") == "active"'}
+  - {id: logbook, text: obj.logbook, done_when: 'exists("/home/volunteer/logbook.txt") && !file_contains("/home/volunteer/logbook.txt", "what I did: ?")'}
+hints:
+  - {id: status, when: 'commands >= 3 && !ran("systemctl")', text: hint.status}
+  - {id: start, when: 'ran("systemctl status") && service("booking-web") != "active" && commands >= 5', text: hint.start}
+events:
+  - id: logbook-gone
+    when: 'removed("/home/volunteer/logbook.txt")'
+    say: event.logbook_gone
+    reset: true

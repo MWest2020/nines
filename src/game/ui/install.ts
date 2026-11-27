@@ -5,7 +5,7 @@
 import Phaser from 'phaser';
 import { questKey } from '../../content/types';
 import type { LocaleId } from '../../content/types';
-import type { QuestRefusal, Reward } from '../../core/game';
+import type { HustleResult, QuestRefusal, Reward } from '../../core/game';
 import type { Params } from '../../core/i18n';
 import type { GameState } from '../../core/save';
 import type { HintOffer } from '../../core/tokens';
@@ -150,8 +150,16 @@ export class GameUi implements GameApi {
     return r.ok ? r.reward : null;
   }
 
-  applyTerminalEvents(questId: string, events: readonly FiredEvent[]): void {
-    this.store.applyEvents(questId, events);
+  applyTerminalEvents(questId: string, events: readonly FiredEvent[]): { money: number; karma: number; agency: { fine: number } | null } {
+    return this.store.applyEvents(questId, events);
+  }
+
+  finishHustle(questId: string, risk: number): HustleResult {
+    return this.store.finishHustle(questId, risk);
+  }
+
+  setContractor(on: boolean): void {
+    this.store.setContractor(on);
   }
 
   hintBoost(): number {

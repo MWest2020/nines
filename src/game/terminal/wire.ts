@@ -3,7 +3,8 @@
 // and the giver's "done" lines once the overlay has closed.
 
 import type { QuestEntry } from '../../content/types';
-import type { Reward } from '../../core/game';
+import { contracted, type Reward } from '../../core/game';
+import { RISK_CAP } from '../../core/karma';
 import { findNpc } from '../../core/talk';
 import type { GameApi } from '../api';
 import { openTerminal, type TerminalOverlay } from './TerminalOverlay';
@@ -39,16 +40,26 @@ function open(api: GameApi, quest: QuestEntry, done: () => void): void {
     current = openTerminal(quest, {
       t: api.t,
       hintBoost: api.hintBoost(),
+      // the mode at opening holds for the whole session (the menu is shut while it is open)
+      skipProcedures: contracted(api.store.game, quest),
       hints: { offer: (key) => api.hintOffer(quest.id, key), ask: (key) => api.askHint(quest.id, key) },
       ...(giver ? { speaker: giver.key(giver.spec.name) } : {}),
-      applyEvents: (events) => {
-        const before = api.store.game.money;
-        api.applyTerminalEvents(quest.id, events);
-        return api.store.game.money - before;
-      },
-      complete: () => {
-        reward = api.completeQuest(quest.id);
-        return reward ? { money: reward.money, income: reward.income, xp: reward.xp, percent: reward.percent, hints: reward.hints } : null;
+      applyEvents: (events) => api.applyTerminalEvents(quest.id, events),
+      complete: (risk) => {
+        let lesson = false;
+        if (quest.quest.kind === 'hustle') {
+          // no risk reported (never, for a valid hustle) fails closed: the cap
+          const r = api.finishHustle(quest.id, risk ?? RISK_CAP);
+          if (!r.ok) return null;
+          if (r.outcome === 'caught') return { kind: 'caught', fine: r.fine, karma: r.karma, strikes: r.strikes, arrested: r.arrested, agency: r.agency, lesson: r.lesson };
+          reward = r.reward;
+          lesson = r.lesson;
+        } else {
+          reward = api.completeQuest(quest.id);
+        }
+        if (!reward) return null;
+        const { money, income, xp, percent, hints, karma, contract, agency } = reward;
+        return { kind: 'paid', money, income, xp, percent, hints, karma, contract, agency, lesson };
       },
       closed: () => {
         current = null;

@@ -91,11 +91,30 @@ describe('the validator rejects broken content', () => {
     expect(errorsAfter('quests/disk-full/scenario.yaml', (s) => s.replace('service("nginx") == "active"', 'service(pipeline_status) == "active"'))).toMatch(/needs a quoted name/);
   });
   it('a stone a quest lights never needs a stone that no quest lights', () => {
-    expect(errorsAfter('roadmap.yaml', (s) => s.replace('title: node.linux.services, requires: [linux-disk]', 'title: node.linux.services, requires: [linux-files]'))).toMatch(
-      /node "linux-services" is lit by a quest but needs "linux-files", which no quest lights/,
+    expect(errorsAfter('roadmap.yaml', (s) => s.replace('title: node.linux.services, requires: [linux-disk]', 'title: node.linux.services, requires: [observability-logs]'))).toMatch(
+      /node "linux-services" is lit by a quest but needs "observability-logs", which no quest lights/,
     );
   });
 
+  it('karma: gates are progress conditions without quest(); risk is a hustle\'s, and a hustle has one', () => {
+    const q = 'quests/vending-prices/quest.yaml';
+    const sc = 'quests/vending-prices/scenario.yaml';
+    expect(errorsAfter(q, (s) => s.replace("available_when: 'karma <= 20'", "available_when: 'quest(\"disk-full\") == \"done\"'"))).toMatch(/available_when may not use quest\(\)/);
+    expect(errorsAfter(q, (s) => s.replace("available_when: 'karma <= 20'", "available_when: 'disk_usage(\"/\") > 3'"))).toMatch(/available_when: unknown function "disk_usage"/);
+    expect(errorsAfter(q, (s) => s.replace('kind: hustle', 'kind: job'))).toMatch(/risk belongs to a hustle; this quest is a job/);
+    expect(errorsAfter(q, (s) => s.replace('karma: -20}', 'karma: 5}'))).toMatch(/a hustle costs karma/);
+    expect(errorsAfter(sc, (s) => s.slice(0, s.indexOf('risk:')))).toMatch(/a hustle is a terminal quest whose scenario has a risk/);
+    expect(errorsAfter(sc, (s) => s.replace("when: 'fails >= 3'", "when: 'fails >= \"3\"'"))).toMatch(/risk\.factors\[2\]\.when/);
+    expect(errorsAfter(sc, (s) => s.replace('text: risk.beeping', 'text: risk.nope'))).toMatch(/unknown locale key "risk.nope"/);
+    expect(errorsAfter(sc, (s) => s.replace('id: beeping', 'id: hr'))).toMatch(/risk factor ids must be unique/);
+    expect(errorsAfter(sc, (s) => s.replace('base: 20', 'base: 99'))).toMatch(/base must be <= 95/);
+  });
+  it('karma: procedures are a job\'s, and a contractor still has work to do', () => {
+    const sc = 'quests/bakery-hotfix/scenario.yaml';
+    expect(errorsAfter(sc, (s) => s.replace("{id: shop, text: obj.shop, done_when", "{id: shop, text: obj.shop, procedure: true, done_when"))).toMatch(/at least one objective must not be a procedure/);
+    expect(errorsAfter('quests/repair-cafe/scenario.yaml', (s) => s.replace('{id: logbook, text: obj.logbook, done_when', '{id: logbook, text: obj.logbook, procedure: true, done_when'))).toMatch(/procedure objectives are a job's \(a contractor skips them\); this quest is a service/);
+    expect(errorsAfter('quests/disk-full/quest.yaml', (s) => s.replace('paths: [sre, systems, devops]', 'paths: [sre, hacker]'))).toMatch(/must be equal to one of the allowed values/);
+  });
   it('requirements may not form a cycle', () => {
     copy();
     edit('quests/disk-full/quest.yaml', (s) => s.replace('requires: []', 'requires: [service-down]'));

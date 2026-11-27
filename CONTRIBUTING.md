@@ -87,7 +87,7 @@ stage: junior                           # junior | medior | senior
 branch: linux                           # linux, networking, git, cicd, containers, iac,
                                         # observability, incident, design or kubernetes
 paths: [systems, sre]                   # the career paths it counts towards: swe, sre,
-                                        # devops, platform, systems (all five for everyone)
+                                        # devops, platform, systems, ethical (all six for everyone)
 roadmap_node: linux-services            # a node in content/roadmap.yaml, on the same branch
 requires: []                            # quest ids that must be done first; [] for none
 giver: yara                             # the id in your npc.yaml

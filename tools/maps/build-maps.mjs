@@ -214,6 +214,16 @@ function juniorVillage() {
   m.put('detail', 32, 25, TT(5), true); // bush
   m.put('detail', 11, 26, TT(5), true);
 
+  // behind the office, out of sight of the street: Vince's corner, a crate with a laptop and a
+  // bin (DESIGN.md, Side hustles)
+  m.put('detail', 20, 4, IN(7), true);
+  m.put('props', 20, 4, N(5));
+  m.put('detail', 16, 4, U(280), true);
+  // the Repair Café's stall in the park, where community service happens (DESIGN.md, Karma)
+  m.put('detail', 26, 25, IN(7), true);
+  m.put('props', 26, 25, N(5));
+  m.put('detail', 27, 25, IN(83), true);
+
   // spawn points and objects
   m.object('player-start', 'spawn', 19, 15, { facing: 'down' });
   m.object('npc-1', 'spawn', 9, 14); // Femke, by the data centre
@@ -224,9 +234,14 @@ function juniorVillage() {
   m.object('cameo-1', 'spawn', 12, 23);
   m.object('cameo-2', 'spawn', 33, 22);
   m.object('npc-5', 'spawn', 24, 17); // Mila, on the square
+  m.object('npc-6', 'spawn', 18, 4); // Vince, behind the office
+  m.object('npc-7', 'spawn', 15, 14); // Sanne, the pentester, in front of the office
+  m.object('npc-8', 'spawn', 24, 25); // Henk, at the Repair Café stall
   m.object('server-room-exit', 'spawn', 7, 13, { facing: 'down' });
   m.object('server-room-door', 'door', 7, 12, { to_map: 'server-room', to_point: 'entrance' });
   m.object('ravi-laptop', 'terminal', 9, 21);
+  m.object('back-alley-laptop', 'terminal', 20, 4);
+  m.object('repair-cafe-laptop', 'terminal', 26, 25);
   m.object('on-call-laptop', 'battle', 28, 21);
   m.object('meeting-room', 'battle', 17, 12);
   m.object('homelab-store', 'shop', 29, 12);
@@ -277,6 +292,8 @@ function serverRoom() {
   m.object('cameo-rack-1', 'terminal', 3, 6);
   m.object('cameo-rack-2', 'terminal', 11, 6);
   m.object('rack-k8s-01', 'terminal', 12, 3); // the Kubernetes jump host
+  m.object('rack-bank-01', 'terminal', 9, 3); // Polderbank's staging server, for the pentest
+  m.object('rack-bakery-01', 'terminal', 5, 3); // the bakery's web shop, for the contractor hotfix
   return m;
 }
 

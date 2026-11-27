@@ -1,7 +1,8 @@
 # Content backlog
 
-What still needs writing: the career paths' signature quests, the Kubernetes learning path, and
-(below those) the system-design battle briefs, all four of which are done. Write our own
+What still needs writing: the career paths' signature quests, karma's side jobs and contractor
+quests, the Kubernetes learning path, and (below those) the system-design battle briefs, all four
+of which are done. Write our own
 questions: these are topics, not text to copy from anywhere.
 
 ## Career paths: signature quests and battles
@@ -34,6 +35,37 @@ interview into Senior Summit and a homelab item. Ideas to start from; tag every 
   with "the cloud" by Friday (backups, restore tests, what RAID is not). Gate: a hardware
   failure triage interview (SMART data, ECC errors, a dying PSU). Item: a second-hand rack
   switch.
+
+## Karma: side jobs, contractor quests, the ethical hacker's line
+
+DESIGN.md, Karma. The engine is built; these are content. Every hack stays abstract and fictional
+(a misplaced folder, a default left in a fictional README, a fictional bucket), never a real
+technique, tool or payload, and every hustle ends on the legal way (security.txt, bug bounties,
+responsible disclosure).
+
+- **Side jobs (Vince, `kind: hustle`).** Each with a risk whose factors reward care.
+  - *Report it instead* (the vending job's other ending, `kind: job`): the same open share, but
+    the player writes to Munchr's security contact (a `security.txt` in the share) and gets a
+    small bug bounty and karma +15. Vince is disappointed. Needs no new engine.
+  - *The parking garage* (`karma <= -20`): a garage's ticket machine prints "admin password: see
+    sticker". Get a free exit for a client. Heat: the camera log, how long you stand there.
+  - *The fake reviews* (stakeholder battle, not a terminal): a restaurant owner wants 50 five-star
+    reviews. A conversation about why that is fraud, and what to do for the restaurant instead.
+- **Contractor quests (`procedure` objectives).**
+  - *Friday deploy for the florist*: a release with a migration; procedures are a dry run and a
+    rollback note. Damage: the migration run twice.
+  - *The DNS cutover*: lower the TTL a day ahead (a procedure), or skip it and wait out the old
+    TTL with a customer on the phone. Damage: deleting the old record too early.
+  - *Contract terms* (battle): a client wants unlimited liability in the contract. What a
+    contractor's insurance, scope and change requests are for.
+- **Ethical hacker (`paths: [ethical]`).** A `security` branch arrives with the Medior line, so the
+  Junior trail keeps its six rows.
+  - Junior, more: *the CTF night* (Thursdays, Sanne): three small flags on a practice box (a
+    world-readable config, a forgotten debug page, a weak file permission), each written up.
+  - Medior: *a web app assessment* with a scope that excludes production; *responsible
+    disclosure* as a battle (the vendor stalls; deadlines, CVE, coordinated publication); the gate
+    into Senior Summit: a red team versus blue team debrief.
+  - Item: a lock-picking practice set for the homelab shelf (cosmetic; the CTF crowd will get it).
 
 ## Kubernetes learning path
 

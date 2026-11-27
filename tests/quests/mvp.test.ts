@@ -42,7 +42,7 @@ describe('disk full', () => {
   it('deleting the database costs money and restores the machine', () => {
     const s = session(scenario('disk-full'));
     const r = run(s, 'rm -r /var/lib/postgresql');
-    expect(r.events).toEqual([{ id: 'database-gone', say: 'event.database_gone', scope: 'quest', money: -150, reset: true }]);
+    expect(r.events).toEqual([{ id: 'database-gone', say: 'event.database_gone', scope: 'quest', money: -150, karma: 0, reset: true }]);
     expect(s.state.fs['/var/lib/postgresql/16/main/base.dat']).toBeDefined();
     expect(r.won).toBe(false);
   });

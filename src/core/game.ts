@@ -10,9 +10,27 @@
 // a positive event pays once per quest and event however often the terminal is replayed.
 // Penalties are consequences and cost every time (ARCHITECTURE.md, Consequences).
 // Hints cost AI tokens and scale a quest's money and XP down (core/tokens.ts).
+// Karma, hustles and the independent contractor (core/karma.ts): a quest's `reward.karma` and
+// an event's `karma` move the meter; a hustle is finished through finishHustle, which rolls its
+// risk; a contractor's terminal job pays CONTRACT_PERCENT and damage costs DAMAGE_MULTIPLIER.
 
-import type { BranchId, ContentBundle, LocaleId, QuestEntry, Stage } from '../content/types';
+import type { BranchId, ContentBundle, LocaleId, QuestEntry, QuestKind, Stage } from '../content/types';
 import { own } from '../rules/own';
+import {
+  ARREST_AFTER,
+  ARREST_FINE,
+  ARREST_KARMA,
+  CAUGHT_FINE,
+  CAUGHT_KARMA,
+  CONTRACT_PERCENT,
+  changeKarma,
+  clampRisk,
+  DAMAGE_MULTIPLIER,
+  fine,
+  questKind,
+  reopenService,
+  riskRoll,
+} from './karma';
 import { questState } from './progress';
 import type { GameState } from './save';
 import { addTokens, paidHints, rewardPercent, scaled } from './tokens';
@@ -64,7 +82,8 @@ export function buy(game: GameState, rules: Rules, itemId: string): BuyResult {
 
 // ---- quests
 
-export type QuestRefusal = 'unknown' | 'locked' | 'done';
+/** `hustle`: a hustle is finished through finishHustle, which rolls its risk first. */
+export type QuestRefusal = 'unknown' | 'locked' | 'done' | 'hustle';
 
 /** Accept a quest: available becomes active. Active stays active. */
 export function startQuest(game: GameState, rules: Rules, id: string): { ok: true; game: GameState } | { ok: false; game: GameState; reason: QuestRefusal } {
@@ -95,32 +114,66 @@ export interface Reward {
   node: string;
   /** quests that became available because this one is done */
   unlocked: string[];
+  kind: QuestKind;
+  /** karma changed by finishing it (community service: up to at least 0) */
+  karma: number;
+  /** the karma drop brought the agency: the fine it took */
+  agency: { fine: number } | null;
+  /** paid as an independent contractor: CONTRACT_PERCENT of the money */
+  contract: boolean;
 }
+
+/**
+ * An independent contractor's terminal job: a job whose scenario has procedures to skip. Only
+ * there are procedures skipped, the money raised and damage billed; elsewhere a contractor works
+ * like anyone else (DESIGN.md, Independent contractor).
+ */
+export const contracted = (game: GameState, entry: QuestEntry | undefined): boolean =>
+  game.contractor && entry !== undefined && questKind(entry) === 'job' && (entry.scenario?.objectives.some((o) => o.procedure === true) ?? false);
 
 export type CompleteResult = { ok: true; game: GameState; reward: Reward } | { ok: false; game: GameState; reason: QuestRefusal };
 
 /**
  * Finish a quest and pay its reward. Only once: a done quest returns `reason: 'done'` and the
  * same state. A locked quest cannot be finished (the world never offers it, so that is a bug).
+ * A hustle is finished with finishHustle, which rolls first.
  */
 export function completeQuest(game: GameState, rules: Rules, id: string): CompleteResult {
   const entry = findQuest(rules, id);
   if (!entry) return { ok: false, game, reason: 'unknown' };
+  if (questKind(entry) === 'hustle') return { ok: false, game, reason: 'hustle' };
+  return pay(game, rules, entry);
+}
+
+function pay(game: GameState, rules: Rules, entry: QuestEntry): CompleteResult {
+  const id = entry.id;
   const state = stateOf(game, rules, id);
   if (state === 'locked' || state === 'done') return { ok: false, game, reason: state };
   const q = entry.quest;
-  const income = incomePerQuest(game, rules);
+  const kind = questKind(entry);
+  const contract = contracted(game, entry);
+  // community service can come round again; its XP and the homelab's income are paid once
+  const serviceKey = `service/${id}`;
+  const again = kind === 'service' && game.claimed.includes(serviceKey);
+  const income = again ? 0 : incomePerQuest(game, rules);
   const hints = paidHints(game, rules, id);
   const percent = rewardPercent(hints);
-  const money = scaled(q.reward.money, percent);
-  const xp = scaled(q.reward.xp, percent);
-  const next: GameState = {
+  const money = scaled(scaled(q.reward.money, percent), contract ? CONTRACT_PERCENT : 100);
+  const xp = again ? 0 : scaled(q.reward.xp, percent);
+  let next: GameState = {
     ...game,
     money: game.money + money + income,
+    ...(kind === 'service' && !again ? { claimed: [...game.claimed, serviceKey] } : {}),
     xp: { ...game.xp, [q.branch]: (own(game.xp, q.branch) ?? 0) + xp },
     tech_debt: game.tech_debt + (q.reward.tech_debt ?? 0),
     quests: { ...game.quests, [id]: 'done' },
   };
+  const k = changeKarma(next, rules, q.reward.karma ?? 0);
+  next = k.game;
+  if (kind === 'service') {
+    // community service: probation ends, strikes are wiped, and karma is back to at least 0
+    next = { ...next, karma: Math.max(0, next.karma), probation: false, strikes: 0 };
+  }
   const unlocked = rules.quests
     .filter((x) => stateOf(game, rules, x.id) === 'locked' && stateOf(next, rules, x.id) === 'available')
     .map((x) => x.id);
@@ -139,8 +192,75 @@ export function completeQuest(game: GameState, rules: Rules, id: string): Comple
       tech_debt: q.reward.tech_debt ?? 0,
       node: q.roadmap_node,
       unlocked,
+      kind,
+      karma: next.karma - game.karma,
+      agency: k.agency,
+      contract,
     },
   };
+}
+
+// ---- hustles (DESIGN.md, Side hustles)
+
+export type HustleResult =
+  | { ok: true; outcome: 'clean'; game: GameState; reward: Reward; roll: number; risk: number; lesson: boolean }
+  | {
+      ok: true;
+      outcome: 'caught';
+      game: GameState;
+      roll: number;
+      risk: number;
+      /** money actually taken: the fine, plus the arrest's when arrested */
+      fine: number;
+      karma: number;
+      strikes: number;
+      arrested: { fine: number } | null;
+      agency: { fine: number } | null;
+      lesson: boolean;
+    }
+  | { ok: false; game: GameState; reason: QuestRefusal };
+
+/**
+ * Finish a hustle: its risk (the scenario's, from sim/session.ts riskOf, 0 to RISK_CAP) against
+ * the seeded roll. Clean: paid like any quest, its karma included. Caught: a fine, a karma hit
+ * and a strike, and the job stays active; at ARREST_AFTER strikes the player is arrested: a big
+ * fine and probation.
+ */
+export function finishHustle(game: GameState, rules: Rules, id: string, risk: number): HustleResult {
+  const entry = findQuest(rules, id);
+  if (!entry || questKind(entry) !== 'hustle') return { ok: false, game, reason: 'unknown' };
+  const state = stateOf(game, rules, id);
+  if (state === 'locked' || state === 'done') return { ok: false, game, reason: state };
+  const r = clampRisk(risk);
+  const dice = riskRoll(game, id);
+  // the responsible-disclosure line is told at a hustle's first ending, not at every retry
+  const lessonKey = `lesson/${id}`;
+  const lesson = !game.claimed.includes(lessonKey);
+  const told = (g: GameState): GameState => (lesson ? { ...g, claimed: [...g.claimed, lessonKey] } : g);
+  if (dice >= r) {
+    const paid = pay(game, rules, entry);
+    return paid.ok ? { ok: true, outcome: 'clean', game: told(paid.game), reward: paid.reward, roll: dice, risk: r, lesson } : paid;
+  }
+  const strikes = game.strikes + 1;
+  const arrest = strikes >= ARREST_AFTER;
+  // an arrest is probation already, so the agency does not come on top of it
+  let g: GameState = { ...game, quests: { ...game.quests, [id]: 'active' }, strikes, caught: game.caught + 1, ...(arrest ? { probation: true } : {}) };
+  const f1 = fine(g, CAUGHT_FINE);
+  g = f1.game;
+  const k1 = changeKarma(g, rules, CAUGHT_KARMA);
+  g = k1.game;
+  let taken = f1.paid;
+  let karma = k1.karma;
+  let arrested: { fine: number } | null = null;
+  if (arrest) {
+    const f2 = fine(g, ARREST_FINE);
+    const k2 = changeKarma(f2.game, rules, ARREST_KARMA);
+    g = reopenService(k2.game, rules);
+    taken += f2.paid;
+    karma += k2.karma;
+    arrested = { fine: f2.paid };
+  }
+  return { ok: true, outcome: 'caught', game: told(g), roll: dice, risk: r, fine: taken, karma, strikes, arrested, agency: k1.agency, lesson };
 }
 
 /** A battle's end. Won completes its quest (and pays, once); lost keeps it active and costs nothing. */
@@ -166,29 +286,47 @@ export function currentQuest(game: GameState, rules: Rules): string | null {
 export interface EventOutcome {
   id: string;
   money: number;
+  karma?: number;
   setFlag?: string;
 }
 
+export interface EventApplied {
+  game: GameState;
+  /** money actually changed */
+  money: number;
+  /** karma actually changed */
+  karma: number;
+  /** the karma drop brought the agency */
+  agency: { fine: number } | null;
+}
+
 /**
- * Apply an event a terminal session fired. A penalty (negative money) costs every time and
- * never takes money below zero; a bonus pays once per quest and event; a flag is set.
- * Returns the money actually changed, for the HUD.
+ * Apply an event a terminal session fired. A penalty (negative money or karma) costs every time,
+ * and money never goes below zero; a bonus (positive money or karma) pays once per quest and
+ * event; a flag is set. An independent contractor pays DAMAGE_MULTIPLIER times the penalty on a
+ * job. Returns what actually changed, for the HUD.
  */
-export function applyEvent(game: GameState, questId: string, ev: EventOutcome): { game: GameState; money: number } {
+export function applyEvent(game: GameState, rules: Rules, questId: string, ev: EventOutcome): EventApplied {
   let next = game;
   let delta = 0;
+  const key = `${questId}/${ev.id}`;
+  const first = !game.claimed.includes(key);
+  const karma = ev.karma ?? 0;
   if (ev.money < 0) {
-    delta = -Math.min(game.money, -ev.money) || 0; // never -0
-    next = { ...next, money: game.money + delta };
-  } else if (ev.money > 0) {
-    const key = `${questId}/${ev.id}`;
-    if (!game.claimed.includes(key)) {
-      delta = ev.money;
-      next = { ...next, money: game.money + delta, claimed: [...game.claimed, key] };
-    }
+    const bill = contracted(game, findQuest(rules, questId)) ? -ev.money * DAMAGE_MULTIPLIER : -ev.money;
+    const f = fine(next, bill);
+    next = f.game;
+    delta = -f.paid || 0; // never -0
+  } else if (ev.money > 0 && first) {
+    delta = ev.money;
+    next = { ...next, money: next.money + delta };
   }
+  if ((ev.money > 0 || karma > 0) && first) next = { ...next, claimed: [...next.claimed, key] };
+  let k: ReturnType<typeof changeKarma> = { game: next, karma: 0, agency: null };
+  if (karma < 0 || (karma > 0 && first)) k = changeKarma(next, rules, karma);
+  next = k.game;
   if (ev.setFlag) next = setFlag(next, ev.setFlag, true);
-  return { game: next, money: delta };
+  return { game: next, money: delta, karma: k.karma, agency: k.agency };
 }
 
 // ---- small setters

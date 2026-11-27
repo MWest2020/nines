@@ -112,6 +112,11 @@ Category: **Game**. Expected outcome: PEGI 3, ESRB Everyone, USK 0.
 - Fear, horror: none. Sexual content, nudity: none. Bad language: none.
 - Drugs, alcohol, tobacco: none. Gambling or simulated gambling: none.
 - Humour: **mild**, about workplace mishaps ("you deleted the database"); no crude humour.
+- Crime themes (since 27 Nov 2026, DESIGN.md, Karma): **mild, optional**. A fixer offers side
+  jobs: reading a fictional company's misplaced files for money. No violence, no real technique;
+  the consequences are fines, probation and community service, and the game says plainly that it
+  is illegal and points to responsible disclosure. Getting caught is decided by how carefully the
+  player worked plus a seeded roll; nothing is bought or wagered, so it is not simulated gambling.
 - Users interact with each other: no. User-generated content shared: no. Shares location: no.
 - Digital purchases: none. Unrestricted internet access: no (the app has no network access).
 - Target audience (App content > Target audience): 13 and over. Not designed for children, so

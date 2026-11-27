@@ -175,8 +175,8 @@ describe('career paths', () => {
     if (!r.ok) throw new Error(r.reason);
     return frozen(r.game);
   };
-  it('five paths in the roadmap', () => {
-    expect(rules().roadmap.paths.map((p) => p.id)).toEqual(['swe', 'sre', 'devops', 'platform', 'systems']);
+  it('six paths in the roadmap: ethical hacker is the sixth (DESIGN.md, Karma)', () => {
+    expect(rules().roadmap.paths.map((p) => p.id)).toEqual(['swe', 'sre', 'devops', 'platform', 'systems', 'ethical']);
   });
   it('is chosen at Medior City, once', () => {
     expect(choosePath(mvp(), rules(), 'sre')).toMatchObject({ ok: false, reason: 'closed' });
@@ -204,10 +204,10 @@ describe('save format 3', () => {
     },
   };
   it('migrates a version-2 save: three tokens, no hints counted, no path; everything else kept', () => {
-    expect(SAVE_VERSION).toBe(3);
     expect(MIGRATIONS[2]!({ a: 1 })).toEqual({ a: 1, tokens: START_TOKENS, hints: {}, path: null });
     const out = deserialize(JSON.stringify(v2), 'en');
-    expect(out).toEqual({ kind: 'ok', game: { ...v2.game, tokens: 3, hints: {}, path: null } });
+    // and on through version 4 (karma, tests/core/karma.test.ts)
+    expect(out).toEqual({ kind: 'ok', game: { ...v2.game, tokens: 3, hints: {}, path: null, karma: 0, strikes: 0, caught: 0, probation: false, contractor: false } });
   });
   it('round-trips tokens, paid hints and the path', () => {
     const g = { ...hinted(fresh(), 'disk-full', 'hint.df'), path: 'platform' };
@@ -232,12 +232,12 @@ describe('save format 3', () => {
     expect(deserialize(serialize(out.game), 'en')).toEqual(out);
     expect(hintsTaken(out.game, 'constructor')).toEqual(['y']);
   });
-  it('a version-4 save is newer: never read as 3, never written over', () => {
-    const st = memoryStorage({ [SAVE_KEY]: JSON.stringify({ format: 'nines-save', version: 4, game: { tokens: 99 } }) });
+  it('a save from a newer version is never read and never written over', () => {
+    const st = memoryStorage({ [SAVE_KEY]: JSON.stringify({ format: 'nines-save', version: SAVE_VERSION + 1, game: { tokens: 99 } }) });
     const { slot, game } = openSave(st, 'en', 1);
     expect(slot.status).toBe('newer');
     expect(slot.save({ ...game, tokens: 1 })).toBe(false);
-    expect(JSON.parse(st.data.get(SAVE_KEY)!).version).toBe(4);
+    expect(JSON.parse(st.data.get(SAVE_KEY)!).version).toBe(SAVE_VERSION + 1);
   });
   it('a version-1 save walks the whole chain', () => {
     const v1 = { format: 'nines-save', version: 1, game: { locale: 'en', money: 10 } };

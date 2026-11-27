@@ -19,7 +19,7 @@
       "minItems": 1,
       "uniqueItems": true,
       "items": { "$ref": "common.schema.json#/$defs/path" },
-      "description": "the career paths this quest counts towards; a quest for everyone lists all five"
+      "description": "the career paths this quest counts towards; a quest for everyone lists all six"
     },
     "roadmap_node": { "$ref": "common.schema.json#/$defs/id" },
     "requires": {
@@ -27,6 +27,14 @@
       "items": { "$ref": "common.schema.json#/$defs/id" },
       "uniqueItems": true,
       "maxItems": 8
+    },
+    "kind": {
+      "enum": ["job", "hustle", "service"],
+      "description": "job (the default): ordinary, legit work. hustle: a shady side job; finishing it rolls the scenario's risk (DESIGN.md, Side hustles). service: community service; finishing it ends probation, clears strikes and brings karma back to at least 0"
+    },
+    "available_when": {
+      "$ref": "common.schema.json#/$defs/expr",
+      "description": "a progress condition that must hold before the quest is offered or started, such as 'karma >= 0 && !probation' for a bank. No quest() here: use requires. A quest already started stays started"
     },
     "giver": { "$ref": "common.schema.json#/$defs/id", "description": "an npc id: this folder's npc.yaml or content/npcs/<id>" },
     "start": {
@@ -45,7 +53,8 @@
       "properties": {
         "money": { "type": "integer", "minimum": 0, "maximum": 5000 },
         "xp": { "type": "integer", "minimum": 0, "maximum": 500 },
-        "tech_debt": { "type": "integer", "minimum": 0, "maximum": 10, "description": "for meme side-quests: debt that later triggers extra incidents" }
+        "tech_debt": { "type": "integer", "minimum": 0, "maximum": 10, "description": "for meme side-quests: debt that later triggers extra incidents" },
+        "karma": { "type": "integer", "minimum": -50, "maximum": 50, "description": "karma when the quest is finished (DESIGN.md, Karma): hustles go down, pentests and community service go up" }
       }
     },
     "dialogue": {

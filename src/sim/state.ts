@@ -59,6 +59,14 @@ export interface SimState {
   counters: { commands: number; fails: number };
   /** command names run, "systemctl" and "systemctl restart" alike */
   ran: string[];
+  /** existing paths a command named as an operand (or the editor opened or saved), absolute */
+  touched: string[];
+  /** folders a recursive command went through (grep -r, du, rm -r): everything below counts as touched */
+  swept: string[];
+  /** files a reading command (cat, less, tail, grep, edit, mv) opened, absolute */
+  opened: string[];
+  /** folders grep -r read through: every file below counts as opened */
+  read: string[];
   restarted: string[];
   flags: Record<string, boolean>;
   firedEvents: string[];
@@ -203,6 +211,10 @@ export function createState(spec: ScenarioSpec): SimState {
     pipeline: { status: 'none', runs: 0 },
     counters: { commands: 0, fails: 0 },
     ran: [],
+    touched: [],
+    swept: [],
+    opened: [],
+    read: [],
     restarted: [],
     flags: {},
     firedEvents: [],

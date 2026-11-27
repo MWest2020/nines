@@ -46,7 +46,10 @@ src/
     i18n.ts         t(key, params), locale choice
     save.ts         save format, versioning, migrations
     progress.ts     PROGRESS_FACTS implemented over the saved game
-    game.ts         money, XP, quest completion, shop purchases, the Career Trail's state
+    game.ts         money, XP, quest completion, shop purchases, the Career Trail's state, hustles
+    karma.ts        karma, the meter, fines, the agency, community service, the seeded risk roll,
+                    the contractor's multipliers
+    tokens.ts       AI tokens: hints cost a token and scale a quest's reward
     persist.ts      the save slot over a key-value storage; never writes over a newer save
     talk.ts         what an NPC says, from the save
   world/          the map as a grid (pure)
@@ -91,7 +94,8 @@ tests/            Vitest: rules, sim, terminal input, quests played end to end, 
 ```
 
 Dependencies point one way: `game → battle, core, sim, rules, terminal, world, content/types`;
-`terminal → sim, rules`; `sim → rules`; `battle → core, rules`; `tools → battle, sim, rules, world` (to validate content with the same code
+`terminal → sim, rules`; `sim → rules`; `battle → core, rules`; `core → battle/seed.ts` (the
+seeded roll only: that file imports nothing); `tools → battle, sim, rules, world` (to validate content with the same code
 the game runs). Nothing in
 `rules`, `sim`, `core`, `battle`, `world` or `terminal` imports Phaser or touches `window`, `document` or `localStorage`
 directly (`save.ts` takes a storage object); `tests/guards.test.ts` checks it.
@@ -310,7 +314,7 @@ and     := not (("&&" | "and") not)*
 not     := ("!" | "not") not | cmp
 cmp     := atom (("==" | "!=" | "<" | "<=" | ">" | ">=") atom)?     no chaining
 atom    := NUMBER | STRING | true | false | IDENT | IDENT "(" args ")" | "(" expr ")"
-NUMBER  := 12 | 2.5 | 500M | 2G                                       K M G T = powers of 1024
+NUMBER  := 12 | 2.5 | 500M | 2G | -20                                 K M G T = powers of 1024; a minus only against the digit
 STRING  := "..." | '...'                                              escapes \\ \" \' \n \t
 ```
 
@@ -352,6 +356,8 @@ with the state they read:
 | `pods_running(deployment)` | boolean, all pods Running |
 | `ran(command)` | boolean, `"df"` or `"git commit"` |
 | `flag(name)` | boolean, set by events |
+| `touched(path)` | boolean: a command named `path` or something inside it as an operand (cd, cat, ls, less, edit, any pipe stage; not flag values or grep's pattern), or a recursive command (grep -r, du, rm -r; the working directory without an operand) walked a folder above it |
+| `opened(path)` | boolean: a reading command (cat, less, tail, grep, edit, mv) opened that file or one inside that folder, or grep -r read through a folder above it; `ls` and `du` only touch |
 | `pipeline_valid` | boolean, the pipeline file in the working tree validates |
 | `pipeline_status` | `none` \| `passed` \| `failed`, the last CI run |
 | `git_clean`, `commits`, `fails`, `commands` | boolean, numbers |
@@ -361,6 +367,8 @@ with the state they read:
 | `quest(id)` | `locked` \| `available` \| `active` \| `done` |
 | `xp(branch)`, `money`, `tech_debt` | numbers |
 | `has_item(id)`, `flag(name)` | booleans |
+| `karma`, `strikes` | numbers: -100..100, times caught since the last community service |
+| `probation`, `contractor` | booleans |
 
 | Battle facts (`battle/engine.ts`) | Type |
 | --------------------------------- | ---- |
@@ -413,12 +421,14 @@ title: title                       # locale keys
 summary: summary
 stage: junior                      # junior | medior | senior
 branch: linux                      # a roadmap branch (ten, kubernetes included)
-paths: [sre, systems, devops]      # career paths it counts towards: swe sre devops platform systems
+paths: [sre, systems, devops]      # career paths it counts towards: swe sre devops platform systems ethical
 roadmap_node: linux-disk           # lights up when done
 requires: []                       # quest ids
+kind?: job                         # job (default) | hustle (rolls its risk) | service (community service)
+available_when?: 'karma >= 0 && !probation'   # a progress condition, no quest(); gates the offer
 giver: femke                       # npc id
 start: {map: server-room, object: rack-web-01}   # interactable that opens the terminal
-reward: {money: 150, xp: 20, tech_debt?: 0}
+reward: {money: 150, xp: 20, tech_debt?: 0, karma?: 0}
 dialogue: {offer: [..], active: [..], done: [..]}
 
 # scenario.yaml
@@ -441,9 +451,10 @@ deployments:
         namespace?, replicas?, image?, config_map?}   # image and config_map show in kubectl describe
 cluster?: [/home/dev/shop-k8s/configmap.yaml]   # manifests whose objects the cluster runs at the start
 git: {root: /home/dev/shop, pipeline: {file: .nines-ci.yml, validator: nines-ci}}
-objectives: [{id, text, done_when}]          # all true = quest complete
+objectives: [{id, text, done_when, procedure?}]   # all true = quest complete; a contractor skips procedures
 hints: [{id, when, text}]
-events: [{id, when, say, money?, reset?, set_flag?}]
+events: [{id, when, say, money?, karma?, reset?, set_flag?}]
+risk?: {base, factors: [{id, when, add, text}]}   # a hustle's chance of getting caught (only a hustle)
 quick?: ["df -h", "du -sh /var/*"]            # the quick-command strip; must parse, start with a command
 outage?: {say?, money?}                       # override the built-in outage
 
@@ -473,6 +484,9 @@ file and then what a schema cannot express:
 - references resolve: `giver`, `requires`, `roadmap_node` (and its branch), maps; quest,
   roadmap and shop `requires` have no cycles; a roadmap node that a quest lights never requires
   (directly or further down) a node that no quest lights, so it can always open;
+- karma: `available_when` is a progress condition without `quest()` (use `requires`); a hustle
+  is a terminal quest with a `risk` and a negative `reward.karma`, and only a hustle has a risk;
+  `procedure` objectives belong to jobs, and at least one objective is not a procedure;
 - every condition parses and type-checks against the right registry; name arguments must be
   quoted literals and must exist: `service`, `pods_running` and `restarted` in that scenario,
   `flag` among that scenario's `set_flag`s, `ran` among the terminal's commands, `quest`,
@@ -600,7 +614,7 @@ uses (no dependencies of its own); it never sees content files.
 ```json
 {
   "format": "nines-save",
-  "version": 3,
+  "version": 4,
   "game": {
     "locale": "nl",
     "money": 350,
@@ -615,6 +629,11 @@ uses (no dependencies of its own); it never sees content files.
     "tokens": 2,
     "hints": {"service-down": ["hint.status"]},
     "path": null,
+    "karma": -10,
+    "strikes": 0,
+    "caught": 1,
+    "probation": false,
+    "contractor": false,
     "player": {"map": "junior-village", "x": 7, "y": 6, "facing": "down"}
   }
 }
@@ -624,14 +643,19 @@ uses (no dependencies of its own); it never sees content files.
 fixes card orders and pager rolls; `ticks` counts pager ticks (map changes); `claimed` lists
 the one-off event bonuses already paid (`<quest>/<event>`); `tokens` is the AI token balance,
 `hints` the hints paid for per quest (by locale key), `path` the career path (null until Medior
-City).
+City); `karma` (-100..100), `strikes` (times caught since the last community service), `caught`
+(times caught ever, which with the seed fixes the next risk roll), `probation` and `contractor`
+(DESIGN.md, Karma).
 
 - **Versioning.** `version` is the save format, not the game version. A format change bumps
   `SAVE_VERSION` and adds `MIGRATIONS[n]`, a pure function from version n to n+1; loading runs
   the chain. Version 2 (MVP build) added `seed`, `ticks` and `claimed`; `MIGRATIONS[1]` fills
   them in. Version 3 (27 Nov 2026) added `tokens`, `hints` and `path`; `MIGRATIONS[2]` gives an
   old save the new game's 3 tokens, counts no hint against any quest (they were free until now)
-  and chooses no path. Bad values are repaired (a missing, negative or fractional token count
+  and chooses no path. Version 4 (27 Nov 2026, karma) added `karma`, `strikes`, `caught`,
+  `probation` and `contractor`; `MIGRATIONS[3]` starts an old save where a new game starts
+  (karma 0, a clean record, employed). Karma is clamped to -100..100 and rounded; a broken
+  count repairs to 0; the two flags are true only when stored as `true`. Bad values are repaired (a missing, negative or fractional token count
   to 0, never a gift; non-string hint keys dropped); the store drops a `path` the roadmap does not
   have. A save from a newer version loads as `{kind: 'newer'}`: the game tells the player
   to update and does not autosave, so the newer save is never overwritten. `core/persist.ts`
@@ -799,10 +823,24 @@ City).
   `percent`, `hints` and the `full` amounts for the UI. Tokens come from a new game (3) and from
   consumable shop items (`consumable: true`, `effects.tokens`), which are never owned and can be
   bought again; a consumable has no other effect and nothing can require it.
-- **Career paths** (`core/game.ts` `choosePath`): five paths in `roadmap.yaml`; a quest lists
+- **Career paths** (`core/game.ts` `choosePath`): six paths in `roadmap.yaml`; a quest lists
   the paths it counts towards in `paths`. The choice is stored in the save (`path`, null until
   chosen), refused before the road to Medior City opens and once chosen. Nothing reads it yet:
   Medior City has no map (DESIGN.md, Career paths).
+- **Karma** (`core/karma.ts`, pure; DESIGN.md, Karma): `reward.karma` and event `karma` go through
+  `changeKarma` (bounds; a drop below zero reopens community service; a drop to -60 or below off
+  probation brings the agency: a fine and probation). A hustle's terminal win calls
+  `finishHustle(risk)`: `RunResult.risk` (sim/session.ts: base plus the factors that hold, 0 to
+  100) is capped at 95 and checked against `riskRoll` (battle/seed.ts `roll` of the save's seed,
+  the quest and `caught`). Clean pays through the same path as any quest; caught fines, costs
+  karma and a strike and keeps the quest active; the second strike is an arrest (probation).
+  `completeQuest` refuses a hustle. A service quest ends probation, wipes the strikes and lifts
+  karma to at least 0; its XP and the homelab's income are paid once per save (`claimed`
+  `service/<id>`). A hustle's first ending carries `lesson` (`claimed` `lesson/<id>`). A contractor (`contracted`: the flag, a job whose scenario has a `procedure`) skips `procedure`
+  objectives (`createSession` `skipProcedures`), is paid `CONTRACT_PERCENT` (150) of the money
+  and billed `DAMAGE_MULTIPLIER` (3) times every penalty. The terminal shows a hustle's heat, a
+  contractor's tag and skipped procedures; the HUD toasts karma changes; the Career Trail's
+  header draws the meter; the menu toggles "Work as".
 - **The Career Trail's state** (`core/game.ts` `trail`): a node is done when a quest that names
   it is done; open when every node it requires is done and its town is open; locked otherwise.
   Towns lie on one road in roadmap order: a town is open when its gate battle is won and every
@@ -823,7 +861,9 @@ the game registry by `main.ts`; get it with `getGameApi(scene)`:
 | `startQuest(id)` | world | available becomes active; returns `started`, `active` or why it was refused |
 | `completeQuest(id)` | terminal | pays at once (once only), saves, shows a reward toast; returns the `Reward`, or `null` if refused |
 | `showQuestDone(reward)` | terminal, battle | the giver's done lines in the dialogue box, after the overlay has closed |
-| `applyTerminalEvents(questId, events)` | terminal | money and flags from `RunResult.events` |
+| `applyTerminalEvents(questId, events)` | terminal | money, karma and flags from `RunResult.events`; returns what changed and the agency's fine |
+| `finishHustle(questId, risk)` | terminal | a hustle's win: roll, then pay (clean) or fine (caught, arrested); saves |
+| `setContractor(on)` | HUD menu | work as an independent contractor or an employee; saves |
 | `hintBoost()` | terminal, battle | pass to `createSession` and `startBattle` |
 | `hintOffer(questId, key)`, `askHint(questId, key)` | terminal, battle | the price of an unlocked hint (`shown`, `free`, `ask` with the reward percent before and after, `broke`); pay a token and save at once |
 | `recordBattle(id, 'won' \| 'lost')` | battle | won pays like `completeQuest`; lost costs nothing |

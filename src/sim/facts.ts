@@ -5,7 +5,7 @@ import type { Env } from '../rules/expr';
 import { has, own, setOwn } from '../rules/own';
 import { validateNinesCi } from './ci';
 import { manifestValue } from './manifest';
-import { join } from './path';
+import { isUnder, join } from './path';
 import { signature, type SimState } from './state';
 import { diskUsage, sizeOf } from './vfs';
 
@@ -82,6 +82,16 @@ export function scenarioEnv(src: FactSource): Env {
       },
       ran: (cmd) => s().ran.includes(String(cmd)),
       flag: (name) => own(s().flags, String(name)) === true,
+      touched: (p) => {
+        const want = String(p);
+        const st = s();
+        return st.touched.some((x) => x === want || isUnder(x, want)) || st.swept.some((x) => x === want || isUnder(want, x));
+      },
+      opened: (p) => {
+        const want = String(p);
+        const st = s();
+        return st.opened.some((x) => x === want || isUnder(x, want)) || st.read.some((x) => isUnder(want, x));
+      },
     },
   };
 }
