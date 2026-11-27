@@ -56,7 +56,9 @@ browsers.
 
 - Use the global git identity (`git config --global`); don't override `user.email`. Push over SSH. Small commits, one concern
   each. Work on a branch in a worktree; open a pull request; wait for green CI; merge with
-  `gh pr merge --squash --delete-branch --match-head-commit <sha>`.
+  `gh pr merge --squash --delete-branch --match-head-commit <sha>`. A pull request whose separate
+  commits are the point (the fourth-quest proof: one commit that only adds a cameo folder) merges
+  with `--rebase` instead, so those commits survive on main.
 - Tests: the parser and the condition language have tests for every change. A new command gets
   tests in `tests/sim/commands.test.ts`. A new quest gets a play-through in `tests/quests/`.
 - `docs/reference/roadmap.yml` is the overview's source: when work changes what "done" means
