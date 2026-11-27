@@ -425,6 +425,12 @@ function mediorCity() {
   m.put('detail', 16, 28, U(291), true); // potted trees
   m.put('detail', 3, 25, U(292), true);
 
+  // trees and a bench along the south sidewalk
+  for (const x of [3, 12, 26, 38]) lamp(m, x, 18);
+  m.put('detail', 22, 18, U(270), true);
+  m.put('detail', 9, 18, U(302), true);
+  m.put('detail', 30, 18, U(301), true);
+
   // the car park, south-east, with its pay station
   m.blob('ground', 24, 19, 18, 7, SIDEWALK);
   for (let x = 26; x < 40; x += 2) {
@@ -473,7 +479,7 @@ function theStack() {
   const H = 12;
   const m = mapBuilder(W, H);
   // wooden boards under the desks, the raised floor of the colocation room on the right
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) m.put('ground', x, y, x >= 13 ? ((x + y) % 5 === 0 ? N(7) : N(6)) : IN(24 + (x % 2)));
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) m.put('ground', x, y, x >= 13 ? ((x + y) % 5 === 0 ? N(7) : N(6)) : IN(24));
   for (let x = 0; x < W; x++) {
     m.put('ground', x, 0, N(8), true);
     m.put('ground', x, 1, N(9), true);

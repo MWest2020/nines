@@ -42,7 +42,7 @@ The Android launcher icons replace Capacitor's template icons and splash images,
 ours and are not shipped: the launch screen is the game's background colour
 (`android/app/src/main/res/drawable/splash.xml`), with the launcher icon on Android 12+.
 
-Only the one sheet the maps use is kept from each pack, not the whole download. The Pixel UI
+Only the one sheet the maps use is kept from each pack, not the whole download. Medior City and The Stack (27 Nov 2026) use the same sheets: no new files. The Pixel UI
 Pack and Kenney Fonts are not used: the dialogue box is drawn in code in our own shape.
 
 The sheets of Femke, Ravi and Bas (`content/quests/*/<name>.png`) are own work by the same

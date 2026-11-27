@@ -101,11 +101,11 @@ dialogue:
 
 - **`roadmap_node`** must already exist in `content/roadmap.yaml`, on the branch you give: a
   cameo lights an existing stone on the Career Trail and does not add one. The sample picked
-  `linux-services` ("Services and their logs", Junior). There is also `networking-dns` ("It is
-  always DNS"), but it is a Medior stone, and this is a Junior quest.
+  `linux-services` ("Services and their logs", Junior): the quest is about DNS, but there is no
+  Junior networking stone, and a Junior quest lights a Junior stone.
 - **`start`** for a terminal quest is a cameo rack: a spare terminal object kept free for
   guests. Today the server room has `cameo-rack-1` (taken by this sample) and `cameo-rack-2`
-  (free). An unclaimed rack is a rack like any other in the game; yours becomes a machine the
+  (free), and The Stack in Medior City has `cameo-desk-1` (free) for a Medior guest. An unclaimed rack is a rack like any other in the game; yours becomes a machine the
   moment your `quest.yaml` names it. Two quests on one rack are refused:
 
   ```
