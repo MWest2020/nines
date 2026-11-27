@@ -78,13 +78,13 @@ phases:
     name: "Playtest fixes"
     summary: "Mark's first playtest (27 Nov 2026): the basics every terminal should have, nginx and kubectl tooling, fair grading of written work, an explicit done, the kiosk logout and a social-engineering choice"
     done_means:
-      - {item: "A shared base shell on every machine: /etc (passwd, group, hostname, hosts, os-release, motd), whoami, id, who, w, last, logout, hostname, uname, ps, kill, pkill, env, echo, head, wc, sort, uniq, find, which, man, history; git log, diff, restore and -C everywhere a scenario has a repository", status: done, evidence: "PRURL"}
-      - {item: "nginx -t, -T, -v and -s reload with file:line errors; systemctl runs the same test; service-down lets the player test the fix before restarting", status: done, evidence: "PRURL"}
-      - {item: "kubectl get deploy|svc|cm|ns|events|rs|nodes|all (-n, -A, -o wide|yaml|name), describe deploy|svc|cm|node, rollout status|history|undo, scale, edit, delete pod, top, on the stored cluster model", status: done, evidence: "PRURL"}
-      - {item: "Fair free-text grading (src/sim/check.ts) with a note in the objectives panel on what is still wrong; applied to both pentest findings, the change tickets, the logbook and the drop file", status: done, evidence: "PRURL"}
-      - {item: "Done is explicit: a done banner with Close and Practice again (a fresh machine, no reward); a battle's win offers Practice again", status: done, evidence: "PRURL"}
-      - {item: "The kiosk logout (who, logout, kill, pkill -u) and Ans's desk: a dialogue choice for a borrowed library card that lowers the job's risk, costs karma and raises the fine when caught; honest unknown-command replies and a dev-only list of them", status: done, evidence: "PRURL"}
-      - {item: "Alpine shell in the browser: decided by Mark (default: keep extending the simulator)", status: open, evidence: "ISSUEURL"}
+      - {item: "A shared base shell on every machine: /etc (passwd, group, hostname, hosts, os-release, motd), whoami, id, who, w, last, logout, hostname, uname, ps, kill, pkill, env, echo, head, wc, sort, uniq, find, which, man, history; git log, diff, restore and -C everywhere a scenario has a repository", status: done, evidence: "https://github.com/MWest2020/nines/pull/31"}
+      - {item: "nginx -t, -T, -v and -s reload with file:line errors; systemctl runs the same test; service-down lets the player test the fix before restarting", status: done, evidence: "https://github.com/MWest2020/nines/pull/31"}
+      - {item: "kubectl get deploy|svc|cm|ns|events|rs|nodes|all (-n, -A, -o wide|yaml|name), describe deploy|svc|cm|node, rollout status|history|undo, scale, edit, delete pod, top, on the stored cluster model", status: done, evidence: "https://github.com/MWest2020/nines/pull/31"}
+      - {item: "Fair free-text grading (src/sim/check.ts) with a note in the objectives panel on what is still wrong; applied to both pentest findings, the change tickets, the logbook and the drop file", status: done, evidence: "https://github.com/MWest2020/nines/pull/31"}
+      - {item: "Done is explicit: a done banner with Close and Practice again (a fresh machine, no reward); a battle's win offers Practice again", status: done, evidence: "https://github.com/MWest2020/nines/pull/31"}
+      - {item: "The kiosk logout (who, logout, kill, pkill -u) and Ans's desk: a dialogue choice for a borrowed library card that lowers the job's risk, costs karma and raises the fine when caught; honest unknown-command replies and a dev-only list of them", status: done, evidence: "https://github.com/MWest2020/nines/pull/31"}
+      - {item: "Alpine shell in the browser: decided by Mark (default: keep extending the simulator)", status: open, evidence: "https://github.com/MWest2020/nines/issues/32"}
   - id: later
     name: "Later: share, cafés, minigames, swag"
     summary: "ideas Mark named on 27 Nov 2026, not designed beyond a line each; tech, memes and fun lead"
