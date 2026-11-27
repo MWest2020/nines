@@ -16,12 +16,13 @@ const scenario = (id: string): ScenarioSpec => {
 describe('content bundle', () => {
   it('has the three MVP quests with both languages', () => {
     const b = content();
-    expect(b.quests.filter((q) => q.scenario).map((q) => q.id)).toEqual(['broken-pipeline', 'disk-full', 'service-down']);
+    // at least these three: a guest cameo is one more folder, and these tests stay as they are
+    expect(b.quests.filter((q) => q.scenario).map((q) => q.id)).toEqual(expect.arrayContaining(['broken-pipeline', 'disk-full', 'service-down']));
     for (const q of b.quests) {
       expect(b.locales.en[questKey(q.id, q.quest.title)]).toBeTruthy();
       expect(b.locales.nl[questKey(q.id, q.quest.title)]).toBeTruthy();
     }
-    expect(b.credits).toEqual([{ name: 'Nines team', for: expect.arrayContaining(['quest:disk-full', 'npc:femke']) }]);
+    expect(b.credits).toEqual(expect.arrayContaining([{ name: 'Nines team', for: expect.arrayContaining(['quest:disk-full', 'npc:femke']) }]));
   });
 });
 

@@ -18,6 +18,7 @@ import functools
 import http.server
 import json
 import os
+import re
 import sys
 import threading
 import time
@@ -33,6 +34,9 @@ BASE = "/nines/"
 TILE = 16
 DIRS = {"up": (0, -1), "down": (0, 1), "left": (-1, 0), "right": (1, 0)}
 KEYS = {"up": "ArrowUp", "down": "ArrowDown", "left": "ArrowLeft", "right": "ArrowRight"}
+# NPC slots, as the game reads them (isNpcSlot in src/world/grid.ts): an NPC may stand there, so
+# the walk never plans through one, whichever quests the content folder holds.
+NPC_SLOT = re.compile(r"^(npc|cameo)-[0-9]+$|^gate-[a-z0-9-]+$")
 
 
 # ---------------------------------------------------------------- serving dist/ at /nines/
@@ -57,7 +61,7 @@ def serve() -> tuple[http.server.ThreadingHTTPServer, str]:
 # ---------------------------------------------------------------- the maps, as a grid
 
 class Grid:
-    def __init__(self, map_id: str, blocked_slots: set[str]):
+    def __init__(self, map_id: str):
         m = json.loads((MAPS / f"{map_id}.json").read_text())
         self.w, self.h = m["width"], m["height"]
         collides = set()
@@ -76,7 +80,7 @@ class Grid:
                 y = int((o["y"] + o.get("height", 0) / 2) // TILE)
                 self.objects[o["name"]] = (o["type"], x, y)
         self.doors = {(x, y) for (t, x, y) in self.objects.values() if t == "door"}
-        self.npcs = {(x, y) for n, (t, x, y) in self.objects.items() if n in blocked_slots}
+        self.npcs = {(x, y) for n, (t, x, y) in self.objects.items() if NPC_SLOT.match(n)}
 
     def free(self, p: tuple[int, int], goal: tuple[int, int]) -> bool:
         x, y = p
@@ -383,9 +387,8 @@ def main() -> int:
     httpd, origin = serve()
     outside: list[str] = []
     errors: list[str] = []
-    slots = {"npc-1", "npc-2", "npc-3", "npc-4", "gate-medior"}
-    village = Grid("junior-village", slots)
-    room = Grid("server-room", set())
+    village = Grid("junior-village")
+    room = Grid("server-room")
     t0 = time.time()
     with sync_playwright() as pw:
         exe = os.environ.get("CHROME")

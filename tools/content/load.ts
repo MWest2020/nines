@@ -94,6 +94,13 @@ export interface SpriteRef {
   file: string;
 }
 
+/**
+ * A spare map object for a guest quest: a terminal or battle object named cameo-<something>
+ * (cameo-rack-1 in the server room) may start no quest until a cameo claims it, so a terminal
+ * cameo is one new folder and no map edit (CONTRIBUTING.md).
+ */
+const isCameoObject = (name: string): boolean => /^cameo-[a-z0-9]+(-[a-z0-9]+)*$/.test(name) && !isNpcSlot(name);
+
 /** Control characters other than tab, newline and carriage return (ANSI/OSC escapes start here). */
 const CONTROL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/;
 
@@ -773,15 +780,19 @@ export function loadContent(contentDir: string, schemaDir: string, options: Load
     if (!npcIds.includes(q.quest.giver)) errors.push(`content/quests/${q.id}/quest.yaml: giver "${q.quest.giver}" is not an npc`);
   }
 
-  // ---- maps against content: every terminal and battle object starts a quest, gates exist, and
-  // everything can be reached on foot from where the player arrives
-  const questStarts = new Set(quests.map((q) => `${q.quest.start.map}/${q.quest.start.object}`));
+  // ---- maps against content: every terminal and battle object starts one quest (a spare
+  // cameo-* object may wait for its guest), gates exist, and everything can be reached on foot
+  // from where the player arrives
+  const questStarts = quests.map((q) => `${q.quest.start.map}/${q.quest.start.object}`);
   for (const [id, w] of worlds) {
     const file = join(mapsDir, `${id}.json`);
     for (const o of w.objects) {
-      if ((o.type === 'terminal' || o.type === 'battle') && !questStarts.has(`${id}/${o.name}`)) {
+      if (o.type !== 'terminal' && o.type !== 'battle') continue;
+      const starting = quests.filter((_, i) => questStarts[i] === `${id}/${o.name}`).map((q) => q.id);
+      if (starting.length === 0 && !isCameoObject(o.name)) {
         err(file, `${o.type} "${o.name}" starts no quest (no quest.yaml has start: {map: ${id}, object: ${o.name}})`);
       }
+      if (starting.length > 1) err(file, `${o.type} "${o.name}" is the start of more than one quest (${starting.join(', ')}); pick a free one`);
     }
     // where the player can appear: player-start and every spawn point a door leads to
     const arrivals = new Set<string>(w.objects.filter((o) => o.name === 'player-start').map((o) => o.name));
