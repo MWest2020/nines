@@ -90,7 +90,7 @@ describe('the battle screen', () => {
     expect(S.toggle(s, 'nope')).toBe(s);
   });
 
-  it('a pick-one round replaces the pick; toggling it again clears it', () => {
+  it('a pick-one round replaces the pick, like radio buttons', () => {
     let s = answer(S.openScreen(B), ['a', 'b']);
     s = S.next(s);
     expect(S.interactionOf(s.view!.round)).toBe('one');
@@ -98,10 +98,21 @@ describe('the battle screen', () => {
     s = S.toggle(s, 'x');
     s = S.toggle(s, 'y');
     expect(s.selection).toEqual(['y']);
-    s = S.toggle(s, 'y');
-    expect(s.selection).toEqual([]);
-    expect(S.canSend(s)).toBe(false);
-    expect(S.send(s)).toBe(s);
+    expect(S.toggle(s, 'y')).toBe(s);
+    expect(S.canSend(s)).toBe(true);
+    const fresh = S.next(answer(S.openScreen(B), ['a', 'b']));
+    expect(S.canSend(fresh)).toBe(false);
+    expect(S.send(fresh)).toBe(fresh);
+  });
+
+  it('remembers attempts across openings: hints show when a battle is opened again', () => {
+    const s = S.openScreen(B);
+    expect(S.attemptsAfter(s)).toBe(0); // opened and left at once
+    const one = answer(s, ['a', 'b']);
+    expect(S.attemptsAfter(one)).toBe(1); // left half-way
+    const again = S.openScreen(B, { attempt: S.attemptsAfter(one) });
+    expect(again.state.attempt).toBe(1);
+    expect(again.view!.hints).toEqual(['hint.ask']);
   });
 
   it('send puts the answer and its note in the transcript, then continue asks the next question', () => {
@@ -153,6 +164,7 @@ describe('the battle screen', () => {
     expect(S.whiteboard(s).proposal).toEqual([]);
     expect(S.boardText('"Per key: 100 a minute."')).toBe('Per key: 100 a minute.');
     expect(S.boardText('„Per sleutel."')).toBe('Per sleutel.');
+    expect(S.boardText('Ingrid says "go"')).toBe('Ingrid says "go"');
   });
 
   it('a perfect play wins, with the outro and a debrief row per round', () => {

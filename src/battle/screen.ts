@@ -115,13 +115,22 @@ function begin(b: CompiledBattle, quest: string, state: BattleState): Screen {
   return { battle: b, quest, state, phase: 'answer', view, selection: freshSelection(view), transcript, debrief: [], last: null };
 }
 
-/** Open the screen on a fresh battle. `quest` is the quest id whose locale keys the battle uses. */
-export function openScreen(b: CompiledBattle, opts: { seed?: number; hintBoost?: number } = {}): Screen {
-  return begin(b, b.id, startBattle(b, opts));
+/**
+ * Open the screen on a fresh battle. `attempt` is how many tries came before this one (the game
+ * remembers it while it runs, so a battle closed and opened again still shows its hints and a
+ * new card order).
+ */
+export function openScreen(b: CompiledBattle, opts: { seed?: number; hintBoost?: number; attempt?: number } = {}): Screen {
+  return begin(b, b.id, { ...startBattle(b, opts), attempt: Math.max(0, opts.attempt ?? 0) });
 }
 
+/** The attempt number for the next opening after the player closes this screen: a finished try
+ *  or one left half-way (after at least one answer) counts; opening and leaving at once does not. */
+export const attemptsAfter = (s: Screen): number => s.state.attempt + (s.state.status !== 'active' || s.state.log.length > 0 ? 1 : 0);
+
 /**
- * Pick or unpick a card. Pick-one rounds replace the pick. A pick-many round never holds more
+ * Pick or unpick a card. Pick-one rounds work like radio buttons: a pick replaces the pick, and
+ * picking the picked card again keeps it. A pick-many round never holds more
  * than it allows: a further pick is refused (the screen is returned unchanged) until one is
  * unpicked. Order rounds ignore this (use move).
  */
@@ -129,7 +138,7 @@ export function toggle(s: Screen, id: string): Screen {
   if (s.phase !== 'answer' || !s.view || !s.view.cards.includes(id)) return s;
   const mode = interactionOf(s.view.round);
   if (mode === 'order') return s;
-  if (mode === 'one') return { ...s, selection: s.selection[0] === id ? [] : [id] };
+  if (mode === 'one') return s.selection[0] === id ? s : { ...s, selection: [id] };
   if (s.selection.includes(id)) return { ...s, selection: s.selection.filter((x) => x !== id) };
   if (s.selection.length >= s.view.pick) return s;
   return { ...s, selection: [...s.selection, id] };
@@ -219,7 +228,10 @@ export function whiteboard(s: Screen): { notes: string[]; proposal: string[] } {
 }
 
 /** Drop the speech marks around a whiteboard note (it is written up, not said). */
-export const boardText = (text: string): string => text.replace(/^\s*["“„]/, '').replace(/["”]\s*$/, '');
+export const boardText = (text: string): string => {
+  const m = /^\s*["“„](.*?)["”]?\s*$/s.exec(text);
+  return m ? m[1]! : text;
+};
 
 /** Meter tone (DESIGN.md, Battles: Colours): Confidence is "ok" above half its maximum. */
 export const confidenceTone = (value: number, max: number): 'ok' | 'low' => (value * 2 > max ? 'ok' : 'low');

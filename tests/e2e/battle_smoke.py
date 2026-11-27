@@ -14,7 +14,8 @@ It serves dist/ itself on 127.0.0.1 for the length of the run (no dev server) an
      round), then Try again, a hint on the second try, and a win;
   3. the 3 AM pager going off on entering the map (a seed chosen so the roll fires), a few
      rounds in, for a screenshot;
-  4. the screen in Dutch, left half-way with Escape (nothing recorded).
+  4. the screen in Dutch, left half-way with Escape (nothing recorded), and opened again by
+     talking to Daan: the hint for a second try shows.
 
 It fails when any request leaves the origin.
 """
@@ -142,8 +143,9 @@ def focused_id(page: Page) -> str | None:
 
 
 def pick_by_keys(page: Page, target: str) -> None:
-    """Arrow to a card and press Space: the keyboard path."""
-    page.locator(".nb-answer [data-id][tabindex='0']").first.focus()
+    """Arrow to a card and press Space: the keyboard path. The overlay itself must have put the
+    keyboard on the cards (at the start and after Continue)."""
+    check(page.evaluate("() => !!document.activeElement.closest('.nb-cards')"), "the keyboard is on the cards")
     for _ in range(12):
         if focused_id(page) == target:
             break
@@ -383,10 +385,16 @@ def check_dutch(browser, origin: str, outside: list) -> None:
     side = page.locator(".nb-side").inner_text()
     check("Zelfvertrouwen" in side and "Druk" in side, "meters: Zelfvertrouwen and Druk")
     check(page.locator("[data-action='send']").inner_text() == "Versturen", "Send is Versturen")
+    check("Hint" not in side, "no hint on a first try")
+    for a in answer_for(card_ids(page), FRIDAY_WORST):
+        pick_by_click(page, a)
+    send_by_keys(page)
     page.keyboard.press("Escape")
     page.wait_for_timeout(300)
     check(page.locator(".nb-battle").count() == 0, "Escape leaves half-way")
     check(game_save(page)["quests"].get("friday-scope") == "active", "leaving records nothing: the quest stays active")
+    press_until_overlay(page)  # talk to Daan again
+    check("Hint" in page.locator(".nb-side").inner_text(), "opened again after leaving half-way: the hint shows")
     page.context.close()
 
 

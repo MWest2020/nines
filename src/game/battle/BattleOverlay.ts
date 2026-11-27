@@ -45,9 +45,15 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
 /** The overlay's tab stops: buttons and the one card or step per list that holds the tab stop. */
 const FOCUSABLE = 'button:not([disabled]):not([tabindex="-1"]), [tabindex="0"]';
 
-/** Open the overlay on a screen; resolves when the player closes it. */
-export function runBattle(opts: OverlayOptions): Promise<void> {
-  return new Promise((resolve) => new BattleOverlay(opts, resolve));
+/** Open the overlay on a screen; resolves with the last screen when the player closes it. */
+export function runBattle(opts: OverlayOptions): Promise<S.Screen> {
+  return new Promise((resolve, reject) => {
+    try {
+      new BattleOverlay(opts, resolve);
+    } catch (err) {
+      reject(err);
+    }
+  });
 }
 
 class BattleOverlay {
@@ -69,7 +75,7 @@ class BattleOverlay {
 
   constructor(
     private readonly opts: OverlayOptions,
-    private readonly resolve: () => void,
+    private readonly resolve: (last: S.Screen) => void,
   ) {
     this.s = opts.screen;
     this.t = opts.t;
@@ -99,7 +105,9 @@ class BattleOverlay {
     this.log = el('div', 'nb-log');
     this.log.setAttribute('role', 'log');
     this.log.setAttribute('aria-live', 'polite');
-    this.log.tabIndex = -1;
+    // a tab stop, so the keyboard can scroll back through the conversation
+    this.log.tabIndex = 0;
+    this.log.setAttribute('aria-label', this.t('ui.battle.transcript'));
     this.answer = el('section', 'nb-answer');
     this.end = el('section', 'nb-end');
     main.append(this.board, this.log, this.answer, this.end);
@@ -112,8 +120,13 @@ class BattleOverlay {
     this.root.append(win, this.sr);
     (opts.parent ?? document.body).append(this.root);
 
+    try {
+      this.render();
+    } catch (err) {
+      this.root.remove();
+      throw err;
+    }
     window.addEventListener('keydown', this.onKey, true);
-    this.render();
     this.focusFirst();
   }
 
@@ -123,7 +136,7 @@ class BattleOverlay {
     window.removeEventListener('keydown', this.onKey, true);
     this.root.remove();
     if (this.before instanceof HTMLElement && this.before.isConnected) this.before.focus();
-    this.resolve();
+    this.resolve(this.s);
   }
 
   private set(next: S.Screen): void {
@@ -325,7 +338,10 @@ class BattleOverlay {
     this.answer.replaceChildren();
     if (s.phase === 'review') {
       const foot = el('div', 'nb-foot');
-      const go = this.button(t(S.finished(s) ? 'ui.battle.debrief' : 'ui.battle.continue'), () => this.set(S.next(this.s)), true);
+      const go = this.button(t(S.finished(s) ? 'ui.battle.debrief' : 'ui.battle.continue'), () => {
+        this.set(S.next(this.s));
+        if (this.s.phase === 'answer') this.focusFirst();
+      }, true);
       go.dataset.action = 'continue';
       foot.append(go);
       this.answer.append(foot);
@@ -379,6 +395,8 @@ class BattleOverlay {
     const list = el('div', 'nb-cards');
     list.setAttribute('role', mode === 'one' ? 'radiogroup' : 'group');
     list.setAttribute('aria-labelledby', 'nb-instr');
+    const q = this.questionId();
+    if (q) list.setAttribute('aria-describedby', q);
     const full = S.full(s);
     v.cards.forEach((id, i) => {
       const picked = s.selection.includes(id);
@@ -411,10 +429,11 @@ class BattleOverlay {
     const n = s.selection.length;
     const help = el('p', 'nb-sr', t('ui.battle.order_help'));
     help.id = 'nb-order-help';
-    const wrap = el('div', 'nb-cards');
+    const wrap = el('div', 'nb-cards-wrap');
     const ol = el('ol', 'nb-cards');
     ol.setAttribute('aria-labelledby', 'nb-instr');
-    ol.setAttribute('aria-describedby', 'nb-order-help');
+    const q = this.questionId();
+    ol.setAttribute('aria-describedby', q ? `${q} nb-order-help` : 'nb-order-help');
     s.selection.forEach((id, i) => {
       const text = t(questKey(s.quest, S.cardText(round, id)));
       const li = el('li', this.grabbed === id ? 'nb-step nb-grabbed' : 'nb-step');
@@ -422,7 +441,8 @@ class BattleOverlay {
       li.tabIndex = (this.grabbed ?? s.selection[0]) === id ? 0 : -1;
       li.setAttribute('aria-label', t('ui.battle.step', { n: i + 1, of: n, text }));
       if (this.grabbed === id) li.setAttribute('aria-current', 'true');
-      const handle = el('span', 'nb-handle', '⠿');
+      // grabbed: a different handle and a visible word, not only a colour
+      const handle = el('span', 'nb-handle', this.grabbed === id ? '⇅' : '⠿');
       handle.setAttribute('aria-hidden', 'true');
       handle.addEventListener('pointerdown', (e) => this.dragStart(e, ol, id));
       const up = el('button', 'nb-arrow', '↑');
@@ -439,7 +459,9 @@ class BattleOverlay {
       down.disabled = i === n - 1;
       down.setAttribute('aria-label', t('ui.battle.move_down'));
       down.addEventListener('click', () => this.moveBy(id, 1, false));
-      li.append(handle, el('span', 'nb-pos', `${i + 1}.`), el('span', 'nb-step-text', text), up, down);
+      li.append(handle, el('span', 'nb-pos', `${i + 1}.`), el('span', 'nb-step-text', text));
+      if (this.grabbed === id) li.append(el('span', 'nb-moving', t('ui.battle.moving')));
+      li.append(up, down);
       ol.append(li);
     });
     wrap.append(help, ol);
@@ -476,15 +498,26 @@ class BattleOverlay {
       ol.removeEventListener('pointermove', onMove);
       ol.removeEventListener('pointerup', onUp);
       ol.removeEventListener('pointercancel', onUp);
+      dragged?.classList.remove('nb-dragging');
       const order = [...ol.querySelectorAll<HTMLElement>('li')].map((li) => li.dataset.id!);
       const from = this.s.selection.indexOf(id);
       const to = order.indexOf(id);
+      if (!ol.isConnected || from < 0 || to === from) return;
       this.set(S.move(this.s, from, to));
       this.say(this.t('ui.battle.moved', { n: to + 1, of: order.length }));
     };
     ol.addEventListener('pointermove', onMove);
     ol.addEventListener('pointerup', onUp);
     ol.addEventListener('pointercancel', onUp);
+  }
+
+  /** The id of the question on screen (the attacker's latest message), for aria-describedby. */
+  private questionId(): string | null {
+    const bubbles = this.log.querySelectorAll<HTMLElement>('.nb-them .nb-bubble');
+    const last = bubbles[bubbles.length - 1];
+    if (!last) return null;
+    last.id ||= `nb-q-${bubbles.length}`;
+    return last.id;
   }
 
   private send(): void {
@@ -517,6 +550,9 @@ class BattleOverlay {
 
     this.end.append(el('h3', undefined, t('ui.battle.debrief')));
     const ol = el('ol', 'nb-debrief');
+    // a tab stop, so the keyboard can scroll through the debrief
+    ol.tabIndex = 0;
+    ol.setAttribute('aria-label', t('ui.battle.debrief'));
     for (const row of s.debrief) {
       const li = el('li');
       li.append(el('p', 'nb-q', t(row.question)));
@@ -579,7 +615,7 @@ class BattleOverlay {
       const after = items.findIndex((x) => active.compareDocumentPosition(x) & Node.DOCUMENT_POSITION_FOLLOWING);
       i = (after < 0 ? items.length : after) - (e.shiftKey ? 0 : 1);
     }
-    const nextIndex = i < 0 && !e.shiftKey ? 0 : (i + (e.shiftKey ? -1 : 1) + items.length) % items.length;
+    const nextIndex = i < 0 ? (e.shiftKey ? items.length - 1 : 0) : (i + (e.shiftKey ? -1 : 1) + items.length) % items.length;
     e.preventDefault();
     items[nextIndex]!.focus();
   }
@@ -590,6 +626,16 @@ class BattleOverlay {
     const go = (j: number) => {
       e.preventDefault();
       const c = cards[(j + cards.length) % cards.length]!;
+      // radio buttons: the arrows also pick (a pick-many group only moves the focus)
+      if (c.getAttribute('role') === 'radio') {
+        this.set(S.toggle(this.s, c.dataset.id!));
+        const fresh = this.answer.querySelector<HTMLElement>(`[data-id="${CSS.escape(c.dataset.id!)}"]`);
+        if (fresh) {
+          this.rove(fresh);
+          fresh.focus();
+        }
+        return;
+      }
       this.rove(c);
       c.focus();
     };

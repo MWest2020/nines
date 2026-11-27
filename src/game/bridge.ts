@@ -53,7 +53,8 @@ export function bridgeWorld(game: Phaser.Game, api: GameApi): void {
 
   game.events.on(WORLD_EVENTS.enter, (e: EnterEvent) => {
     const pager = api.enterMap({ map: e.map, x: e.x, y: e.y, facing: e.facing });
-    if (!pager || battleOpen()) return;
+    // not over another overlay or a dialogue (the save notice at boot, say): the page is missed
+    if (!pager || battleOpen() || api.isBusy()) return;
     // The 3 AM page: the quest starts now, and the battle opens over the world.
     api.startQuest(pager);
     void openBattle(game, api, pager).catch(() => undefined);

@@ -691,7 +691,9 @@ the one-off event bonuses already paid (`<quest>/<event>`).
   three phases (answer, review with the explanations, end with the debrief), a pick-one round
   replaces its pick, a pick-many round refuses more than `pick`, an order round starts with
   every card and moves them, Send works only for a complete answer, and Try again calls
-  `retryBattle`. Locale keys only, translated when drawn. The first `intro` line is the
+  `retryBattle`. Tries are counted per battle while the game runs (`attemptsAfter`, not saved),
+  so a battle closed after a loss or half-way and opened again starts at the next attempt, with
+  its hints and a new card order. Locale keys only, translated when drawn. The first `intro` line is the
   announcement (`PAGER 03:07 · ...`); the whiteboard of a design interview holds every prompt
   line before a round's question (the requirements so far) and, during a `flaw` round, only the
   proposal. The attacker's portrait is the giver's standing frame cropped to the head and drawn
@@ -793,6 +795,7 @@ Pinned exactly, each version published at least two weeks before it was added (c
 | @types/node | 22.20.5 | dev | types for tools and tests |
 | @xterm/xterm | 6.0.0 | runtime | the terminal's output renderer (MIT); no addons; published 22 Dec 2025, the current release |
 | @capacitor/core, cli, android | 8.x | Android phase | pinned when that phase starts |
+| playwright (Python) | 1.65.2 | by hand only, never shipped or in package.json | the browser smoke tests in `tests/e2e/`, run through `uv run --with playwright==1.65.2` under the memory cap |
 
 ## Testing and CI
 

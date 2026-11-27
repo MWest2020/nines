@@ -1,12 +1,13 @@
 // Opening a battle from the world: compile it, hold the UI while the overlay is open, record
 // each finished try (a win pays once, a loss costs nothing), and after the overlay closes let
-// the quest giver say their "done" lines. A gate battle into a town that has no map yet adds
-// that the town opens later. The bridge (src/game/bridge.ts) calls this for an NPC talk, a
+// the quest giver say their "done" lines. A gate battle into a town that has no map yet says on
+// its end screen that the town opens later. Tries are counted per battle while the game runs,
+// so a battle closed after a loss and opened again shows its hints and a new card order. The bridge (src/game/bridge.ts) calls this for an NPC talk, a
 // battle object and the pager.
 
 import type Phaser from 'phaser';
 import { compileBattle } from '../../battle/engine';
-import { openScreen } from '../../battle/screen';
+import { attemptsAfter, openScreen } from '../../battle/screen';
 import { townNotBuilt } from '../../battle/triggers';
 import { type QuestEntry, questKey } from '../../content/types';
 import type { Reward } from '../../core/game';
@@ -16,6 +17,8 @@ import { allNpcs, standFrame } from '../world/sprites';
 import { runBattle } from './BattleOverlay';
 
 let open = false;
+/** Tries per battle while the game runs (not saved, like battle sessions): hints grow with them. */
+const attempts = new Map<string, number>();
 
 /** Is a battle overlay open now? */
 export const battleOpen = (): boolean => open;
@@ -70,30 +73,30 @@ export async function openBattle(game: Phaser.Game, api: GameApi, questId: strin
   if (!entry?.battle || open) return;
   open = true;
   const release = api.hold();
-  const result: { paid: Reward | null; won: boolean } = { paid: null, won: false };
+  const result: { paid: Reward | null } = { paid: null };
   const later = gateLater(api, entry);
   try {
     const battle = compileBattle(entry.id, entry.battle);
     const npc = findNpc(api.store.content, entry.quest.giver);
     const attacker = api.t(questKey(entry.id, entry.battle.attacker));
-    await runBattle({
+    const last = await runBattle({
       t: api.t,
-      screen: openScreen(battle, { seed: api.store.game.seed, hintBoost: api.hintBoost() }),
+      screen: openScreen(battle, { seed: api.store.game.seed, hintBoost: api.hintBoost(), attempt: attempts.get(entry.id) ?? 0 }),
       attacker,
       speaker: npc ? api.t(npc.key(npc.spec.name)) : attacker,
       portrait: portraitOf(game, api, npc?.spec.id),
       record: (outcome) => {
         const reward = api.recordBattle(entry.id, outcome);
         if (outcome === 'lost') return [];
-        result.won = true;
         result.paid ??= reward;
         return [...rewardLines(api, reward), ...(later ? [api.t('ui.battle.gate_later', later)] : [])];
       },
     });
+    attempts.set(entry.id, attemptsAfter(last));
   } finally {
     open = false;
     release();
   }
+  // the end screen already said that a gate's town opens later
   if (result.paid) await api.showQuestDone(result.paid);
-  if (result.won && later) await api.showDialogue([{ text: 'ui.battle.gate_later', params: later }]);
 }
