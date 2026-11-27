@@ -1,0 +1,26 @@
+# A side hustle (DESIGN.md, Side hustles). Vince, behind the office, has a client who sells snacks
+# from vending machines and wants a competitor's price list. The "hack" is abstract on purpose:
+# a fictional company left a fictional internal folder on its public file share, and the player
+# reads it from a shared kiosk. No real technique, tool or payload; the lesson at the end points
+# to responsible disclosure. Finishing it rolls the scenario's risk against the save's seed.
+schema: 1
+id: vending-prices
+author: {name: "Nines team"}
+title: title
+summary: summary
+stage: junior
+branch: linux
+# same skills as the pentest, other side of the law
+paths: [ethical, systems]
+roadmap_node: linux-files
+requires: []
+kind: hustle
+# the fixer does not work with people whose karma is too clean
+available_when: 'karma <= 20'
+giver: vince
+start: {map: junior-village, object: back-alley-laptop}
+reward: {money: 400, xp: 15, karma: -20}
+dialogue:
+  offer: [offer.1, offer.2, offer.3]
+  active: [active.1]
+  done: [done.1, done.2]

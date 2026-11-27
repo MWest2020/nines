@@ -1,0 +1,69 @@
+# bakery-01: Bakkerij De Korst's web shop. This morning's price update wrote a comma where the
+# shop wants a dot, and the shop refuses to start. Procedures (a contractor may skip them): the
+# change ticket in ~/changes and the fix committed in /srv/bakery for review. Damage: deleting
+# today's orders.
+schema: 1
+host: bakery-01
+user: dev
+home: /home/dev
+motd: motd
+mounts:
+  - {path: /, device: /dev/sda1, size: 20G, base_used: 4G}
+dirs: [/tmp]
+files:
+  /home/dev/changes/CHG-1042.txt: |
+    CHANGE CHG-1042 (Bakkerij De Korst web shop)
+    What: ?
+    Why: ?
+    Rollback: ?
+  /home/dev/rules.txt: |
+    Femke's rules for production changes:
+    1. a change ticket in ~/changes (what, why, rollback)
+    2. the fix committed in git, so a colleague can review it
+    Contractors: your call. Your invoice. Your risk.
+  /srv/bakery/prices.yaml: |
+    # prices in euros, with a dot
+    bread: 3.20
+    croissant: 1,80
+    apple_pie: 14.50
+  /srv/bakery/shop.yaml: |
+    name: Bakkerij De Korst
+    currency: EUR
+    orders: /srv/bakery/data/orders.db
+  /srv/bakery/data/orders.db: {size: 12M}
+git: {root: /srv/bakery}
+services:
+  bakery-shop:
+    description: Bakkerij De Korst web shop
+    state: failed
+    logs:
+      - "Nov 26 07:30:02 bakery-01 systemd[1]: Starting bakery-shop.service - Bakkerij De Korst web shop..."
+      - "Nov 26 07:30:02 bakery-01 bakery-shop[611]: error: /srv/bakery/prices.yaml line 3: price '1,80' for croissant is not a number (use a dot: 1.80)"
+      - "Nov 26 07:30:02 bakery-01 systemd[1]: bakery-shop.service: Main process exited, code=exited, status=1/FAILURE"
+      - "Nov 26 07:30:02 bakery-01 systemd[1]: bakery-shop.service: Failed with result 'exit-code'."
+    restart:
+      succeeds_if: 'file_contains("/srv/bakery/prices.yaml", "croissant: 1.80") && !file_contains("/srv/bakery/prices.yaml", "1,80") && exists("/srv/bakery/data/orders.db")'
+      logs_on_success:
+        - "Nov 26 09:00:00 bakery-01 bakery-shop[902]: loaded 3 prices, 41 orders for today"
+        - "Nov 26 09:00:00 bakery-01 systemd[1]: Started bakery-shop.service - Bakkerij De Korst web shop."
+      logs_on_failure:
+        - "Nov 26 09:00:00 bakery-01 bakery-shop[902]: error: /srv/bakery/prices.yaml: a price is not a number (use a dot)"
+quick:
+  - systemctl status bakery-shop
+  - "cat ~/rules.txt"
+  - "edit /srv/bakery/prices.yaml"
+  - help
+objectives:
+  - {id: shop, text: obj.shop, done_when: 'service("bakery-shop") == "active"'}
+  - {id: ticket, text: obj.ticket, procedure: true, done_when: 'exists("/home/dev/changes/CHG-1042.txt") && !file_contains("/home/dev/changes/CHG-1042.txt", ": ?")'}
+  - {id: review, text: obj.review, procedure: true, done_when: 'commits >= 1 && git_clean'}
+hints:
+  - {id: status, when: 'commands >= 3 && !ran("systemctl status") && !ran("journalctl")', text: hint.status}
+  - {id: comma, when: '(ran("systemctl status") || ran("journalctl")) && service("bakery-shop") == "failed" && commands >= 6', text: hint.comma}
+  - {id: paperwork, when: 'service("bakery-shop") == "active" && commits == 0 && commands >= 8', text: hint.paperwork}
+events:
+  - id: orders-gone
+    when: 'removed("/srv/bakery/data/orders.db")'
+    say: event.orders_gone
+    money: -120
+    reset: true

@@ -1,0 +1,21 @@
+# The independent contractor's quest variant (DESIGN.md, Independent contractor). An employee
+# does it by the book: the fix, a change ticket and a commit. A contractor (menu: Work as) may
+# skip the two procedures, is paid 150%, and pays three times the damage of a mistake, such as
+# deleting today's orders. Femke gives it once Disk full is done.
+schema: 1
+id: bakery-hotfix
+author: {name: "Nines team"}
+title: title
+summary: summary
+stage: junior
+branch: incident
+paths: [devops, sre, swe]
+roadmap_node: incident-first
+requires: [disk-full]
+giver: femke
+start: {map: server-room, object: rack-bakery-01}
+reward: {money: 200, xp: 25}
+dialogue:
+  offer: [offer.1, offer.2, offer.3]
+  active: [active.1]
+  done: [done.1]

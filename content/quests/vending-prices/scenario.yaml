@@ -1,0 +1,82 @@
+# kiosk-07: the co-working space's shared kiosk. Munchr Vending's public file share is mounted
+# at /mnt/munchr-public (fictional company, fictional share). Someone left the internal folder
+# in it. The job: two 2027 prices into ~/drop/for-vince.txt. The risk is what gives the player
+# away: snooping beyond the job (the HR folder, or a recursive grep that walks through it), a
+# beeping kiosk (failed commands), dawdling, taking the file instead of reading it, and staying
+# signed in with their own library card when they drop.
+schema: 1
+host: kiosk-07
+user: guest
+home: /home/guest
+motd: motd
+mounts:
+  - {path: /, device: /dev/sda1, size: 16G, base_used: 5G}
+  - {path: /mnt/munchr-public, device: /dev/munchr-share, size: 50G, base_used: 3G}
+dirs: [/tmp, /mnt/munchr-public/photos]
+files:
+  /home/guest/job.txt: |
+    From: V.
+    Client: SnackoMat (vending machines, the orange ones).
+    Wants: Munchr Vending's 2027 prices for the Choco Bar and the Cola.
+
+    Munchr's public file share is mounted on this kiosk: /mnt/munchr-public
+    Word is someone left more than logos in there.
+
+    Put the two prices in ~/drop/for-vince.txt. The moment that file is right, I collect.
+    So: get in, read only what you need, and sign out of the kiosk BEFORE you drop.
+    You're signed in with your own library card. Think about that.
+  /home/guest/drop/for-vince.txt: |
+    choco_bar: ?
+    cola: ?
+  /home/guest/.kiosk/signed-in-as.txt: |
+    Kiosk session: library card 4417 (that's you).
+    Remove this file to sign out.
+  /mnt/munchr-public/README.txt: |
+    Munchr Vending: public share
+    Logos and photos for the website and our partners.
+    Internal files do NOT belong here.
+    (Dave, is /internal still in here? Move it before Friday!!)
+  /mnt/munchr-public/logo.png: {size: 48K}
+  /mnt/munchr-public/photos/choco-bar.jpg: {size: 310K}
+  /mnt/munchr-public/photos/cola.jpg: {size: 290K}
+  /mnt/munchr-public/internal/prices-2027.csv: |
+    product,price_2026,price_2027
+    choco_bar,1.10,1.25
+    cola,1.30,1.45
+    crisps_paprika,1.00,1.10
+    water,0.90,0.95
+  /mnt/munchr-public/internal/roadmap-2027.txt: |
+    Q1: more machines in train stations
+    Q2: contactless everywhere
+    Q3: stop putting internal files on the public share (Dave)
+  /mnt/munchr-public/internal/hr/salaries-2026.csv: {size: 18K}
+  /mnt/munchr-public/internal/hr/README.txt: |
+    CONFIDENTIAL. Seriously, Dave.
+quick:
+  - "cat ~/job.txt"
+  - ls /mnt/munchr-public
+  - "edit ~/drop/for-vince.txt"
+  - help
+objectives:
+  - {id: drop, text: obj.drop, done_when: 'file_contains("/home/guest/drop/for-vince.txt", "1.25") && file_contains("/home/guest/drop/for-vince.txt", "1.45")'}
+hints:
+  - {id: look, when: 'commands >= 3 && !touched("/mnt/munchr-public")', text: hint.look}
+  - {id: readme, when: 'touched("/mnt/munchr-public") && !touched("/mnt/munchr-public/internal") && commands >= 5', text: hint.readme}
+  - {id: deliver, when: 'touched("/mnt/munchr-public/internal/prices-2027.csv") && commands >= 7', text: hint.drop}
+events:
+  - id: hr
+    when: 'touched("/mnt/munchr-public/internal/hr")'
+    say: event.hr
+    karma: -5
+  - id: drop-gone
+    when: 'removed("/home/guest/drop/for-vince.txt")'
+    say: event.drop_gone
+    reset: true
+risk:
+  base: 10
+  factors:
+    - {id: snooped, when: 'touched("/mnt/munchr-public/internal/hr")', add: 25, text: risk.snooped}
+    - {id: took, when: 'removed("/mnt/munchr-public/internal/prices-2027.csv")', add: 40, text: risk.took}
+    - {id: beeping, when: 'fails >= 3', add: 15, text: risk.beeping}
+    - {id: dawdling, when: 'commands >= 20', add: 15, text: risk.dawdling}
+    - {id: signed-in, when: '!removed("/home/guest/.kiosk/signed-in-as.txt")', add: 20, text: risk.signed_in}

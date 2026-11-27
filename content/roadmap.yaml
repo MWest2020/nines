@@ -17,7 +17,8 @@ branches:
   - {id: incident, title: branch.incident}
   - {id: design, title: branch.design}
   - {id: kubernetes, title: branch.kubernetes}
-# The five career paths, chosen at Medior City (DESIGN.md, Career paths). A quest names the
+# The six career paths, chosen at Medior City (DESIGN.md, Career paths; the sixth, ethical
+# hacker, came with karma on 27 Nov 2026). A quest names the
 # paths it counts towards in its quest.yaml `paths`.
 paths:
   - {id: swe, title: path.swe, pitch: path.swe.pitch}
@@ -25,6 +26,7 @@ paths:
   - {id: devops, title: path.devops, pitch: path.devops.pitch}
   - {id: platform, title: path.platform, pitch: path.platform.pitch}
   - {id: systems, title: path.systems, pitch: path.systems.pitch}
+  - {id: ethical, title: path.ethical, pitch: path.ethical.pitch}
 nodes:
   - {id: linux-files, branch: linux, stage: junior, title: node.linux.files, requires: []}
   - {id: linux-disk, branch: linux, stage: junior, title: node.linux.disk, requires: []}
