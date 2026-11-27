@@ -67,6 +67,8 @@ class BattleOverlay {
   private readonly answer: El;
   private readonly end: El;
   private readonly side: El;
+  /** phones: the hints fold into a count in the header that opens them over the transcript */
+  private readonly hintToggle: HTMLButtonElement;
   private readonly sr: El;
   private shown = 0;
   private grabbed: string | null = null;
@@ -96,7 +98,15 @@ class BattleOverlay {
     leave.setAttribute('aria-label', this.t('ui.battle.leave'));
     leave.title = this.t('ui.battle.leave');
     leave.addEventListener('click', () => this.close());
-    head.append(this.title, this.round, leave);
+    this.hintToggle = el('button', 'nb-hintcount') as HTMLButtonElement;
+    this.hintToggle.type = 'button';
+    this.hintToggle.hidden = true;
+    this.hintToggle.setAttribute('aria-expanded', 'false');
+    this.hintToggle.addEventListener('click', () => {
+      const open = win.classList.toggle('nb-show-hints');
+      this.hintToggle.setAttribute('aria-expanded', String(open));
+    });
+    head.append(this.title, this.hintToggle, this.round, leave);
 
     const body = el('div', 'nb-body');
     const main = el('div', 'nb-main');
@@ -316,6 +326,9 @@ class BattleOverlay {
       this.meter(t(S.PRESSURE_KEY[kind]), s.state.pressure, max.pressure, 'nb-them'),
     );
     const hints = s.phase === 'answer' && s.view ? s.view.hints : [];
+    this.hintToggle.hidden = hints.length === 0;
+    this.hintToggle.textContent = `? ${hints.length}`;
+    this.hintToggle.setAttribute('aria-label', t('ui.battle.hints_count', { n: hints.length }));
     if (hints.length > 0) {
       const box = el('section', 'nb-hints');
       box.append(el('h3', undefined, t('ui.battle.hint')));

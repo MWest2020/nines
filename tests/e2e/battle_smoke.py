@@ -18,6 +18,11 @@ It serves dist/ itself on 127.0.0.1 for the length of the run (no dev server) an
      talking to Daan: the hint for a second try shows.
 
 It fails when any request leaves the origin.
+
+PHONE=portrait or PHONE=landscape plays the same on an emulated Pixel 7 (touch, mobile viewport)
+and checks the phone layouts (DESIGN.md, Battles, Phone): transcript, cards and both meters on
+screen, every button at least 48 CSS px, nothing wider than the screen; in portrait the hints
+open from the count in the header. Screenshots get the mode as a prefix.
 """
 
 import functools
@@ -35,6 +40,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 DIST = ROOT / "dist"
 SHOTS = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else ROOT / "test-results")
 CHROME = os.environ.get("CHROME")
+PHONE = os.environ.get("PHONE")  # None, "portrait" or "landscape"
+DEVICE: dict | None = None  # set in main() from Playwright's device list
 
 BASE_DONE = {"disk-full": "done", "service-down": "done", "broken-pipeline": "done"}
 
@@ -105,7 +112,7 @@ def check(cond: bool, what: str) -> None:
 
 
 def open_game(browser, origin: str, save_json: str, outside: list, viewport=(1280, 800)) -> Page:
-    ctx = browser.new_context(viewport={"width": viewport[0], "height": viewport[1]})
+    ctx = browser.new_context(**DEVICE) if DEVICE else browser.new_context(viewport={"width": viewport[0], "height": viewport[1]})
     ctx.add_init_script(f"if (!sessionStorage.getItem('seeded')) {{ localStorage.setItem('nines.save', {json.dumps(save_json)}); sessionStorage.setItem('seeded', '1'); }}")
     page = ctx.new_page()
 
@@ -202,9 +209,49 @@ def order_by_keys(page: Page, target: list[str], drag_first: bool = False, click
     check(card_ids(page) == target, f"order set by keyboard: {' > '.join(target)}")
 
 
+def phone_layout(page: Page, what: str) -> None:
+    """On a phone: the war room fits the screen, its parts are on it, its targets are big enough."""
+    if not PHONE:
+        return
+    r = page.evaluate(
+        """() => {
+      const box = (el) => { const b = el.getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height }; };
+      const shown = (el) => el.offsetParent !== null && getComputedStyle(el).visibility !== 'hidden';
+      const win = document.querySelector('.nb-window');
+      return {
+        vw: innerWidth, vh: innerHeight, win: box(win), wide: win.scrollWidth > win.clientWidth + 1,
+        log: box(document.querySelector('.nb-log')),
+        meters: [...document.querySelectorAll('.nb-meter')].filter(shown).map(box),
+        cards: [...document.querySelectorAll('.nb-answer [data-id]')].filter(shown).map(box),
+        small: [...document.querySelectorAll('.nb-battle button')].filter(shown).map((b) => ({ c: b.className, ...box(b) })).filter((b) => b.w < 48 || b.h < 48),
+      };
+    }"""
+    )
+    inside = lambda b: b["x"] >= -0.5 and b["y"] >= -0.5 and b["x"] + b["w"] <= r["vw"] + 0.5 and b["y"] + b["h"] <= r["vh"] + 0.5  # noqa: E731
+    check(inside(r["win"]) and not r["wide"], f"{what}: the war room fits the {r['vw']}x{r['vh']} screen")
+    check(r["log"]["h"] >= 60 and inside(r["log"]), f"{what}: the transcript is on screen ({r['log']['h']:.0f} px high)")
+    check(len(r["meters"]) == 2 and all(inside(m) for m in r["meters"]), f"{what}: both meters are on screen")
+    check(not r["small"], f"{what}: every button is at least 48 CSS px {r['small']}")
+    if r["cards"]:
+        first = r["cards"][0]
+        check(inside(first), f"{what}: the first answer card is on screen ({len(r['cards'])} cards)")
+
+
+def side_text(page: Page) -> str:
+    """The meters and hints; in portrait on a phone the hints open from the count in the header."""
+    count = page.locator(".nb-hintcount")
+    if PHONE == "portrait" and count.is_visible():
+        count.click()
+        page.wait_for_timeout(150)
+        text = page.locator(".nb-side").inner_text()
+        count.click()  # and closed again, so it does not cover the transcript
+        return text
+    return page.locator(".nb-side").inner_text()
+
+
 def shot(page: Page, name: str) -> str:
     SHOTS.mkdir(parents=True, exist_ok=True)
-    path = SHOTS / name
+    path = SHOTS / (f"{PHONE}-{name}" if PHONE else name)
     page.screenshot(path=str(path))
     print(f"  shot {path}")
     return str(path)
@@ -249,6 +296,7 @@ def play_interview(browser, origin: str, outside: list) -> list[str]:
     check(page.locator(".nb-announce").inner_text().startswith("Whiteboard interview · Topic"), "opening line: Whiteboard interview · ...")
     check(page.locator(".nb-board").is_visible(), "the whiteboard is up")
     check(page.locator(".nb-them canvas").count() >= 1, "the interviewer has a head-only portrait")
+    phone_layout(page, "interview")
     n = 0
     while page.locator(".nb-answer [data-id]").count() > 0:
         n += 1
@@ -264,6 +312,7 @@ def play_interview(browser, origin: str, outside: list) -> list[str]:
             pick_by_click(page, ans[0])
         if "multiply" in ids:
             check("proposal" in page.locator(".nb-board").inner_text().lower(), "the flaw round puts the proposal on the whiteboard")
+            phone_layout(page, "interview, spot the flaw")
             shots.append(shot(page, "battle-interview-whiteboard.png"))
         send_by_keys(page)
         check("Spot on" in page.locator(".nb-note").last.inner_text(), f"round {n}: marked Spot on")
@@ -296,11 +345,13 @@ def play_friday(browser, origin: str, outside: list) -> list[str]:
     check(page.locator(".nb-title").inner_text().startswith("Meeting · Daan"), "header: Meeting · Daan")
     check(page.locator(".nb-announce").inner_text().startswith("Incoming: Daan"), "opening line: Incoming: ...")
     check(not page.locator(".nb-board").is_visible(), "no whiteboard in a meeting")
+    phone_layout(page, "meeting")
     rounds = 0
     while page.locator(".nb-answer [data-id]").count() > 0:
         rounds += 1
         ids = card_ids(page)
         if "cleanup" in ids:
+            phone_layout(page, "meeting, order round")
             order_by_keys(page, list(reversed(FRIDAY_ORDER)), drag_first=True, click_arrow=True)
             page.locator("[data-action='send']").click()
             page.wait_for_selector("[data-action='continue']")
@@ -321,7 +372,12 @@ def play_friday(browser, origin: str, outside: list) -> list[str]:
     page.keyboard.press("Enter")  # Try again
     page.wait_for_selector(".nb-answer [data-id]")
     check(page.locator(".nb-value").first.inner_text() == "100", "confidence refilled")
-    check("Hint" in page.locator(".nb-side").inner_text(), "a hint shows on the second try")
+    check("Hint" in side_text(page), "a hint shows on the second try")
+    if PHONE == "portrait":
+        page.locator(".nb-hintcount").click()
+        page.wait_for_timeout(150)
+        shots.append(shot(page, "battle-hints-open.png"))
+        page.locator(".nb-hintcount").click()
     rounds = 0
     while page.locator(".nb-answer [data-id]").count() > 0:
         rounds += 1
@@ -342,8 +398,9 @@ def play_friday(browser, origin: str, outside: list) -> list[str]:
     page.wait_for_selector(".nb-end:not([hidden])")
     check("You held your ground." in page.locator(".nb-end").inner_text(), "the retry wins")
     check(game_save(page)["quests"].get("friday-scope") == "done", "the save has the win")
-    page.set_viewport_size({"width": 390, "height": 844})
-    page.wait_for_timeout(200)
+    if not PHONE:
+        page.set_viewport_size({"width": 390, "height": 844})
+        page.wait_for_timeout(200)
     shots.append(shot(page, "battle-end-phone.png"))
     page.keyboard.press("Escape")
     page.wait_for_timeout(300)
@@ -362,6 +419,7 @@ def play_pager(browser, origin: str, outside: list) -> list[str]:
     check(page.locator(".nb-title").inner_text().startswith("Incident · PAGER · checkout-api"), "header: Incident · PAGER · checkout-api")
     check(page.locator(".nb-announce").inner_text().startswith("PAGER 03:07"), "opening line: PAGER 03:07 · ...")
     check("Impact" in page.locator(".nb-side").inner_text(), "the attacker's meter is Impact")
+    phone_layout(page, "incident")
     # two answers in, one of them weak, so both meters have moved
     for target in ("ack", "social"):
         ids = card_ids(page)
@@ -382,7 +440,7 @@ def check_dutch(browser, origin: str, outside: list) -> None:
     page = open_game(browser, origin, save(quests, 20, 14, "up", locale="nl"), outside)
     press_until_overlay(page)
     check(page.locator(".nb-title").inner_text().startswith("Overleg · Daan"), "header: Overleg · Daan")
-    side = page.locator(".nb-side").inner_text()
+    side = side_text(page)
     check("Zelfvertrouwen" in side and "Druk" in side, "meters: Zelfvertrouwen and Druk")
     check(page.locator("[data-action='send']").inner_text() == "Versturen", "Send is Versturen")
     check("Hint" not in side, "no hint on a first try")
@@ -394,7 +452,7 @@ def check_dutch(browser, origin: str, outside: list) -> None:
     check(page.locator(".nb-battle").count() == 0, "Escape leaves half-way")
     check(game_save(page)["quests"].get("friday-scope") == "active", "leaving records nothing: the quest stays active")
     press_until_overlay(page)  # talk to Daan again
-    check("Hint" in page.locator(".nb-side").inner_text(), "opened again after leaving half-way: the hint shows")
+    check("Hint" in side_text(page), "opened again after leaving half-way: the hint shows")
     page.context.close()
 
 
@@ -406,6 +464,10 @@ def main() -> None:
     shots: list[str] = []
     try:
         with sync_playwright() as p:
+            global DEVICE
+            if PHONE:
+                DEVICE = {**p.devices["Pixel 7" if PHONE == "portrait" else "Pixel 7 landscape"], "locale": "en-US"}
+                print(f"phone: Pixel 7 {PHONE}")
             browser = p.chromium.launch(executable_path=CHROME) if CHROME else p.chromium.launch()
             try:
                 shots += play_interview(browser, origin, outside)
