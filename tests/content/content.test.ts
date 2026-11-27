@@ -90,12 +90,18 @@ describe('the validator rejects broken content', () => {
     expect(errorsAfter('quests/disk-full/scenario.yaml', (s) => s.replace('!ran("df")', '!flag("nope")'))).toMatch(/no event in this scenario sets that flag/);
     expect(errorsAfter('quests/disk-full/scenario.yaml', (s) => s.replace('service("nginx") == "active"', 'service(pipeline_status) == "active"'))).toMatch(/needs a quoted name/);
   });
+  it('a stone a quest lights never needs a stone that no quest lights', () => {
+    expect(errorsAfter('roadmap.yaml', (s) => s.replace('title: node.linux.services, requires: [linux-disk]', 'title: node.linux.services, requires: [linux-files]'))).toMatch(
+      /node "linux-services" is lit by a quest but needs "linux-files", which no quest lights/,
+    );
+  });
+
   it('requirements may not form a cycle', () => {
     copy();
     edit('quests/disk-full/quest.yaml', (s) => s.replace('requires: []', 'requires: [service-down]'));
     edit('quests/service-down/quest.yaml', (s) => s.replace('requires: []', 'requires: [disk-full]'));
     expect(loadContent(dir, SCHEMA_DIR, { root: ROOT }).errors.join('\n')).toMatch(/quest requirements form a cycle/);
-    expect(errorsAfter('roadmap.yaml', (s) => s.replace('title: node.linux.files, requires: []', 'title: node.linux.files, requires: [linux-services]'))).toMatch(/roadmap node requirements form a cycle/);
+    expect(errorsAfter('roadmap.yaml', (s) => s.replace('title: node.linux.disk, requires: []', 'title: node.linux.disk, requires: [linux-services]'))).toMatch(/roadmap node requirements form a cycle/);
   });
   it('control characters, symlinks, stray images and stray files in maps/ are refused', () => {
     expect(errorsAfter('quests/disk-full/locales/en.yaml', (s) => s.replace('title: "Disk full"', 'title: "Disk \\e]8;;https://x.test\\e\\\\full"'))).toMatch(/control characters/);
@@ -283,6 +289,17 @@ describe('the validator checks maps', () => {
   it('every terminal starts a quest, and a gate battle has its gate', () => {
     expect(errorsAfterMap('server-room', (m) => (layer(m, 'objects').objects as Json[]).push({ name: 'rack-db-01', type: 'terminal', x: 88, y: 88 }))).toMatch(/terminal "rack-db-01" starts no quest/);
     expect(errorsAfterMap('junior-village', (m) => (obj(m, 'gate-medior').name = 'gate-medior-city'))).toMatch(/no map has the object "gate-medior"/);
+  });
+  it('a spare cameo-* terminal may wait for its guest; any other terminal starts exactly one quest', () => {
+    // the server room keeps spare racks for terminal cameos: unclaimed, they are fine
+    expect(errorsAfterMap('server-room', () => undefined)).toBe('');
+    // the same rack under an ordinary name must start a quest
+    expect(errorsAfterMap('server-room', (m) => (obj(m, 'cameo-rack-2').name = 'rack-db-01'))).toMatch(/terminal "rack-db-01" starts no quest/);
+    // two quests on one machine: the second could never be opened
+    copy();
+    const q = join(dir, 'quests', 'service-down', 'quest.yaml');
+    writeFileSync(q, readFileSync(q, 'utf8').replace('object: rack-app-01', 'object: rack-web-01'));
+    expect(loadContent(dir, SCHEMA_DIR, { root: ROOT }).errors.join('\n')).toMatch(/terminal "rack-web-01" is the start of more than one quest \(disk-full, service-down\)/);
   });
   it('everything can be reached on foot', () => {
     // wall the rack row in: the tiles in front of rack-web-01 and its neighbours become solid

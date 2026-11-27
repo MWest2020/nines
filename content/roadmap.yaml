@@ -19,7 +19,7 @@ branches:
 nodes:
   - {id: linux-files, branch: linux, stage: junior, title: node.linux.files, requires: []}
   - {id: linux-disk, branch: linux, stage: junior, title: node.linux.disk, requires: []}
-  - {id: linux-services, branch: linux, stage: junior, title: node.linux.services, requires: [linux-files]}
+  - {id: linux-services, branch: linux, stage: junior, title: node.linux.services, requires: [linux-disk]}
   - {id: git-basics, branch: git, stage: junior, title: node.git.basics, requires: []}
   - {id: cicd-pipeline, branch: cicd, stage: junior, title: node.cicd.pipeline, requires: []}
   - {id: incident-first, branch: incident, stage: junior, title: node.incident.first, requires: []}

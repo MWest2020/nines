@@ -59,7 +59,7 @@ nothing to download or license.
 | Walk | 4 frames per tile step at 8 fps (step, stand, step, stand); one tile per 250 ms |
 | Map | Junior Village 40 x 30 tiles; server room 15 x 10 (one screen) |
 | Canvas text | 8 px pixel font, 10 px line height |
-| Touch targets | at least 48 x 48 CSS px; D-pad 144 x 144 (48 px arms), use 64, back 56, menu and Career Trail 48 |
+| Touch targets | at least 48 x 48 CSS px for every DOM control (the touch controls, the terminal and battle overlays); D-pad 144 x 144 (48 px arms), use 64, back 56, menu and Career Trail 48. Buttons drawn on the canvas (the menu, shop and trail) scale with the view and are smaller on a phone: the D-pad moves their focus and the use button presses them |
 | Dialogue box | 232 x 48 px at the bottom of the view, 4 px margin, 3 lines of text |
 
 ## Palette

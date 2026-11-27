@@ -1,0 +1,105 @@
+# api-02: invoice-api will not start since last night's database move (25 Nov; the terminal's
+# clock starts at Nov 26 09:00, so the incident is dated before it). DNS was updated and
+# answers correctly; a forgotten line in /etc/hosts still sends db.internal to the old server,
+# and nsswitch.conf ("hosts: files dns") makes the file win over DNS.
+schema: 1
+host: api-02
+user: dev
+home: /home/dev
+motd: motd
+mounts:
+  - {path: /, device: /dev/sda1, size: 20G, base_used: 4G}
+dirs: [/tmp, /var/log/invoice-api]
+files:
+  /home/dev/migration.txt: |
+    Database move, 25 Nov (Yara)
+    - 18:00 invoice database copied to db-02 (10.0.4.30)
+    - 18:05 DNS record updated: db.internal -> 10.0.4.30
+    - 18:06 checked from my laptop: db.internal answers 10.0.4.30. DNS is fine!
+    - 18:10 postgres on db-01 (10.0.4.12) stopped; db-01 is switched off on Friday
+  /etc/hosts: |
+    127.0.0.1   localhost
+    127.0.1.1   api-02
+    # temporary, during the 2024 network change. Remove when DNS is back! (Bas)
+    10.0.4.12   db.internal
+  /etc/resolv.conf: |
+    nameserver 10.0.0.53
+    search internal
+  /etc/nsswitch.conf: |
+    # where each kind of name is looked up, in this order
+    passwd:   files
+    group:    files
+    hosts:    files dns
+  /etc/invoice-api/config.yaml: |
+    listen: 0.0.0.0:8080
+    database:
+      host: db.internal
+      port: 5432
+      name: invoices
+  /lib/systemd/system/invoice-api.service: |
+    [Unit]
+    Description=Invoice API
+    Wants=network-online.target
+    After=network-online.target
+
+    [Service]
+    ExecStartPre=/usr/local/bin/invoice-api check-db
+    ExecStart=/usr/local/bin/invoice-api serve
+    User=invoice
+
+    [Install]
+    WantedBy=multi-user.target
+services:
+  invoice-api:
+    description: Invoice API
+    state: failed
+    enabled: true
+    logs:
+      - "Nov 25 18:12:30 api-02 systemd[1]: Starting invoice-api.service - Invoice API..."
+      - "Nov 25 18:12:30 api-02 invoice-api[2210]: check-db: db.internal resolved to 10.0.4.12"
+      - "Nov 25 18:12:30 api-02 invoice-api[2210]: check-db: connect to 10.0.4.12:5432 failed: Connection refused"
+      - "Nov 25 18:12:30 api-02 systemd[1]: invoice-api.service: Control process exited, code=exited, status=1/FAILURE"
+      - "Nov 25 18:12:30 api-02 systemd[1]: invoice-api.service: Failed with result 'exit-code'."
+      - "Nov 25 18:12:30 api-02 systemd[1]: Failed to start invoice-api.service - Invoice API."
+    restart:
+      # DNS knows the way: it works once no active line of /etc/hosts sends db.internal to the
+      # old server (removed or commented out), and any 10.0.4.x line left names the new address
+      # exactly. "\n10.0.4." matches only at the start of a line, so a comment does not count
+      # and 10.0.4.300 is not 10.0.4.30.
+      succeeds_if: '!file_contains("/etc/hosts", "\n10.0.4.12 ") && (!file_contains("/etc/hosts", "\n10.0.4.") || file_contains("/etc/hosts", "\n10.0.4.30 "))'
+      logs_on_success:
+        - "Nov 26 09:00:00 api-02 systemd[1]: Starting invoice-api.service - Invoice API..."
+        - "Nov 26 09:00:00 api-02 invoice-api[3107]: check-db: db.internal resolved to 10.0.4.30"
+        - "Nov 26 09:00:00 api-02 invoice-api[3107]: check-db: connected to invoices on 10.0.4.30:5432"
+        - "Nov 26 09:00:01 api-02 systemd[1]: Started invoice-api.service - Invoice API."
+      logs_on_failure:
+        - "Nov 26 09:00:00 api-02 invoice-api[3107]: check-db: cannot reach the database at db.internal:5432"
+  ssh:
+    description: OpenBSD Secure Shell server
+    state: active
+    enabled: true
+    logs:
+      - "Nov 25 06:00:02 api-02 systemd[1]: Started ssh.service - OpenBSD Secure Shell server."
+# Suggestions for the terminal's quick-command strip: a tap fills the input line.
+quick:
+  - systemctl status invoice-api
+  - journalctl -u invoice-api
+  - "cat ~/migration.txt"
+  - cat /etc/resolv.conf
+  - cat /etc/nsswitch.conf
+  - help
+objectives:
+  - {id: api, text: obj.api, done_when: 'service("invoice-api") == "active"'}
+  - {id: names, text: obj.names, done_when: 'file_contains("/etc/hosts", "localhost") && file_contains("/etc/hosts", "api-02")'}
+hints:
+  - {id: status, when: 'commands >= 3 && !ran("systemctl status") && !ran("journalctl")', text: hint.status}
+  - {id: resolved, when: '(ran("journalctl") || ran("systemctl status")) && service("invoice-api") == "failed" && commands >= 6', text: hint.resolved}
+  - {id: hosts, when: '(ran("journalctl") || ran("systemctl status")) && service("invoice-api") == "failed" && (fails >= 2 || commands >= 10)', text: hint.hosts}
+events:
+  - id: hosts-gone
+    when: 'removed("/etc/hosts")'
+    say: event.hosts_gone
+    reset: true
+  - id: pinned-again
+    when: 'service("invoice-api") == "active" && file_contains("/etc/hosts", "\n10.0.4.30 ")'
+    say: event.pinned_again

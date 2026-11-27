@@ -72,14 +72,17 @@ describe('the world grid', () => {
     expect(ahead(entrance.x, entrance.y, 'down')).toEqual({ x: exit.x, y: exit.y });
   });
 
-  it('the server room racks are terminals of the two server-room quests, reachable from the entrance', () => {
+  it('the server room racks are terminals: the two server-room quests\' and two spare cameo racks, reachable from the entrance', () => {
     const r = world('server-room');
-    const starts = content().quests.filter((q) => q.quest.start.map === 'server-room').map((q) => q.quest.start.object).sort();
-    expect(starts).toEqual(['rack-app-01', 'rack-web-01']);
+    const racks = r.objects.filter((o) => o.type === 'terminal').map((o) => o.name).sort();
+    expect(racks).toEqual(['cameo-rack-1', 'cameo-rack-2', 'rack-app-01', 'rack-web-01']);
+    // more quests may start here (a cameo claims a spare rack), but not on a machine that is not there
+    const starts = content().quests.filter((q) => q.quest.start.map === 'server-room').map((q) => q.quest.start.object);
+    expect(starts).toEqual(expect.arrayContaining(['rack-app-01', 'rack-web-01']));
+    for (const s of starts) expect(racks).toContain(s);
     const seen = reachable(r, [objectNamed(r, 'entrance')!]);
-    for (const name of starts) {
+    for (const name of racks) {
       const o = objectNamed(r, name)!;
-      expect(o.type).toBe('terminal');
       expect(isSolid(r, o.x, o.y)).toBe(true); // a rack is furniture: you face it, you do not stand on it
       expect(seen[(o.y + 1) * r.width + o.x], `${name} from below`).toBe(1);
     }
@@ -90,7 +93,8 @@ describe('the world grid', () => {
     const built = new Set(content().maps.map((m) => m.id));
     const all = [...content().npcs, ...content().quests.flatMap((q) => (q.npc ? [q.npc] : []))];
     const npcs = all.filter((n) => built.has(n.spawn.map));
-    expect(npcs.map((n) => n.id).sort()).toEqual(['bas', 'daan', 'femke', 'ingrid', 'ravi']);
+    // at least these; a guest cameo adds its own
+    expect(npcs.map((n) => n.id)).toEqual(expect.arrayContaining(['bas', 'daan', 'femke', 'ingrid', 'ravi']));
     const planned = new Set(content().roadmap.towns.flatMap((t) => (t.map ? [t.map] : [])));
     for (const n of all) if (!built.has(n.spawn.map)) expect(planned.has(n.spawn.map), n.id).toBe(true);
     for (const n of npcs) {

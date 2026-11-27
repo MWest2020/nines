@@ -590,7 +590,7 @@
 /* ---- phones in portrait (DESIGN.md, Battles, Phone): two thin gauges under the header, the
    hints as a count in the header that opens them over the transcript */
 
-@media (max-width: 720px) {
+@media (max-width: 720px) and (orientation: portrait), (max-width: 720px) and (min-height: 501px) {
   .nb-battle {
     touch-action: manipulation;
   }
@@ -640,7 +640,7 @@
   }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 720px) and (orientation: portrait), (max-width: 720px) and (min-height: 501px) {
   .nb-battle {
     font-size: 14px;
   }
@@ -682,10 +682,10 @@
   }
 }
 
-/* ---- phones in landscape (short and wide): the transcript and the answers side by side, the
-   meters in a narrower column on the right */
+/* ---- phones in landscape (short and wide, any width): the transcript and the answers side
+   by side, the meters in a narrower column on the right */
 
-@media (min-width: 721px) and (max-height: 500px) {
+@media (orientation: landscape) and (max-height: 500px) {
   .nb-battle {
     touch-action: manipulation;
   }

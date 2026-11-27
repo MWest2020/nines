@@ -1,0 +1,20 @@
+# The sample cameo: a guest quest added as this one folder, with no change anywhere else
+# (CONTRIBUTING.md walks through every file). Yara stands in the village on the free slot
+# cameo-1; her machine is the spare rack cameo-rack-1 in the server room.
+schema: 1
+id: its-always-dns
+author: {name: "Nines sample cameo"}
+title: title
+summary: summary
+stage: junior
+branch: linux
+track: any
+roadmap_node: linux-services
+requires: []
+giver: yara
+start: {map: server-room, object: cameo-rack-1}
+reward: {money: 125, xp: 20}
+dialogue:
+  offer: [offer.1, offer.2, offer.3]
+  active: [active.1]
+  done: [done.1, done.2]

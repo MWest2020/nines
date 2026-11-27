@@ -106,6 +106,10 @@ export function installTouchControls(game: Phaser.Game, api: GameApi, hooks: Tou
   const arms = {} as Record<Facing, HTMLButtonElement>;
   for (const f of ['up', 'left', 'right', 'down'] as const) {
     arms[f] = button(`tc-arm tc-${f}`, f, `ui.pad.${f}`);
+    // a screen reader's or switch's click: one press of that direction (menus move focus)
+    arms[f].addEventListener('click', (e) => {
+      if (e.detail === 0) game.events.emit(PAD_EVENTS.move, f);
+    });
     dpad.append(arms[f]);
   }
   dpad.append(Object.assign(document.createElement('span'), { className: 'tc-hub' }));
@@ -141,6 +145,7 @@ export function installTouchControls(game: Phaser.Game, api: GameApi, hooks: Tou
   };
   dpad.addEventListener('pointerdown', (e) => {
     e.preventDefault();
+    if (pointer !== null) return; // one finger steers; a second one is ignored
     pointer = e.pointerId;
     dpad.setPointerCapture?.(e.pointerId);
     hold(dirAt(e));
@@ -161,6 +166,10 @@ export function installTouchControls(game: Phaser.Game, api: GameApi, hooks: Tou
       e.preventDefault();
       b.classList.add('tc-on');
       fn();
+    });
+    // screen readers and switch access activate a button with a click and no pointer before it
+    b.addEventListener('click', (e) => {
+      if (e.detail === 0) fn();
     });
     for (const ev of ['pointerup', 'pointercancel', 'pointerleave'] as const) b.addEventListener(ev, () => b.classList.remove('tc-on'));
   };

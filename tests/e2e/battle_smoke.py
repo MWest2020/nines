@@ -19,8 +19,9 @@ It serves dist/ itself on 127.0.0.1 for the length of the run (no dev server) an
 
 It fails when any request leaves the origin.
 
-PHONE=portrait or PHONE=landscape plays the same on an emulated Pixel 7 (touch, mobile viewport)
-and checks the phone layouts (DESIGN.md, Battles, Phone): transcript, cards and both meters on
+PHONE=portrait or PHONE=landscape plays the same on an emulated Pixel 7 (its mobile viewport;
+the plays still use keys and mouse clicks, so this proves the layout, not touch input) and
+checks the phone layouts (DESIGN.md, Battles, Phone): transcript, cards and both meters on
 screen, every button at least 48 CSS px, nothing wider than the screen; in portrait the hints
 open from the count in the header. Screenshots get the mode as a prefix.
 """

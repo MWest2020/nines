@@ -1,0 +1,15 @@
+# Yara, the network engineer who moved the database. Her sprite is own work, drawn with the
+# character style of tools/art/draw-art.mjs (drawCharacter with styles [bun, headphones] and the
+# colours H brick, h shadow, S sand, s wood, C lilac, c plum, A phosphor, P night, p ink,
+# F bark from the DESIGN.md palette) and released CC0.
+schema: 1
+id: yara
+author: {name: "Nines sample cameo"}
+name: npc.name
+tint: "#a868a8"
+sprite: {file: yara.png, frame: 16, source: "own work, Nines sample cameo: drawn in the style of tools/art/draw-art.mjs", license: CC0-1.0}
+spawn: {map: junior-village, slot: cameo-1, facing: down}
+dialogue:
+  - when: 'quest("its-always-dns") == "done"'
+    lines: [npc.after]
+  - lines: [npc.idle]

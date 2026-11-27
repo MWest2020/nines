@@ -372,7 +372,7 @@
   }
 }
 
-/* touch screens: every button at least 44 CSS px, and no double-tap zoom */
+/* touch screens: every button at least 48 CSS px (DESIGN.md, Sizes), and no double-tap zoom */
 @media (pointer: coarse) {
   .nt-overlay {
     touch-action: manipulation;
@@ -382,8 +382,8 @@
   .nt-objtoggle,
   .nt-btn,
   .nt-quick button {
-    min-width: 44px;
-    min-height: 44px;
+    min-width: 48px;
+    min-height: 48px;
   }
 
   .nt-quick {

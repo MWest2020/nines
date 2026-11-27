@@ -459,7 +459,8 @@ file and then what a schema cannot express:
   and every PNG is declared by an `npc.yaml` with its source and licence;
 - ids match folder names; ids and NPC spawn slots are unique across all folders;
 - references resolve: `giver`, `requires`, `roadmap_node` (and its branch), maps; quest,
-  roadmap and shop `requires` have no cycles;
+  roadmap and shop `requires` have no cycles; a roadmap node that a quest lights never requires
+  (directly or further down) a node that no quest lights, so it can always open;
 - every condition parses and type-checks against the right registry; name arguments must be
   quoted literals and must exist: `service`, `pods_running` and `restarted` in that scenario,
   `flag` among that scenario's `set_flag`s, `ran` among the terminal's commands, `quest`,
@@ -495,8 +496,9 @@ Maps (`content/maps/<id>.json`, schema `map`) are checked too:
   door leads to a spawn point of a map that exists; exactly one map has `player-start`;
 - against the content: every NPC's `spawn.slot` is a spawn point of its map; a quest's
   `start.object` exists (a `terminal` for a terminal quest, a `battle` or the giver's spawn for
-  a battle); every terminal and battle object starts a quest; a gate battle's `gate-<town>`
-  exists;
+  a battle); every terminal and battle object starts exactly one quest, except that a spare
+  `cameo-*` object may start none until a guest quest claims it (so a terminal cameo needs no map
+  edit); a gate battle's `gate-<town>` exists;
 - on foot: from `player-start` and every door's arrival point, every spawn and door can be
   walked to, and every NPC slot, terminal, battle and shop has a reachable neighbour (NPC slots
   count as occupied).
@@ -558,14 +560,17 @@ Guards:
 **The service worker** (`src/offline/sw.js`, hand-written, no dependency). The build
 (`tools/vite-plugin-sw.ts`) prepends `VERSION`, a hash of every built file, and `FILES`, the
 list of them, and emits `dist/sw.js`. `src/game/offline.ts` registers it (built site only, a
-secure context, not inside the Capacitor app). Install: every file into the cache `nines-<VERSION>`
-(bypassing the HTTP cache), then take over at once. Activate: delete the other `nines-*` caches
-(only ours: a GitHub Pages user site shares its origin with other projects). Fetch: GET requests
-for the same origin come from the cache first; a file missing from the cache is asked of the
-same origin (the one `fetch` in the code base, allowed by name in `check:dist` and
-`tests/guards.test.ts`); requests for other origins are not touched. A new deploy is a new
-`VERSION`: the open page keeps running the old files it already loaded, and the next load runs
-the new ones.
+secure context, not inside the Capacitor app). Install: every file into the cache
+`nines:<scope>:<VERSION>` (bypassing the HTTP cache), then take over at once. Activate: delete
+the older caches of the same scope only (a GitHub Pages user site shares its origin with other
+projects, forks and previews). Fetch: only GET requests for the same origin and the worker's
+scope; files come from the cache first, the page itself (a navigation) from the network first
+and from the cache when that fails, so a new deploy's index.html is never shadowed by an old one;
+a file missing from the cache is asked of the same origin. That is the one `fetch` in the code
+base, allowed by name, once, after the origin check, in `check:dist` and `tests/guards.test.ts`
+(which also scans `src/**/*.js`); requests for other origins are not touched. A new deploy is a
+new `VERSION`: the open page keeps running the files it already loaded, the next online load
+runs the new build, and the new worker replaces the cache in the background.
 
 **"Runs offline"** means: `dist/` served over HTTP(S) by any static host (GitHub Pages, a
 sub-path included) keeps working with the network off once loaded, and the Capacitor app
@@ -649,8 +654,10 @@ the one-off event bonuses already paid (`<quest>/<event>`).
   `collides: true`), plus an object layer `objects` with named objects: spawn points
   (`type: spawn`: `player-start`, `npc-1..n`, `cameo-1..n` as free slots for guest NPCs,
   `gate-<town>`, and where doors arrive), terminals (`type: terminal`, named as a terminal
-  quest's `start.object`), battle starts (`type: battle`), doors (`type: door`, properties
-  `to_map`, `to_point`) and the shop counter (`type: shop`). Tilesets are embedded in the map
+  quest's `start.object`; the server room keeps two spare racks, `cameo-rack-1` and
+  `cameo-rack-2`, for terminal cameos, which do nothing until a quest claims one), battle
+  starts (`type: battle`), doors (`type: door`, properties `to_map`, `to_point`) and the shop
+  counter (`type: shop`). Tilesets are embedded in the map
   JSON. Grid movement on 16 px tiles, four directions: a tap turns, holding walks, one tile per
   250 ms; NPCs block their tile. Keyboard: arrows or WASD, Enter or Space to use or talk, Escape
   to close. Stepping onto a door fades to its map. The rack LEDs blink by swapping two tiles.
@@ -678,10 +685,11 @@ the one-off event bonuses already paid (`<quest>/<event>`).
   button (64 px), back (56 px) and big menu and Career Trail buttons (48 px) put out the held
   direction (`padState`, read by the world each frame like the arrow keys) and events on
   `game.events` (`pad:move`, `pad:use`, `pad:back`), which `keyboardNav` (every screen and the
-  menu) and the HUD's dialogue box handle like their keys. A tap on the map walks the shortest
+  menu) and the HUD's dialogue box handle like their keys; for screen readers and switch access a
+  click with no pointer before it does the same. A tap on the map walks the shortest
   grid path there (`findPath` in `src/world/grid.ts`; doors only as the goal); a tap on an NPC,
   a terminal, a battle object or the shop counter walks up to it (`approach`), faces it and uses
-  it. A key or the D-pad takes over from a tap walk. No zoom or scroll: `touch-action: none` on
+  it; a tap on a wall does nothing. A key or the D-pad takes over from a tap walk. No zoom or scroll: `touch-action: none` on
   the canvas and the controls, `manipulation` on the page and the overlays, no overscroll.
 - **TerminalOverlay**: DOM, not canvas, so text is crisp and the Android soft keyboard works.
   xterm.js renders the output (ANSI colours for prompts and errors). Input is our own
@@ -854,7 +862,8 @@ Pinned exactly, each version published at least two weeks before it was added (c
   keyboard (paths from the Tiled maps) and plays all three MVP quests by typing real commands,
   the editor and a database-deleting mistake included; buys the Raspberry Pi at the shop counter
   with the quest money between the second and third quest, sees its €10 on the third reward,
-  and counts the Career Trail's three done stones from the canvas pixels. Touch: on an emulated
+  checks from the canvas pixels that exactly the three quests' own stones are lit on the Career
+  Trail (right row, right place), then plays the sample cameo. Touch: on an emulated
   Pixel 7 in portrait it taps to walk to Ravi's laptop (the terminal opens), checks the input
   line and quick strip above a soft keyboard (both kinds, above), walks with the D-pad, uses a
   rack with the use button, and cycles the controls setting with the menu, D-pad, use and back

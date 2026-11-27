@@ -221,8 +221,8 @@ export class WorldScene extends Phaser.Scene {
     this.input.on('pointerup', (p: Phaser.Input.Pointer) => {
       const started = this.tapStarted;
       this.tapStarted = false;
-      // a tap, not a drag, that began and ends while the world is free
-      if (!started || this.waiting() || p.getDistance() > 12) return;
+      // a tap (the main button), not a drag, that began and ends while the world is free
+      if (!started || this.waiting() || p.button !== 0 || p.getDistance() > 12) return;
       const cam = this.cameras.main;
       if (p.y < cam.y || p.y >= cam.y + cam.height) return; // the HUD band is not the map
       const at = cam.getWorldPoint(p.x, p.y);
@@ -240,14 +240,15 @@ export class WorldScene extends Phaser.Scene {
     this.route = [];
     this.routeEnd = null;
     if (x === p.x && y === p.y) return;
-    if (usable || !canEnter(this.world, x, y, occupied)) {
-      // a thing, a person or a wall: stand next to it and face it; use it if it is usable
+    if (usable) {
+      // a person or a thing: stand next to it, face it and use it
       const a = approach(this.world, p, { x, y }, occupied, doors);
       if (!a) return;
       this.route = a.path;
-      this.routeEnd = { facing: a.facing, use: usable };
+      this.routeEnd = { facing: a.facing, use: true };
       return;
     }
+    // open ground: walk there; a wall or a tree: nothing
     this.route = findPath(this.world, p, { x, y }, occupied, doors) ?? [];
   }
 

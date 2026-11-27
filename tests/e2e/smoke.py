@@ -1,4 +1,5 @@
-"""Browser smoke test: play the three MVP quests on the built game, typing real commands.
+"""Browser smoke test: play the three MVP quests and the sample guest cameo on the built game,
+typing real commands.
 
 It serves dist/ under a sub-path (like GitHub Pages) from a server inside this process, walks
 the player to each machine with the keyboard (paths come from the Tiled maps), plays the quest
@@ -14,10 +15,12 @@ CHROME (an executable path) picks the browser; otherwise Playwright's own headle
 from __future__ import annotations
 
 import argparse
+import re
 import functools
 import http.server
 import json
 import os
+import re
 import sys
 import threading
 import struct
@@ -35,12 +38,18 @@ BASE = "/nines/"
 TILE = 16
 DIRS = {"up": (0, -1), "down": (0, 1), "left": (-1, 0), "right": (1, 0)}
 KEYS = {"up": "ArrowUp", "down": "ArrowDown", "left": "ArrowLeft", "right": "ArrowRight"}
+# NPC slots, as the game reads them (isNpcSlot in src/world/grid.ts): an NPC may stand there, so
+# the walk never plans through one, whichever quests the content folder holds.
+NPC_SLOT = re.compile(r"^(npc|cameo)-[0-9]+$|^gate-[a-z0-9-]+$")
 
 
 # ---------------------------------------------------------------- serving dist/ at /nines/
 
 class Handler(http.server.SimpleHTTPRequestHandler):
+    served: list[str] = []  # every request that reached the server (the offline check reads it)
+
     def translate_path(self, path: str) -> str:
+        Handler.served.append(path)
         path = path.split("?", 1)[0]
         if path.startswith(BASE):
             path = "/" + path[len(BASE):]
@@ -59,7 +68,7 @@ def serve() -> tuple[http.server.ThreadingHTTPServer, str]:
 # ---------------------------------------------------------------- the maps, as a grid
 
 class Grid:
-    def __init__(self, map_id: str, blocked_slots: set[str]):
+    def __init__(self, map_id: str):
         m = json.loads((MAPS / f"{map_id}.json").read_text())
         self.w, self.h = m["width"], m["height"]
         collides = set()
@@ -78,7 +87,7 @@ class Grid:
                 y = int((o["y"] + o.get("height", 0) / 2) // TILE)
                 self.objects[o["name"]] = (o["type"], x, y)
         self.doors = {(x, y) for (t, x, y) in self.objects.values() if t == "door"}
-        self.npcs = {(x, y) for n, (t, x, y) in self.objects.items() if n in blocked_slots}
+        self.npcs = {(x, y) for n, (t, x, y) in self.objects.items() if NPC_SLOT.match(n)}
 
     def free(self, p: tuple[int, int], goal: tuple[int, int]) -> bool:
         x, y = p
@@ -414,8 +423,9 @@ def png_pixels(data: bytes) -> tuple[int, int, int, list[bytes]]:
     return w, h, bpp, rows
 
 
-def done_stones(page: Page) -> list[int]:
-    """Count the filled gold diamonds on each branch row of the Career Trail, from the pixels."""
+def done_stones(page: Page) -> list[list[float]]:
+    """The filled gold diamonds on each branch row of the Career Trail, from the pixels: their
+    centres (view x) per row."""
     box = page.locator("canvas").bounding_box()
     w, h, bpp, rows = png_pixels(page.screenshot(clip=box))
     k = w / 240  # screen pixels per canvas pixel
@@ -425,17 +435,32 @@ def done_stones(page: Page) -> list[int]:
         x = min(w - 1, int((cx + 0.5) * k)) * bpp
         return all(abs(row[x + i] - GOLD[i]) <= 16 for i in range(3))
 
-    counts = []
+    rows_found = []
     for ry in TRAIL_ROWS:
-        runs, run = 0, 0
-        for cx in range(100, 240):
-            if gold(cx, BAND + ry):
+        centres, run = [], 0
+        for cx in range(100, 241):
+            if cx < 240 and gold(cx, BAND + ry):
                 run += 1
-            else:
-                runs += 5 <= run <= 11
-                run = 0
-        counts.append(runs)
-    return counts
+                continue
+            if 5 <= run <= 11:
+                centres.append(cx - run / 2 - 0.5)
+            run = 0
+        rows_found.append(centres)
+    return rows_found
+
+
+def junior_trail() -> tuple[list[str], dict[str, list[str]]]:
+    """From content/roadmap.yaml: the branches with Junior stones in row order, and each row's stones."""
+    text = (ROOT / "content" / "roadmap.yaml").read_text()
+    branches = re.findall(r"^\s*- \{id: ([\w-]+), title: branch\.", text, re.M)
+    rows: dict[str, list[str]] = {}
+    for node, branch in re.findall(r"^\s*- \{id: ([\w-]+), branch: ([\w-]+), stage: junior\b", text, re.M):
+        rows.setdefault(branch, []).append(node)
+    return [b for b in branches if b in rows], rows
+
+
+def quest_node(quest: str) -> str:
+    return re.search(r"^roadmap_node: ([\w-]+)", (ROOT / "content" / "quests" / quest / "quest.yaml").read_text(), re.M).group(1)
 
 
 def trail(page: Page, shots: Path | None) -> None:
@@ -446,11 +471,42 @@ def trail(page: Page, shots: Path | None) -> None:
     page.wait_for_timeout(700)
     if shots:
         page.screenshot(path=str(shots / "career-trail.png"))
-    counts = done_stones(page)
+    found = done_stones(page)
+    counts = [len(c) for c in found]
     assert sum(counts) == 3, f"done stones per branch row: {counts}"
-    print(f"  Career Trail: done stones per branch row {counts}")
+    # and they are the three quests' own stones: the right row, the right place in it (the
+    # first stone of a row sits at x 120, later ones further right)
+    order, rows = junior_trail()
+    for q in ("broken-pipeline", "disk-full", "service-down"):
+        node = quest_node(q)
+        branch = next(b for b in order if node in rows[b])
+        r, j = order.index(branch), rows[branch].index(node)
+        assert len(found[r]) == 1, (q, node, found)
+        x = found[r][0]
+        assert (abs(x - 120) <= 1) if j == 0 else (x > 128), f"{q}: {node} is stone {j} of {branch}, gold at x {x}"
+        print(f"  Career Trail: {q} lit {node} (row {branch}, stone {j + 1})")
     page.keyboard.press("Escape")
     page.wait_for_timeout(500)
+
+
+HOSTS_FIXED = """127.0.0.1   localhost
+127.0.1.1   api-02
+"""
+
+
+def its_always_dns(page: Page, shots: Path | None) -> None:
+    """The sample cameo (content/quests/its-always-dns): one folder, played like any quest."""
+    run(page, "systemctl status invoice-api", "failed")
+    run(page, "journalctl -u invoice-api", "db.internal resolved to 10.0.4.12")
+    run(page, "cat /etc/nsswitch.conf", "files dns")
+    run(page, "grep db.internal /etc/hosts", "10.0.4.12")
+    run(page, "edit /etc/hosts")
+    page.locator(".nt-editor").wait_for(state="visible")
+    if shots:
+        page.screenshot(path=str(shots / "editor-hosts.png"))
+    edit_file(page, HOSTS_FIXED)
+    run(page, "systemctl restart invoice-api")
+    finish(page, "It's always DNS")
 
 
 def play(page: Page, village: Grid, room: Grid, shots: Path | None) -> None:
@@ -485,7 +541,7 @@ def play(page: Page, village: Grid, room: Grid, shots: Path | None) -> None:
     open_terminal(page, p, room, "rack-app-01")
     service_down(page, shots, reward="€185")
 
-    # the save says all three are done and paid, and the Pi is owned
+    # the three MVP quests are done and paid, and the Pi is owned
     save = save_game(page)
     quests = save["quests"]
     for q in ("disk-full", "broken-pipeline", "service-down"):
@@ -495,11 +551,26 @@ def play(page: Page, village: Grid, room: Grid, shots: Path | None) -> None:
     assert save["items"] == ["raspberry-pi"], save["items"]
     assert save["xp"] == {"cicd": 25, "linux": 20, "incident": 25}, save["xp"]
     print(f"  save: quests {quests}, money {save['money']}, items {save['items']}, xp {save['xp']}")
+
+    # 5. the Career Trail lights the three MVP quests' own stones
+    trail(page, shots)
+
+    # 6. the sample cameo: Yara's machine is the spare rack cameo-rack-1
+    print("quest: its-always-dns (sample cameo)")
+    open_terminal(page, p, room, "cameo-rack-1")
+    its_always_dns(page, shots)
+
+    # the save says all four are done and paid
+    save = save_game(page)
+    quests = save["quests"]
+    for q in ("disk-full", "broken-pipeline", "service-down", "its-always-dns"):
+        assert quests.get(q) == "done", quests
+    # 125 for the cameo plus the Pi's 10
+    assert save["money"] == 320, save["money"]
+    assert save["xp"] == {"cicd": 25, "linux": 40, "incident": 25}, save["xp"]
+    print(f"  save: quests {quests}, money {save['money']}, xp {save['xp']}")
     if shots:
         page.screenshot(path=str(shots / "world-after.png"))
-
-    # 5. the Career Trail lights the three nodes
-    trail(page, shots)
 
 
 # ---------------------------------------------------------------- touch: phones and a tablet
@@ -803,7 +874,7 @@ def touch_layout_only(browser, origin: str, name: str, device: dict, mode: str, 
     page.wait_for_timeout(2500)
     check_layout(page, name, mode)
     # a D-pad press in the world does not scroll or zoom the page
-    Touch(page, Grid("junior-village", set()), (0, 0), "down").button(".tc-up")
+    Touch(page, Grid("junior-village"), (0, 0), "down").button(".tc-up")
     assert page.evaluate("[scrollX, scrollY, visualViewport.scale]") == [0, 0, 1]
     if shots:
         page.screenshot(path=str(shots / shot))
@@ -827,9 +898,8 @@ def main() -> int:
     outside: list[str] = []
     failed: list[str] = []
     errors: list[str] = []
-    slots = {"npc-1", "npc-2", "npc-3", "npc-4", "gate-medior"}
-    village = Grid("junior-village", slots)
-    room = Grid("server-room", set())
+    village = Grid("junior-village")
+    room = Grid("server-room")
     t0 = time.time()
 
     def watch(ctx) -> None:
@@ -857,8 +927,11 @@ def main() -> int:
             page = ctx.new_page()
             page.goto(origin + BASE)
             page.wait_for_function("() => navigator.serviceWorker && navigator.serviceWorker.controller !== null", timeout=15000)
-            cached = page.evaluate("async () => (await (await caches.open((await caches.keys()).find(k => k.startsWith('nines-')))).keys()).length")
+            cached = page.evaluate("async () => (await (await caches.open((await caches.keys()).find(k => k.startsWith('nines:')))).keys()).length")
+            files = (DIST / "sw.js").read_text().split("const FILES = ", 1)[1].split(";", 1)[0]
+            assert cached == len(json.loads(files)), f"the service worker keeps every built file: {cached} cached"
             ctx.set_offline(True)
+            served = len(Handler.served)
             page.reload()
             page.wait_for_timeout(2500)  # boot: textures, maps, the world
             assert page.evaluate("navigator.onLine") is False
@@ -868,6 +941,14 @@ def main() -> int:
             print(f"  offline: reloaded from the service worker's cache ({cached} files), canvas x4, no touch controls")
             try:
                 play(page, village, room, args.shots)
+                # with the network off nothing reached the server: every file came from the cache
+                # The browser itself checks for a new sw.js on navigation (the service worker
+                # update check, same origin, outside the page). Playwright's offline switch does
+                # not reach that check; on a real offline device it simply fails. Nothing else
+                # may reach the server.
+                late = [u for u in Handler.served[served:] if u != BASE + "sw.js"]
+                assert not late, f"requests reached the server while offline: {late}"
+                print("  offline: no request reached the server during the whole play")
             except Exception:
                 if args.shots:
                     page.screenshot(path=str(args.shots / "failure.png"))

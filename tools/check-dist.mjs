@@ -24,7 +24,7 @@ const ALLOWED_PATTERNS = [/confirm\(`Do you want to navigate to \$\{\w+\}\?[^`]*
 // file it does not have, after returning early for every request to another origin. That one
 // call is allowed in sw.js only, exactly once, and only with the origin check in place;
 // tests/guards.test.ts checks the source the same way.
-const SW = { file: 'sw.js', call: 'return hit ?? fetch(request);', guard: "new URL(request.url).origin !== self.location.origin) return;" };
+const SW = { file: 'sw.js', call: 'return await fetch(request);', guard: "new URL(request.url).origin !== self.location.origin) return;" };
 
 // tools/content/load.ts (DIST_REFUSES) checks locale strings against the same patterns.
 const BANNED = [/\bfetch\s*\(/, /\bWebSocket\b/, /\bEventSource\b/, /\bsendBeacon\b/, /\bRTCPeerConnection\b/, /window\.open\s*\(/, /\beval\s*\(/, /\bFunction\s*\(/];
@@ -45,7 +45,8 @@ for (const file of files) {
   const name = relative(DIST, file);
   if (name === SW.file) {
     const calls = text.split(SW.call).length - 1;
-    if (calls !== 1 || !text.includes(SW.guard)) problems.push(`${name}: expected one same-origin fetch after the origin check, found ${calls}`);
+    const guardAt = text.indexOf(SW.guard);
+    if (calls !== 1 || guardAt < 0 || guardAt > text.indexOf(SW.call)) problems.push(`${name}: expected one same-origin fetch after the origin check, found ${calls}`);
     text = text.split(SW.call).join('');
   }
   for (const m of text.matchAll(/https?:\/\/[A-Za-z0-9.\-_~:/?#@!$&'()*+,;=%]*/g)) {
