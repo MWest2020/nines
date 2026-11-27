@@ -2,7 +2,9 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!-- resizes-content: Chrome on Android shrinks the page when the soft keyboard opens, so the
+         terminal's input line stays above it (src/game/touch/viewport.ts covers other browsers). -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
     <!-- No request may leave the origin: no analytics, no fonts, no CDNs. -->
     <meta
       http-equiv="Content-Security-Policy"
@@ -11,9 +13,11 @@
     <meta name="referrer" content="no-referrer" />
     <title>Nines</title>
     <style>
-      html, body { margin: 0; height: 100%; background: #101820; overflow: hidden; }
-      #game { width: 100vw; height: 100dvh; }
-      canvas { image-rendering: pixelated; }
+      /* No page scroll, no pull-to-refresh, no double-tap zoom: the game is the whole page. */
+      html, body { margin: 0; height: 100%; background: #101820; overflow: hidden; overscroll-behavior: none; touch-action: manipulation; }
+      /* src/game/touch/controls.ts sizes and places the canvas (a whole-number scale where it fits) */
+      #game { position: absolute; left: 0; top: 0; width: 100vw; height: 100dvh; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+      canvas { display: block; image-rendering: pixelated; }
     </style>
   </head>
   <body>

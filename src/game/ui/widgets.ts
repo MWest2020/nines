@@ -7,6 +7,7 @@ import { measure, sanitize } from './font';
 import { pixelFont } from './pixelfont';
 import { C, hex } from './theme';
 import type { Dir, Focusable } from './nav';
+import { PAD_EVENTS } from '../touch/pad';
 
 export type { Dir, Focusable } from './nav';
 export { navigate } from './nav';
@@ -79,11 +80,22 @@ export function freshKeys(fn: (e: KeyboardEvent) => void): (e: KeyboardEvent) =>
 
 /**
  * Keyboard for a screen: arrows or WASD move focus, Enter or Space presses, Escape backs out.
+ * The on-screen D-pad, use and back buttons do the same (src/game/touch/pad.ts).
  * Returns a function that removes the listeners.
  */
 export function keyboardNav(scene: Phaser.Scene, handlers: { move: (d: Dir) => void; press: () => void; back: () => void }): () => void {
+  const events = scene.game.events;
+  const onMove = (d: Dir) => handlers.move(d);
+  events.on(PAD_EVENTS.move, onMove);
+  events.on(PAD_EVENTS.use, handlers.press);
+  events.on(PAD_EVENTS.back, handlers.back);
+  const offPad = () => {
+    events.off(PAD_EVENTS.move, onMove);
+    events.off(PAD_EVENTS.use, handlers.press);
+    events.off(PAD_EVENTS.back, handlers.back);
+  };
   const kb = scene.input.keyboard;
-  if (!kb) return () => {};
+  if (!kb) return offPad;
   const map: Record<string, () => void> = {
     ArrowUp: () => handlers.move('up'),
     KeyW: () => handlers.move('up'),
@@ -105,5 +117,8 @@ export function keyboardNav(scene: Phaser.Scene, handlers: { move: (d: Dir) => v
     }
   });
   kb.on('keydown', onKey);
-  return () => kb.off('keydown', onKey);
+  return () => {
+    kb.off('keydown', onKey);
+    offPad();
+  };
 }

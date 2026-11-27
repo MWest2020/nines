@@ -27,6 +27,9 @@ export const hex = (c: string): number => Number.parseInt(c.slice(1), 16);
 
 export const VIEW = { width: 240, height: 160 } as const;
 
+/** The HUD bar sits in its own band above the view; the canvas is both (src/game/touch/layout.ts). */
+export { CANVAS, HUD_BAND as BAND } from '../touch/layout';
+
 /** UI scenes draw above the world; their depth inside the scene. */
 export const DEPTH = { panel: 10, text: 11, top: 20 } as const;
 
@@ -39,7 +42,7 @@ export function panel(scene: Phaser.Scene, x: number, y: number, w: number, h: n
   return g;
 }
 
-/** Dim whatever is under a full-screen UI screen. */
-export function dimmer(scene: Phaser.Scene, alpha = 0.6): Phaser.GameObjects.Rectangle {
-  return scene.add.rectangle(0, 0, VIEW.width, VIEW.height, hex(C.ink), alpha).setOrigin(0).setInteractive();
+/** Dim whatever is under a full-screen UI screen (the view; pass a height to dim more). */
+export function dimmer(scene: Phaser.Scene, alpha = 0.6, height: number = VIEW.height): Phaser.GameObjects.Rectangle {
+  return scene.add.rectangle(0, 0, VIEW.width, height, hex(C.ink), alpha).setOrigin(0).setInteractive();
 }

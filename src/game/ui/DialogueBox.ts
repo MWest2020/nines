@@ -1,5 +1,5 @@
 // The dialogue box (DESIGN.md, World and dialogue box): a dark ink panel with paper text at the
-// bottom of the view, 232 x 48 px with a 4 px margin, three lines of text. A name tab sits on
+// bottom of the view (the HUD scene draws on the whole canvas, band included), 232 x 48 px with a 4 px margin, three lines of text. A name tab sits on
 // its top edge with a 1 px gold rule under the name; square corners. Text types out; a tap,
 // Enter or Space shows it all, the next one advances. A small gold caret blinks when there is
 // more. Our own shape, not a copy of any other game's box.
@@ -7,7 +7,7 @@
 import Phaser from 'phaser';
 import { measure, paginate, sanitize } from './font';
 import { pixelText } from './pixelfont';
-import { C, hex, VIEW } from './theme';
+import { C, CANVAS, hex } from './theme';
 
 const BOX = { x: 4, w: 232, h: 48 } as const;
 const PAD = { x: 6, y: 5 } as const;
@@ -40,7 +40,7 @@ export class DialogueBox {
   private queue: Promise<void> = Promise.resolve();
 
   constructor(private readonly scene: Phaser.Scene) {
-    const y = VIEW.height - BOX.h - 4;
+    const y = CANVAS.height - BOX.h - 4;
     this.frame = scene.add.graphics();
     this.body = pixelText(scene, BOX.x + PAD.x, y + PAD.y, '', C.paper);
     this.name = pixelText(scene, BOX.x + PAD.x, y - 9, '', C.gold);
@@ -48,7 +48,7 @@ export class DialogueBox {
     this.caret.setPosition(BOX.x + BOX.w - 9, y + BOX.h - 10);
     scene.tweens.add({ targets: this.caret, alpha: 0, duration: 400, yoyo: true, repeat: -1, ease: 'Stepped' });
     // a full-screen catcher: while the box is open a tap anywhere advances it
-    const catcher = scene.add.zone(0, 0, VIEW.width, VIEW.height).setOrigin(0).setInteractive();
+    const catcher = scene.add.zone(0, 0, CANVAS.width, CANVAS.height).setOrigin(0).setInteractive();
     catcher.on('pointerdown', () => this.advance());
     this.root = scene.add.container(0, 0, [catcher, this.frame, this.name, this.body, this.caret]).setVisible(false).setDepth(30);
     this.root.setActive(false);
@@ -114,7 +114,7 @@ export class DialogueBox {
 
   private render(): void {
     const page = this.pages[this.index]!;
-    const y = VIEW.height - BOX.h - 4;
+    const y = CANVAS.height - BOX.h - 4;
     const g = this.frame.clear();
     g.fillStyle(hex(C.ink), 1).fillRect(BOX.x, y, BOX.w, BOX.h);
     g.lineStyle(1, hex(C.slate), 1).strokeRect(BOX.x + 0.5, y + 0.5, BOX.w - 1, BOX.h - 1);

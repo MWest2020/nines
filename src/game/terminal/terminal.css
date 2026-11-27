@@ -42,7 +42,8 @@
   display: flex;
   flex-direction: column;
   width: min(1100px, 100vw);
-  height: min(720px, 100dvh);
+  /* of the overlay, which follows the visual viewport when a soft keyboard opens */
+  height: min(720px, 100%);
   background: var(--ink);
   border: 1px solid var(--slate);
 }
@@ -343,7 +344,7 @@
 @media (max-width: 720px) {
   .nt-window {
     width: 100vw;
-    height: 100dvh;
+    height: 100%;
     border: 0;
   }
 
@@ -368,5 +369,37 @@
 
   .nt-show-side .nt-side {
     display: block;
+  }
+}
+
+/* touch screens: every button at least 44 CSS px, and no double-tap zoom */
+@media (pointer: coarse) {
+  .nt-overlay {
+    touch-action: manipulation;
+  }
+
+  .nt-close,
+  .nt-objtoggle,
+  .nt-btn,
+  .nt-quick button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .nt-quick {
+    overscroll-behavior-x: contain;
+  }
+
+  /* 16 px or more: iOS zooms the page into a smaller input on focus */
+  .nt-input {
+    font-size: 16px;
+  }
+}
+
+/* a short window (a phone in landscape, or the soft keyboard up): a slimmer header */
+@media (max-height: 480px) {
+  .nt-head {
+    min-height: 0;
+    padding: 2px 8px;
   }
 }
