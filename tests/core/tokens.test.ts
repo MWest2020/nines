@@ -1,10 +1,13 @@
 // AI tokens (core/tokens.ts): hints cost tokens and scale a quest's reward down, with a floor;
 // AI credits from the shop; the career path; the version-2 to version-3 save migration.
 import { describe, expect, it } from 'vitest';
-import { buy, canBuy, choosePath, completeQuest, recordBattle, type Rules } from '../../src/core/game';
+import { buy, CAREER_CHANGE_FEE, canBuy, changePath, choosePath, completeQuest, recordBattle, type Rules } from '../../src/core/game';
 import { memoryStorage, openSave } from '../../src/core/persist';
 import { deserialize, type GameState, MIGRATIONS, newGame, SAVE_KEY, SAVE_VERSION, serialize, START_TOKENS } from '../../src/core/save';
 import { FLOOR_PERCENT, HINT_COST, hintOffer, hintsTaken, PENALTY_PERCENT, rewardPercent, scaled, takeHint } from '../../src/core/tokens';
+import { progressEnv } from '../../src/core/progress';
+import { compile, test } from '../../src/rules/expr';
+import { PROGRESS_FACTS } from '../../src/rules/registries';
 import { content } from '../helpers';
 
 const rules = (): Rules => content();
@@ -186,6 +189,32 @@ describe('career paths', () => {
     expect(choosePath(r.game, rules(), 'sre')).toEqual({ ok: true, game: r.game });
     expect(choosePath(r.game, rules(), 'swe')).toMatchObject({ ok: false, reason: 'chosen' });
     expect(choosePath(medior(), rules(), 'wizard')).toMatchObject({ ok: false, reason: 'unknown' });
+  });
+  it('can be changed later at the coach, for a fee (issue #24, default 2)', () => {
+    expect(CAREER_CHANGE_FEE).toBe(300);
+    expect(changePath(mvp(), rules(), 'swe')).toMatchObject({ ok: false, reason: 'closed' });
+    expect(changePath(medior(), rules(), 'swe')).toMatchObject({ ok: false, reason: 'none' });
+    const chosen = choosePath(medior(), rules(), 'sre');
+    if (!chosen.ok) throw new Error(chosen.reason);
+    const rich = frozen({ ...chosen.game, money: 450, xp: { incident: 30 }, karma: 10 });
+    expect(changePath(rich, rules(), 'sre')).toMatchObject({ ok: false, reason: 'same' });
+    expect(changePath(rich, rules(), 'wizard')).toMatchObject({ ok: false, reason: 'unknown' });
+    expect(changePath(frozen({ ...rich, money: CAREER_CHANGE_FEE - 1 }), rules(), 'swe')).toMatchObject({ ok: false, reason: 'money' });
+    const r = changePath(rich, rules(), 'swe');
+    expect(r).toMatchObject({ ok: true, fee: 300 });
+    if (!r.ok) return;
+    // the fee is paid, the path changes, and what was learned stays
+    expect([r.game.path, r.game.money, r.game.xp, r.game.karma, r.game.quests]).toEqual(['swe', 150, { incident: 30 }, 10, rich.quests]);
+    // and back again costs the fee again
+    expect(changePath(r.game, rules(), 'sre')).toMatchObject({ ok: false, reason: 'money' });
+  });
+  it('the path_chosen and career_path() progress facts read the choice', () => {
+    const chosen = choosePath(medior(), rules(), 'platform');
+    if (!chosen.ok) throw new Error(chosen.reason);
+    const ask = (g: GameState, src: string) => test(compile(src, PROGRESS_FACTS), progressEnv(g, rules().quests.map((q) => q.quest)));
+    expect(ask(medior(), 'path_chosen')).toBe(false);
+    expect(ask(medior(), 'career_path("platform")')).toBe(false);
+    expect(ask(chosen.game, 'path_chosen && career_path("platform") && !career_path("swe")')).toBe(true);
   });
   it('every quest counts towards at least one path, and every path has a quest', () => {
     const quests = rules().quests;

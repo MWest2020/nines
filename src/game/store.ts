@@ -23,6 +23,7 @@ export type Change =
   | { kind: 'hint'; quest: string; charged: number }
   | { kind: 'caught'; quest: string; fine: number; arrested: boolean }
   | { kind: 'contractor'; on: boolean }
+  | { kind: 'path'; path: string; fee: number }
   | { kind: 'quest'; id: string }
   | { kind: 'locale'; locale: LocaleId }
   | { kind: 'other' };
@@ -155,6 +156,22 @@ export class GameStore {
 
   conversation(npcId: string): Conversation | null {
     return conversation(this.state, this.content, npcId);
+  }
+
+  // ---- career paths (DESIGN.md, Career paths)
+
+  /** Choose the career path at the coach (saved). False when refused. */
+  choosePath(id: string): boolean {
+    const r = rules.choosePath(this.state, this.content, id);
+    if (r.ok) this.commit(r.game, { kind: 'path', path: id, fee: 0 }, true);
+    return r.ok;
+  }
+
+  /** Change the career path at the coach, for its fee (saved). False when refused. */
+  changePath(id: string): boolean {
+    const r = rules.changePath(this.state, this.content, id);
+    if (r.ok) this.commit(r.game, { kind: 'path', path: id, fee: r.fee }, true);
+    return r.ok;
   }
 
   // ---- shop

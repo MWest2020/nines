@@ -69,7 +69,7 @@ export const USAGE: Record<string, string> = {
   edit: 'edit <file>',
   systemctl: 'systemctl status|restart <unit>',
   journalctl: 'journalctl -u <unit> [-n N]',
-  kubectl: 'kubectl get pods | kubectl describe pod [pod] | kubectl logs <pod> | kubectl apply -f <file> | kubectl rollout restart deployment/<name>',
+  kubectl: 'kubectl get pods|deployments | kubectl describe pod [pod] | kubectl logs <pod> | kubectl apply -f <file> | kubectl rollout restart|status deployment/<name>',
   git: 'git status | git add <path...> | git commit -m "message"',
   clear: 'clear',
   exit: 'exit',
@@ -541,17 +541,20 @@ const kubectl: Command = (ctx, args) => {
   const all = f['A'] || f['all-namespaces'];
   switch (rest[0]) {
     case 'get': {
+      if (['deployments', 'deployment', 'deploy'].includes(rest[1] ?? '')) return getDeployments(ctx, all ? null : ns);
       if (!['pods', 'pod', 'po'].includes(rest[1] ?? '')) return usage();
       const pods = ctx.s.pods.filter((p) => all || p.namespace === ns);
       if (pods.length === 0) return ok([ctx.t('sh.no_pods', { ns })]);
       const w = Math.max(4, ...pods.map((p) => p.name.length)) + 3;
-      const sw = Math.max(6, ...pods.map((p) => p.status.length)) + 3;
+      // a pod whose readiness probe fails runs, but is not ready: Running, READY 0/1
+      const shown = (p: SimState['pods'][number]) => (p.status === 'NotReady' ? 'Running' : p.status);
+      const sw = Math.max(6, ...pods.map((p) => shown(p).length)) + 3;
       const nsCol = (v: string) => (all ? v.padEnd(Math.max(9, ...pods.map((p) => p.namespace.length)) + 3) : '');
       return ok([
         `${nsCol('NAMESPACE')}${'NAME'.padEnd(w)}READY   ${'STATUS'.padEnd(sw)}RESTARTS   AGE`,
         ...pods.map(
           (p) =>
-            `${nsCol(p.namespace)}${p.name.padEnd(w)}${(p.status === 'Running' ? '1/1' : '0/1').padEnd(8)}${p.status.padEnd(sw)}${String(p.restarts).padEnd(11)}${p.age}`,
+            `${nsCol(p.namespace)}${p.name.padEnd(w)}${(p.status === 'Running' ? '1/1' : '0/1').padEnd(8)}${shown(p).padEnd(sw)}${String(p.restarts).padEnd(11)}${p.age}`,
         ),
       ]);
     }
@@ -580,6 +583,8 @@ const kubectl: Command = (ctx, args) => {
         const r = applyManifest(ctx, target.path, target.shown, ns);
         out.push(r.line);
         bad ||= r.bad;
+        // a changed pod template rolls the Deployment out, as on a real cluster
+        if (r.rollout) rollout(ctx, r.rollout);
       }
       return bad ? { out, exit: 1, fail: true } : ok(out);
     }
@@ -602,7 +607,7 @@ const kubectl: Command = (ctx, args) => {
       ]);
     }
     case 'rollout': {
-      if (rest[1] !== 'restart') return usage();
+      if (rest[1] !== 'restart' && rest[1] !== 'status') return usage();
       let name: string | undefined;
       const m = /^(?:deployment|deployments|deploy)\/(.+)$/.exec(rest[2] ?? '');
       if (m) name = m[1];
@@ -610,22 +615,53 @@ const kubectl: Command = (ctx, args) => {
       if (!name) return usage();
       const spec = own(ctx.spec.deployments, name);
       if (!spec || (spec.namespace ?? 'default') !== ns) return fail([ctx.t('sh.deploy_not_found', { name })]);
-      const rule = own(ctx.deploymentRules, name);
-      const healthy = rule === undefined || test(rule, ctx.env);
-      ctx.s.generation++;
+      if (rest[1] === 'status') {
+        const pods = ctx.s.pods.filter((p) => p.deployment === name);
+        const ready = pods.filter((p) => p.status === 'Running').length;
+        if (ready === pods.length) return ok([`deployment "${name}" successfully rolled out`]);
+        // the real command waits; this terminal shows where the rollout stands and returns
+        return { out: [`Waiting for deployment "${name}" rollout to finish: ${ready} of ${pods.length} updated replicas are available...`, ctx.t('sh.rollout_wait_note')], exit: 1, fail: false };
+      }
+      rollout(ctx, name);
       ctx.s.restarted.push(name);
-      const status = healthy ? 'Running' : (spec.restart?.status_on_failure ?? spec.status);
-      const logs = healthy ? (spec.restart?.logs_on_success ?? []) : (spec.restart?.logs_on_failure ?? spec.logs ?? []);
-      ctx.s.pods = [
-        ...ctx.s.pods.filter((p) => p.deployment !== name),
-        ...makePods(name, spec, ctx.s.generation, status, 0, '3s', logs),
-      ];
       return ok([`deployment.apps/${name} restarted`]);
     }
     default:
       return usage();
   }
 };
+
+/**
+ * Replace a Deployment's pods with a new generation, healthy when its `restart.succeeds_if` holds:
+ * what `rollout restart` does, and what applying a changed Deployment does on a real cluster.
+ */
+function rollout(ctx: Ctx, name: string): void {
+  const spec = own(ctx.spec.deployments, name);
+  if (!spec) return;
+  const rule = own(ctx.deploymentRules, name);
+  const healthy = rule === undefined || test(rule, ctx.env);
+  ctx.s.generation++;
+  const status = healthy ? 'Running' : (spec.restart?.status_on_failure ?? spec.status);
+  const logs = healthy ? (spec.restart?.logs_on_success ?? []) : (spec.restart?.logs_on_failure ?? spec.logs ?? []);
+  ctx.s.pods = [...ctx.s.pods.filter((p) => p.deployment !== name), ...makePods(name, spec, ctx.s.generation, status, 0, '3s', logs)];
+}
+
+/** kubectl get deployments: ready, up to date and available replicas per Deployment. */
+function getDeployments(ctx: Ctx, ns: string | null): CmdResult {
+  const names = Object.keys(ctx.spec.deployments ?? {}).filter((n) => ns === null || (own(ctx.spec.deployments, n)?.namespace ?? 'default') === ns);
+  if (names.length === 0) return ok([ctx.t('sh.no_pods', { ns: ns ?? 'default' })]);
+  const w = Math.max(4, ...names.map((n) => n.length)) + 3;
+  const nsW = ns === null ? Math.max(9, ...names.map((n) => (own(ctx.spec.deployments, n)?.namespace ?? 'default').length)) + 3 : 0;
+  const col = (v: string) => (ns === null ? v.padEnd(nsW) : '');
+  return ok([
+    `${col('NAMESPACE')}${'NAME'.padEnd(w)}READY   UP-TO-DATE   AVAILABLE   AGE`,
+    ...names.map((n) => {
+      const pods = ctx.s.pods.filter((p) => p.deployment === n);
+      const ready = pods.filter((p) => p.status === 'Running').length;
+      return `${col(own(ctx.spec.deployments, n)?.namespace ?? 'default')}${n.padEnd(w)}${`${ready}/${pods.length}`.padEnd(8)}${String(pods.length).padEnd(13)}${String(ready).padEnd(12)}${pods[0]?.age ?? '42m'}`;
+    }),
+  ]);
+}
 
 /** Phase, container state and events of a pod, as kubectl describe pod prints them (abridged). */
 function describePod(p: SimState['pods'][number], spec: DeploymentSpec | undefined): string[] {
@@ -634,7 +670,7 @@ function describePod(p: SimState['pods'][number], spec: DeploymentSpec | undefin
   const ready = p.status === 'Running';
   const image = spec?.image ?? `${p.deployment}:latest`;
   const state: string[] =
-    p.status === 'Running'
+    p.status === 'Running' || p.status === 'NotReady'
       ? ['    State:          Running']
       : p.status === 'Error'
         ? ['    State:          Terminated', '      Reason:       Error', '      Exit Code:    1']
@@ -644,7 +680,12 @@ function describePod(p: SimState['pods'][number], spec: DeploymentSpec | undefin
   if (p.status === 'CrashLoopBackOff') state.push('    Last State:     Terminated', '      Reason:       Error', '      Exit Code:    1');
   const seen = (n: number) => (n > 1 ? `20s (x${n} over ${p.age})` : p.age);
   const events: string[] =
-    p.status === 'Running'
+    p.status === 'NotReady'
+      ? [
+          `  Normal   Started    ${p.age.padEnd(19)}kubelet  Started container ${p.deployment}`,
+          `  Warning  Unhealthy  ${seen(p.restarts + 12).padEnd(19)}kubelet  Readiness probe failed: ${spec?.readiness_failure ?? 'the probe did not succeed'}`,
+        ]
+      : p.status === 'Running'
       ? [
           `  Normal   Pulled     ${p.age.padEnd(19)}kubelet  Container image "${image}" already present on machine`,
           `  Normal   Started    ${p.age.padEnd(19)}kubelet  Started container ${p.deployment}`,
@@ -685,7 +726,7 @@ function describePod(p: SimState['pods'][number], spec: DeploymentSpec | undefin
  * them); comments and blank lines never make a change. The content is what a scenario's
  * applied_value() and applied_contains() read.
  */
-function applyManifest(ctx: Ctx, path: string, shown: string, ns: string): { line: string; bad: boolean } {
+function applyManifest(ctx: Ctx, path: string, shown: string, ns: string): { line: string; bad: boolean; rollout?: string } {
   const node = ctx.s.fs[path];
   const text = node?.type === 'file' ? (node.content ?? '') : '';
   const tab = text.split('\n').findIndex((l) => /^[ ]*\t/.test(l));
@@ -696,7 +737,10 @@ function applyManifest(ctx: Ctx, path: string, shown: string, ns: string): { lin
   const before = own(ctx.s.cluster, key);
   setOwn(ctx.s.cluster, key, text);
   const how = before === undefined ? 'created' : significant(before) === significant(text) ? 'unchanged' : 'configured';
-  return { bad: false, line: `${resourceName(id.kind)}/${id.name} ${how}` };
+  // a configured Deployment that the scenario runs rolls out new pods (its namespace must match)
+  const dep = id.kind === 'Deployment' && how === 'configured' ? own(ctx.spec.deployments, id.name) : undefined;
+  const rollsOut = dep !== undefined && (dep.namespace ?? 'default') === (id.namespace ?? ns);
+  return { bad: false, line: `${resourceName(id.kind)}/${id.name} ${how}`, ...(rollsOut ? { rollout: id.name } : {}) };
 }
 
 // ------------------------------------------------------------------ git

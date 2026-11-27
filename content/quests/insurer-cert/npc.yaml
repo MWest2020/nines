@@ -1,0 +1,15 @@
+# Marieke, IT manager at Grachtgarant, a fictional insurer. A placeholder sprite tinted in the
+# palette's water blue. Her job stays locked on probation or below zero karma, so she says why
+# herself and points at community service.
+schema: 1
+id: marieke
+author: {name: "Nines team"}
+name: npc.name
+tint: "#2860a0"
+spawn: {map: medior-city, slot: npc-6, facing: down}
+dialogue:
+  - when: 'quest("insurer-cert") == "done"'
+    lines: [npc.after]
+  - when: 'probation || karma < 0'
+    lines: [npc.no_clearance]
+  - lines: [npc.idle]

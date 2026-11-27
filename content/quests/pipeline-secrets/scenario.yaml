@@ -1,0 +1,120 @@
+# ci-02: payments-web's pipeline. What it teaches: a secret written into a pipeline file is in
+# git for good (removing it in a new commit does not take it out of the history), so it is moved
+# to the CI's secret store, which hands it to the job as an environment variable and masks it in
+# the log, and the leaked value is revoked; a dependency cache keyed on the lockfile (the cache is
+# reused until the dependencies change, and a key that never changes would serve stale packages);
+# and that a pipeline change only counts once it is committed and the run passes.
+schema: 1
+host: ci-02
+user: dev
+home: /home/dev
+cwd: /home/dev/payments-web
+motd: motd
+mounts:
+  - {path: /, device: /dev/vda1, size: 40G, base_used: 9G}
+dirs: [/tmp]
+files:
+  /home/dev/payments-web/README.md: |
+    # payments-web
+    The checkout pages. CI config: .nines-ci.yml. How our CI does caches and secrets:
+    docs/ci.md.
+  /home/dev/payments-web/package.json: |
+    {"name": "payments-web", "scripts": {"build": "vite build", "test": "vitest run"}}
+  /home/dev/payments-web/package-lock.json: |
+    {"name": "payments-web", "lockfileVersion": 3, "packages": {"": {"name": "payments-web"}}}
+  /home/dev/payments-web/deploy.sh: |
+    #!/bin/sh
+    # Uploads dist/ to the payment pages host. Needs DEPLOY_TOKEN in the environment.
+    set -eu
+    upload --token "$DEPLOY_TOKEN" dist/
+  /home/dev/payments-web/docs/ci.md: |
+    # Our CI (nines-ci): caches and secrets
+
+    ## Caches
+    A job may keep folders between runs. The cache is reused while its key file is unchanged:
+
+        install:
+          stage: install
+          cache:
+            key: package-lock.json
+            paths: [.npm]
+          script:
+            - npm ci --cache .npm --prefer-offline
+
+    Key it on the lockfile: it changes exactly when the dependencies do. package.json also
+    changes for a new script, and a fixed key would keep serving old packages.
+
+    ## Secrets
+    Never write a secret into this file: the file is in git, and git keeps every version.
+    Ask the platform team to put the value in the CI's secret store, then name it in the job:
+
+        deploy:
+          stage: deploy
+          secrets: [DEPLOY_TOKEN]
+          script:
+            - ./deploy.sh
+
+    The job gets it as the environment variable DEPLOY_TOKEN, and the log shows it as [MASKED].
+    DEPLOY_TOKEN is in the store already (ticket PLAT-311).
+  /home/dev/payments-web/ci-last-run.log: |
+    ci: pipeline #208 started for main
+    ci: install   6m12s   npm ci: downloaded 1214 packages (no cache)
+    ci: test      1m40s   212 tests passed
+    ci: deploy    0m21s   DEPLOY_TOKEN=dpl_live_7f3a9c21e8b44d06 ./deploy.sh
+    ci: pipeline #208 passed in 8m13s
+    secret-scan: WARNING a live deploy token (dpl_live_...) was found in .nines-ci.yml and in this log
+  /home/dev/payments-web/.nines-ci.yml: |
+    stages:
+      - install
+      - test
+      - deploy
+
+    install:
+      stage: install
+      image: node:22
+      script:
+        - npm ci
+
+    test:
+      stage: test
+      needs: [install]
+      script:
+        - npm test
+
+    deploy:
+      stage: deploy
+      needs: [test]
+      script:
+        - DEPLOY_TOKEN=dpl_live_7f3a9c21e8b44d06 ./deploy.sh
+  /home/dev/ops/revoke-request.txt: |
+    Token revocation request, for the security team
+    Repository: payments-web
+    Paste the leaked token here, so we revoke the right one:
+git:
+  root: /home/dev/payments-web
+  branch: main
+  pipeline: {file: .nines-ci.yml, validator: nines-ci}
+quick:
+  - cat ci-last-run.log
+  - cat docs/ci.md
+  - edit .nines-ci.yml
+  - git status
+  - git add .nines-ci.yml
+  - "git commit -m \"ci: secrets and cache\""
+  - "edit ~/ops/revoke-request.txt"
+objectives:
+  - {id: no-token, text: obj.no_token, done_when: '!file_contains("/home/dev/payments-web/.nines-ci.yml", "dpl_live_7f3a9c21e8b44d06")'}
+  - {id: secret, text: obj.secret, done_when: 'file_contains("/home/dev/payments-web/.nines-ci.yml", "secrets:") && file_contains("/home/dev/payments-web/.nines-ci.yml", "DEPLOY_TOKEN")'}
+  - {id: cache, text: obj.cache, done_when: 'file_contains("/home/dev/payments-web/.nines-ci.yml", "cache:") && file_contains("/home/dev/payments-web/.nines-ci.yml", "key: package-lock.json")'}
+  - {id: green, text: obj.green, done_when: 'pipeline_valid && git_clean && pipeline_status == "passed"'}
+  - {id: revoke, text: obj.revoke, done_when: 'file_contains("/home/dev/ops/revoke-request.txt", "dpl_live_7f3a9c21e8b44d06")'}
+hints:
+  - {id: log, when: 'commands >= 3 && !opened("/home/dev/payments-web/ci-last-run.log")', text: hint.log}
+  - {id: docs, when: 'opened("/home/dev/payments-web/ci-last-run.log") && !opened("/home/dev/payments-web/docs/ci.md") && (fails >= 1 || commands >= 6)', text: hint.docs}
+  - {id: commit, when: 'pipeline_valid && !git_clean && (fails >= 2 || commands >= 12)', text: hint.commit}
+  - {id: leaked, when: '!file_contains("/home/dev/payments-web/.nines-ci.yml", "dpl_live_7f3a9c21e8b44d06") && !file_contains("/home/dev/ops/revoke-request.txt", "dpl_live_7f3a9c21e8b44d06") && commands >= 10', text: hint.revoke}
+  - {id: syntax, when: '!pipeline_valid && fails >= 2', text: hint.syntax}
+events:
+  - id: package-json-key
+    when: 'file_contains("/home/dev/payments-web/.nines-ci.yml", "key: package.json")'
+    say: event.package_json_key

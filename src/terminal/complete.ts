@@ -78,7 +78,7 @@ function candidates(s: SimState, before: readonly string[], word: string): Candi
     return words([...s.pods.map((p) => p.name).sort(), ...deployments.map((d) => `deployment/${d}`)], word);
   }
   if (cmd === 'kubectl' && args[1] === 'rollout') {
-    if (args.length === 2) return words(['restart'], word);
+    if (args.length === 2) return words(['restart', 'status'], word);
     if (args.length === 3) return words(deployments.map((d) => `deployment/${d}`), word);
   }
   return pathCandidates(s, word);

@@ -1,0 +1,23 @@
+# The DevOps Engineer's first Medior quest: a pipeline that is slow (no cache, every run downloads
+# every package) and leaks (a live deploy token written into the pipeline file). The player moves
+# the token to the CI's secret store, adds a cache keyed on the lockfile, commits, and asks for
+# the leaked token to be revoked, because git keeps it in the history. Ruben sits in The Stack
+# (npc-1); his desk is stack-desk-ci.
+schema: 1
+id: pipeline-secrets
+author: {name: "Nines team"}
+title: title
+summary: summary
+stage: medior
+branch: cicd
+paths: [devops]
+roadmap_node: cicd-cache-secrets
+requires: [rate-limiter-interview]
+available_when: 'path_chosen'
+giver: ruben
+start: {map: the-stack, object: stack-desk-ci}
+reward: {money: 450, xp: 50}
+dialogue:
+  offer: [offer.1, offer.2]
+  active: [active.1]
+  done: [done.1, done.2]

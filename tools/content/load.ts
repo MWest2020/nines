@@ -415,10 +415,12 @@ export function loadContent(contentDir: string, schemaDir: string, options: Load
       const at = objectTile(o);
       if (at.x >= map.width || at.y >= map.height) err(file, `object "${o.name}" lies outside the map`);
       const props = new Map((o.properties ?? []).map((x) => [x.name, x.value]));
-      const allowed = o.type === 'spawn' ? ['facing'] : o.type === 'door' ? ['to_map', 'to_point', 'facing'] : [];
+      const allowed = o.type === 'spawn' ? ['facing'] : o.type === 'door' ? ['to_map', 'to_point', 'facing', 'town'] : [];
       for (const k of props.keys()) if (!allowed.includes(k)) err(file, `object "${o.name}" (${o.type}) may not have the property "${k}"`);
       if (props.has('facing') && !isFacing(props.get('facing'))) err(file, `object "${o.name}": facing must be up, down, left or right`);
       if (o.type === 'door' && (!props.has('to_map') || !props.has('to_point'))) err(file, `door "${o.name}" needs the properties to_map and to_point`);
+      // a gated door (town: medior) stays shut until the road to that town is open
+      if (props.has('town') && !(roadmap?.towns ?? []).some((t) => t.id === props.get('town'))) err(file, `door "${o.name}": town "${String(props.get('town'))}" is not a town in roadmap.yaml`);
     }
     if (errors.length === before) {
       maps.push({ id, map });
@@ -836,6 +838,8 @@ export function loadContent(contentDir: string, schemaDir: string, options: Load
   // ---- cross-folder checks
   const npcIds = npcs.map((n) => n.npc.id);
   for (const id of new Set(npcIds)) if (npcIds.filter((x) => x === id).length > 1) errors.push(`content: npc id "${id}" is used twice`);
+  const coaches = npcs.filter((n) => n.npc.role === 'coach').map((n) => n.npc.id);
+  if (coaches.length > 1) errors.push(`content: only one career coach, found ${coaches.join(', ')}`);
   const slots = npcs.map((n) => `${n.npc.spawn.map}/${n.npc.spawn.slot}`);
   for (const s of new Set(slots)) if (slots.filter((x) => x === s).length > 1) errors.push(`content: spawn slot ${s} is taken twice`);
   for (const q of quests) {

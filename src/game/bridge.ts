@@ -8,6 +8,9 @@
 // giver whose town has no map yet says that the town opens later.
 //
 // Using a terminal opens the quest's terminal overlay (src/game/terminal).
+//
+// The career coach (an npc with role: coach) opens the career screen after her lines, and speaks
+// again when the player chose or changed a path there (her lines name the mentor).
 
 import Phaser from 'phaser';
 import { questKey } from '../content/types';
@@ -25,6 +28,14 @@ export function bridgeWorld(game: Phaser.Game, api: GameApi): void {
     const run = async (): Promise<void> => {
       const c = await api.talk(e.npc.id);
       if (c?.battle) return openBattle(game, api, c.battle);
+      // the career coach: her screen after her lines; a new choice gets her word on the mentor
+      if (e.npc.role === 'coach' && !c?.offer) {
+        const before = api.store.game.path;
+        await api.openCareer();
+        const after = api.store.conversation(e.npc.id);
+        if (api.store.game.path !== before && after) await api.showDialogue(after.lines.map((text) => ({ speaker: after.speaker, text })));
+        return;
+      }
       // a won gate into a town that is not built yet
       const gate = e.quests.find((q) => q.battle?.trigger.kind === 'gate' && api.store.questState(q.id) === 'done');
       const later = gate ? gateLater(api, gate) : null;

@@ -1,0 +1,24 @@
+# Esra, lead pentester at Duinwacht Security, a small security firm in Medior City. A placeholder
+# sprite tinted in the palette's plum. Her own lines speak when she has nothing to offer: before
+# a career path is chosen, on a record she cannot take to a client, and after the engagement
+# (to her mentees on the ethical path one way, to everyone else another).
+schema: 1
+id: esra
+author: {name: "Nines team"}
+name: npc.name
+tint: "#683878"
+spawn: {map: the-stack, slot: npc-2, facing: down}
+dialogue:
+  - when: 'quest("webshop-scope") == "done" && career_path("ethical")'
+    lines: [npc.after_mentee]
+  - when: 'quest("webshop-scope") == "done"'
+    lines: [npc.after_side]
+  - when: '!path_chosen'
+    lines: [npc.no_path]
+  - when: 'probation || karma < 0'
+    lines: [npc.no_clearance]
+  - when: 'career_path("ethical")'
+    lines: [npc.mentee]
+    intro: true
+  - lines: [npc.side]
+    intro: true

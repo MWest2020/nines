@@ -10,10 +10,12 @@ import { progressEnv } from '../core/progress';
 import { compile, test } from '../rules/expr';
 import { own } from '../rules/own';
 import { PROGRESS_FACTS } from '../rules/registries';
+import { townOpen } from '../core/game';
 import {
   ahead,
   approach,
   canEnter,
+  closedGates,
   doorTiles,
   findPath,
   facingOf,
@@ -21,6 +23,7 @@ import {
   isSolid,
   objectNamed,
   objectsAt,
+  openMaps,
   OPPOSITE,
   readMap,
   TILE,
@@ -57,6 +60,10 @@ export class WorldScene extends Phaser.Scene {
   private world!: WorldMap;
   private player!: Actor;
   private npcs: Npc[] = [];
+  /** the map as drawn, for clearing a gate's barrier once its road opens */
+  private tilemap: Phaser.Tilemaps.Tilemap | null = null;
+  /** gate doors still shut ("x,y"): walls until the road to their town is open */
+  private gates = new Set<string>();
   private moving = false;
   private busy = false;
   private turnedAt = 0;
@@ -92,10 +99,18 @@ export class WorldScene extends Phaser.Scene {
 
   create(): void {
     this.api = getGameApi(this);
+    // a map behind a gate that is still shut (a hand-edited save) puts the player back at the start
+    const { store } = this.api;
+    const reachable = openMaps(content.maps.map((m) => readMap(m.id, m.map)), (town) => townOpen(store.game, store.content, town));
+    if (this.start.map !== undefined && !reachable.has(this.start.map)) this.start = {};
     this.entry = content.maps.find((m) => m.id === this.start.map) ?? content.maps.find((m) => m.id === DEFAULT_MAP) ?? content.maps[0]!;
     this.world = readMap(this.entry.id, this.entry.map);
 
     this.drawMap();
+    this.updateGates();
+    // a gate battle won while standing here opens the road at once
+    const offStore = this.api.store.subscribe(() => this.updateGates());
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, offStore);
     this.placeNpcs();
     this.placePlayer();
     this.bindKeys();
@@ -117,6 +132,7 @@ export class WorldScene extends Phaser.Scene {
 
   private drawMap(): void {
     const map = this.make.tilemap({ key: `map:${this.entry.id}` });
+    this.tilemap = map;
     const tilesets = this.entry.map.tilesets.flatMap((ts) => {
       const url = own(this.entry.images ?? {}, ts.name);
       const set = url ? map.addTilesetImage(ts.name, tilesetKey(url), TILE, TILE, 0, ts.spacing ?? 0) : null;
@@ -140,6 +156,19 @@ export class WorldScene extends Phaser.Scene {
           detail.swapByIndex(g + 3, g + 4);
         },
       });
+    }
+  }
+
+  /**
+   * Which gate doors are shut (src/world/grid.ts closedGates): a shut gate blocks walking and tap
+   * paths; an open one loses its barrier, the gate tile on the props layer.
+   */
+  private updateGates(): void {
+    const { store } = this.api;
+    this.gates = closedGates(this.world, (town) => townOpen(store.game, store.content, town));
+    for (const o of this.world.objects) {
+      if (o.type !== 'door' || own(o.props, 'town') === undefined || this.gates.has(`${o.x},${o.y}`)) continue;
+      this.tilemap?.removeTileAt(o.x, o.y, true, true, 'props');
     }
   }
 
@@ -279,8 +308,9 @@ export class WorldScene extends Phaser.Scene {
 
   // ---- moving
 
+  /** Tiles nobody may step on now: where NPCs stand, and gates that are still shut. */
   private occupied(): Set<string> {
-    return new Set(this.npcs.map((n) => `${n.x},${n.y}`));
+    return new Set([...this.npcs.map((n) => `${n.x},${n.y}`), ...this.gates]);
   }
 
   private heldDirection(): Facing | null {
@@ -346,7 +376,8 @@ export class WorldScene extends Phaser.Scene {
   /** After a step: a door takes the player to its map. */
   private arrive(): void {
     const door = objectsAt(this.world, this.player.x, this.player.y).find((o) => o.type === 'door');
-    if (!door) return;
+    // a shut gate is never entered (occupied() blocks it); this is the second lock on that door
+    if (!door || this.gates.has(`${door.x},${door.y}`)) return;
     this.busy = true;
     this.player.sprite.stop();
     const facing = door.props.facing;

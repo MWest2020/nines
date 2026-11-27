@@ -1,0 +1,107 @@
+# fs-02: the office file server's RAID 1 runs on one disk. What it teaches: /proc/mdstat ([2/1]
+# [U_], a member marked (F)), the kernel's I/O errors, SMART attributes that matter (reallocated,
+# pending and uncorrectable sectors), that sdX names are given at boot and can change, so a disk
+# to pull is named by serial and bay, and that a rebuild reads the whole surviving disk, so the
+# backup is checked first: RAID is redundancy, not a backup.
+schema: 1
+host: fs-02
+user: dev
+home: /home/dev
+motd: motd
+mounts:
+  - {path: /, device: /dev/md0, size: 931G, base_used: 412G}
+dirs: [/tmp, /srv/share]
+files:
+  /home/dev/notes.txt: |
+    From: Wim
+    - fs-02 mirrors two disks (RAID 1, /dev/md0). Monitoring says the array is degraded.
+    - Remote hands at the data centre swap disks for us. They pull exactly the disk we name.
+    - Saved SMART reports (smartctl -a) are in ~/disks, with the bay map of the chassis.
+    - Write the request in ~/tickets/DC-REQUEST.txt. I'll send it.
+  /proc/mdstat: |
+    Personalities : [raid1]
+    md0 : active raid1 sdb1[1](F) sda1[0]
+          976630336 blocks super 1.2 [2/1] [U_]
+          bitmap: 3/8 pages [12KB], 65536KB chunk
+
+    unused devices: <none>
+  /var/log/kern.log: |
+    Nov 28 03:12:44 fs-02 kernel: ata2.00: exception Emask 0x0 SAct 0x0 SErr 0x0 action 0x0
+    Nov 28 03:12:44 fs-02 kernel: ata2.00: failed command: READ FPDMA QUEUED
+    Nov 28 03:12:45 fs-02 kernel: blk_update_request: I/O error, dev sdb, sector 1953520112 op 0x0:(READ)
+    Nov 28 03:12:47 fs-02 kernel: blk_update_request: I/O error, dev sdb, sector 1953520120 op 0x0:(READ)
+    Nov 28 03:12:47 fs-02 kernel: md/raid1:md0: Disk failure on sdb1, disabling device.
+    Nov 28 03:12:47 fs-02 kernel: md/raid1:md0: Operation continuing on 1 devices.
+  /var/log/backup.log: |
+    2026-11-26 01:00:02 backup fs-02:/srv/share -> backup-01: started
+    2026-11-26 01:41:17 backup fs-02:/srv/share -> backup-01: OK, 384 GiB, 0 errors
+    2026-11-27 01:00:01 backup fs-02:/srv/share -> backup-01: started
+    2026-11-27 01:39:55 backup fs-02:/srv/share -> backup-01: OK, 385 GiB, 0 errors
+    2026-11-28 01:00:02 backup fs-02:/srv/share -> backup-01: started
+    2026-11-28 01:40:31 backup fs-02:/srv/share -> backup-01: OK, 385 GiB, 0 errors
+    2026-11-28 01:40:33 restore test: 50 random files restored from backup-01 and compared: OK
+  /home/dev/disks/bays.txt: |
+    Chassis fs-02, front view. Bay numbers are printed on the trays.
+    Bay 0: serial WD-WCC4E1A2B3C4
+    Bay 1: serial WD-WCC4E9X8Y7Z6
+  /home/dev/disks/smart-sda.txt: |
+    === START OF INFORMATION SECTION ===
+    Device Model:     Example Red NAS 1TB
+    Serial Number:    WD-WCC4E1A2B3C4
+    User Capacity:    1,000,204,886,016 bytes [1.00 TB]
+    === START OF READ SMART DATA SECTION ===
+    SMART overall-health self-assessment test result: PASSED
+    ID# ATTRIBUTE_NAME          VALUE WORST THRESH TYPE      RAW_VALUE
+      5 Reallocated_Sector_Ct   200   200   140    Pre-fail  0
+      9 Power_On_Hours          043   043   000    Old_age   41766
+    197 Current_Pending_Sector  200   200   000    Old_age   0
+    198 Offline_Uncorrectable   100   253   000    Old_age   0
+    199 UDMA_CRC_Error_Count    200   200   000    Old_age   0
+  /home/dev/disks/smart-sdb.txt: |
+    === START OF INFORMATION SECTION ===
+    Device Model:     Example Red NAS 1TB
+    Serial Number:    WD-WCC4E9X8Y7Z6
+    User Capacity:    1,000,204,886,016 bytes [1.00 TB]
+    === START OF READ SMART DATA SECTION ===
+    SMART overall-health self-assessment test result: FAILED!
+    Drive failure expected in less than 24 hours. SAVE ALL DATA.
+    ID# ATTRIBUTE_NAME          VALUE WORST THRESH TYPE      RAW_VALUE
+      5 Reallocated_Sector_Ct   098   098   140    Pre-fail  1832
+      9 Power_On_Hours          043   043   000    Old_age   41766
+    197 Current_Pending_Sector  196   196   000    Old_age   212
+    198 Offline_Uncorrectable   100   253   000    Old_age   37
+    199 UDMA_CRC_Error_Count    200   200   000    Old_age   0
+  /home/dev/tickets/DC-REQUEST.txt: |
+    Remote hands request
+    Site: Medior City colocation, rack B4
+    Server: fs-02
+    Action: replace one failed disk with a new spare of the same size
+    Bay:
+    Serial of the disk to pull:
+    Backup checked before the swap (yes/no):
+  /srv/share/README.txt: |
+    The office share. Contracts, invoices and the holiday photos nobody asked for.
+quick:
+  - "cat ~/notes.txt"
+  - cat /proc/mdstat
+  - "tail -n 6 /var/log/kern.log"
+  - "ls ~/disks"
+  - "edit ~/tickets/DC-REQUEST.txt"
+objectives:
+  - {id: backup, text: obj.backup, done_when: 'opened("/var/log/backup.log")'}
+  - {id: serial, text: obj.serial, done_when: 'file_contains("/home/dev/tickets/DC-REQUEST.txt", "WD-WCC4E9X8Y7Z6")'}
+  - {id: healthy, text: obj.healthy, done_when: '!file_contains("/home/dev/tickets/DC-REQUEST.txt", "WD-WCC4E1A2B3C4")'}
+hints:
+  - {id: mdstat, when: 'commands >= 3 && !opened("/proc/mdstat")', text: hint.mdstat}
+  - {id: smart, when: 'opened("/proc/mdstat") && !opened("/home/dev/disks/smart-sdb.txt") && (fails >= 1 || commands >= 6)', text: hint.smart}
+  - {id: by-serial, when: 'opened("/home/dev/disks/smart-sdb.txt") && !file_contains("/home/dev/tickets/DC-REQUEST.txt", "WD-WCC4E9X8Y7Z6") && (fails >= 2 || commands >= 10)', text: hint.serial}
+  - {id: check-backup, when: 'file_contains("/home/dev/tickets/DC-REQUEST.txt", "WD-WCC4E9X8Y7Z6") && !opened("/var/log/backup.log")', text: hint.backup}
+events:
+  - id: wrong-disk
+    when: 'file_contains("/home/dev/tickets/DC-REQUEST.txt", "WD-WCC4E1A2B3C4")'
+    say: event.wrong_disk
+  - id: share-gone
+    when: 'removed("/srv/share/README.txt")'
+    say: event.share_gone
+    money: -100
+    reset: true

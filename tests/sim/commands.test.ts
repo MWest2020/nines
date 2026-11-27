@@ -619,3 +619,65 @@ describe('procedures and risk (DESIGN.md, Independent contractor; Side hustles)'
     expect(run(s, 'ls /etc').events).toEqual([{ id: 'peek', say: 'event.peek', scope: 'quest', money: 0, karma: -5, reset: false }]);
   });
 });
+
+describe('kubectl for Medior City: readiness, rollouts from apply, rollout status, get deployments', () => {
+  const dep = (probe: string) =>
+    `apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: api\n  namespace: shop\nspec:\n  template:\n    spec:\n      containers:\n        - name: api\n          readinessProbe:\n            httpGet:\n              path: ${probe}\n`;
+  const k8s = () =>
+    session({
+      ...FIXTURE,
+      files: { ...FIXTURE.files, '/home/dev/d.yaml': dep('/healthz') },
+      cluster: ['/home/dev/d.yaml'],
+      deployments: {
+        api: {
+          namespace: 'shop',
+          replicas: 2,
+          status: 'NotReady',
+          readiness_failure: 'HTTP probe failed with statuscode: 404',
+          restart: { succeeds_if: 'applied_value("deployment/shop/api", "path") == "/ready"', status_on_failure: 'NotReady' },
+        },
+      },
+      objectives: [{ id: 'up', text: 'obj', done_when: 'pods_running("api")' }],
+    });
+  it('a NotReady pod shows Running with READY 0/1, and describe names the failing probe', () => {
+    const s = k8s();
+    const row = run(s, 'kubectl get pods -n shop').out[1]!;
+    expect(row).toMatch(/\s0\/1\s+Running\s+0\s+42m$/);
+    const out = sh(s, 'kubectl describe pods -n shop');
+    expect(out).toMatch(/State:\s+Running\n\s+Ready:\s+False/);
+    expect(out).toMatch(/Warning\s+Unhealthy\s+.*Readiness probe failed: HTTP probe failed with statuscode: 404/);
+    expect(run(s, 'pwd').won).toBe(false);
+  });
+  it('get deployments counts ready replicas; rollout status says whether it is done, without counting a failure', () => {
+    const s = k8s();
+    expect(run(s, 'kubectl get deploy -n shop').out).toEqual(['NAME   READY   UP-TO-DATE   AVAILABLE   AGE', 'api    0/2     2            0           42m']);
+    const r = run(s, 'kubectl rollout status deployment/api -n shop');
+    expect(r.out[0]).toBe('Waiting for deployment "api" rollout to finish: 0 of 2 updated replicas are available...');
+    expect(r.exit).toBe(1);
+    expect(sh(s, 'kubectl get deployments')).toBe('No resources found in default namespace.');
+  });
+  it('applying a changed Deployment rolls it out: healthy when the fix holds, still NotReady when not', () => {
+    const s = k8s();
+    const before = run(s, 'kubectl get pods -n shop').out[1]!.split(/\s+/)[0];
+    // unchanged: nothing rolls
+    expect(sh(s, 'kubectl apply -f d.yaml')).toBe('deployment.apps/api unchanged');
+    expect(run(s, 'kubectl get pods -n shop').out[1]!.split(/\s+/)[0]).toBe(before);
+    // a wrong fix: new pods, still not ready
+    saveFile(s, '/home/dev/d.yaml', dep('/health'));
+    expect(sh(s, 'kubectl apply -f d.yaml')).toBe('deployment.apps/api configured');
+    const wrong = run(s, 'kubectl get pods -n shop').out[1]!;
+    expect(wrong.split(/\s+/)[0]).not.toBe(before);
+    expect(wrong).toMatch(/0\/1\s+Running\s+0\s+3s$/);
+    // the right fix: Ready, and the rollout is done without a rollout restart
+    saveFile(s, '/home/dev/d.yaml', dep('/ready'));
+    sh(s, 'kubectl apply -f d.yaml');
+    expect(run(s, 'kubectl get pods -n shop').out[1]).toMatch(/1\/1\s+Running/);
+    expect(sh(s, 'kubectl rollout status deploy/api -n shop')).toBe('deployment "api" successfully rolled out');
+    expect(run(s, 'pwd').won).toBe(true);
+    // the same Deployment applied into another namespace is another object: no rollout here
+    const t = k8s();
+    saveFile(t, '/home/dev/d.yaml', dep('/ready').replace('  namespace: shop\n', ''));
+    expect(sh(t, 'kubectl apply -f d.yaml')).toBe('deployment.apps/api created');
+    expect(run(t, 'kubectl get pods -n shop').out[1]).toMatch(/0\/1/);
+  });
+});

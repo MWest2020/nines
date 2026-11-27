@@ -1,0 +1,211 @@
+# portal-01: Grachtgarant's internal portal (a fictional insurer). The TLS certificate in
+# /etc/nginx/tls/2025 expires tonight. The PKI team delivered the renewal to /etc/nginx/tls/2026:
+# cert.pem (the certificate alone), chain.pem (the intermediate), fullchain.pem (certificate
+# first, then the intermediate: what nginx's ssl_certificate wants) and privkey.pem (a NEW key:
+# the 2025 key does not fit). The fix: both ssl_ lines in /etc/nginx/sites-enabled/portal point
+# at 2026 (fullchain.pem and privkey.pem), then systemctl restart nginx.
+#
+# The restart follows nginx: the old pair starts (it is valid until midnight), a 2026 certificate
+# with the 2026 key starts (cert.pem alone too: nginx does not check the chain, browsers do, so
+# the "chain" objective stays open), and a mix fails with nginx's "key values mismatch". The
+# paths are matched by their last two parts ("2026/privkey.pem;"), so commented-out old lines
+# are fine. The delivered and the old files are always in place: removing one is an event that
+# puts the machine back.
+#
+# Procedures (a contractor skips them): the implementer's lines in ~/changes/CHG-2291.txt, and the
+# new expiry date (2027-06-11, from checks.txt; also 11-06-2027, Jun 11 2027, 11 Jun 2027 or
+# 11 juni 2027) in place of tonight's in ~/inventory/certificates.txt.
+# Damage: the 2025 files deleted before the new certificate is live (the rollback is gone), the
+# new private key deleted or moved out of its folder (it must be re-issued), a delivered
+# certificate file deleted or moved.
+schema: 1
+host: portal-01
+user: ops
+home: /home/ops
+motd: motd
+mounts:
+  - {path: /, device: /dev/sda1, size: 40G, base_used: 9G}
+dirs: [/tmp, /var/log/nginx]
+files:
+  /home/ops/changes/CHG-2291.txt: |
+    CHANGE CHG-2291 (Grachtgarant IT)
+    Title:     renew the TLS certificate of portal.grachtgarant.example.test
+    CI:        portal-01 (nginx)
+    Requested: M. Bos, IT manager
+    Approved:  CAB, 25 Nov 2026 (standard change)
+    Window:    26 Nov 2026, 09:00 to 12:00
+    Risk:      low. Rollback: point nginx back at /etc/nginx/tls/2025 and
+               restart. Keep those files until the new certificate is live.
+
+    Plan
+    1. point nginx at the renewed certificate and key in /etc/nginx/tls/2026
+    2. restart nginx and check that it runs
+    3. record the new expiry date in ~/inventory/certificates.txt
+
+    Filled in by the implementer
+    Implemented by: ?
+    Result: ?
+    Rollback used: ?
+  /home/ops/inventory/certificates.txt: |
+    # Certificate inventory, Grachtgarant IT. Update it in the same change as the renewal.
+    # expires = notAfter, as YYYY-MM-DD
+    # name                               host        expires     change
+    portal.grachtgarant.example.test     portal-01   2026-11-26  CHG-1874
+    claims.grachtgarant.example.test     claims-02   2027-01-09  CHG-2203
+    mail.grachtgarant.example.test       mail-01     2027-03-14  CHG-2010
+  /home/ops/alerts/cert-expiry.txt: |
+    From: monitoring@grachtgarant.example.test
+    Subject: [WARN] TLS certificate expires in 0 days: portal.grachtgarant.example.test
+
+    host:      portal-01:443
+    subject:   CN = portal.grachtgarant.example.test
+    notAfter:  Nov 26 23:59:59 2026 GMT
+    days left: 0
+  /etc/nginx/nginx.conf: |
+    user www-data;
+    events {}
+    http {
+      include /etc/nginx/sites-enabled/*;
+    }
+  /etc/nginx/sites-enabled/portal: |
+    # Grachtgarant internal portal. Managed by IT: changes only with an approved change.
+    server {
+        listen 443 ssl;
+        http2 on;
+        server_name portal.grachtgarant.example.test;
+
+        ssl_certificate     /etc/nginx/tls/2025/fullchain.pem;
+        ssl_certificate_key /etc/nginx/tls/2025/privkey.pem;
+        ssl_protocols       TLSv1.2 TLSv1.3;
+
+        root /srv/portal/www;
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+    }
+  /etc/nginx/tls/2025/fullchain.pem: |
+    subject=CN = portal.grachtgarant.example.test
+    issuer=C = NL, O = Example Trust Services, CN = Example Trust TLS CA 2025
+    -----BEGIN CERTIFICATE-----
+    MIIDrDCCAzKgAwIBAgIQPortal2025GrachtgarantExampleTestNotReal01
+    -----END CERTIFICATE-----
+    subject=C = NL, O = Example Trust Services, CN = Example Trust TLS CA 2025
+    issuer=C = NL, O = Example Trust Services, CN = Example Trust Root R1
+    -----BEGIN CERTIFICATE-----
+    MIIDjTCCAxOgAwIBAgIQIntermediate2025ExampleTrustNotRealAtAll02
+    -----END CERTIFICATE-----
+  /etc/nginx/tls/2025/privkey.pem: {size: 241}
+  /etc/nginx/tls/2026/README.txt: |
+    DELIVERY FOR CHG-2291 (PKI team, 24 Nov 2026)
+    portal.grachtgarant.example.test, issued by Example Trust TLS CA 2026.
+    A new key pair (from the CSR of 20 Nov): the 2025 key does not fit
+    this certificate.
+
+      cert.pem       the certificate alone
+      chain.pem      the intermediate CA certificate
+      fullchain.pem  cert.pem followed by chain.pem: the certificate
+                     first, then the intermediate
+      privkey.pem    the private key. Leave it in this folder: never copy
+                     it to /tmp, a home folder or a ticket.
+      checks.txt     what we checked at delivery (saved openssl output)
+  /etc/nginx/tls/2026/checks.txt: |
+    Checked by the PKI team at delivery, 24 Nov 2026 (saved openssl output)
+
+    $ openssl x509 -in cert.pem -noout -subject -issuer
+    subject=CN = portal.grachtgarant.example.test
+    issuer=C = NL, O = Example Trust Services, CN = Example Trust TLS CA 2026
+
+    $ openssl x509 -in cert.pem -noout -startdate -enddate
+    notBefore=Nov 24 00:00:00 2026 GMT
+    notAfter=Jun 11 23:59:59 2027 GMT
+
+    $ openssl x509 -in /etc/nginx/tls/2025/fullchain.pem -noout -enddate
+    notAfter=Nov 26 23:59:59 2026 GMT
+
+    Does a key belong to the certificate? Compare their public keys:
+    $ openssl x509 -in cert.pem -noout -pubkey | openssl sha256
+    SHA2-256(stdin)= 9b3e61c0d2f74a85e1c6b0f93d27a4e85c1f60b7d29e3a48c5f1b06d7e28a913
+    $ openssl pkey -in privkey.pem -pubout | openssl sha256
+    SHA2-256(stdin)= 9b3e61c0d2f74a85e1c6b0f93d27a4e85c1f60b7d29e3a48c5f1b06d7e28a913
+    $ openssl pkey -in /etc/nginx/tls/2025/privkey.pem -pubout | openssl sha256
+    SHA2-256(stdin)= 47d0a2e9c3b15f86a7e4d1c09b38f2a65e7c0d14b9a26f38e5c71d0a4b92e6f0
+  /etc/nginx/tls/2026/cert.pem: |
+    subject=CN = portal.grachtgarant.example.test
+    issuer=C = NL, O = Example Trust Services, CN = Example Trust TLS CA 2026
+    -----BEGIN CERTIFICATE-----
+    MIIDsTCCAzegAwIBAgIRPortal2026GrachtgarantExampleTestNotReal03
+    -----END CERTIFICATE-----
+  /etc/nginx/tls/2026/chain.pem: |
+    subject=C = NL, O = Example Trust Services, CN = Example Trust TLS CA 2026
+    issuer=C = NL, O = Example Trust Services, CN = Example Trust Root R1
+    -----BEGIN CERTIFICATE-----
+    MIIDjzCCAxWgAwIBAgIRIntermediate2026ExampleTrustNotRealAtAll04
+    -----END CERTIFICATE-----
+  /etc/nginx/tls/2026/fullchain.pem: |
+    subject=CN = portal.grachtgarant.example.test
+    issuer=C = NL, O = Example Trust Services, CN = Example Trust TLS CA 2026
+    -----BEGIN CERTIFICATE-----
+    MIIDsTCCAzegAwIBAgIRPortal2026GrachtgarantExampleTestNotReal03
+    -----END CERTIFICATE-----
+    subject=C = NL, O = Example Trust Services, CN = Example Trust TLS CA 2026
+    issuer=C = NL, O = Example Trust Services, CN = Example Trust Root R1
+    -----BEGIN CERTIFICATE-----
+    MIIDjzCCAxWgAwIBAgIRIntermediate2026ExampleTrustNotRealAtAll04
+    -----END CERTIFICATE-----
+  /etc/nginx/tls/2026/privkey.pem: {size: 241}
+  /srv/portal/www/index.html: |
+    <h1>Grachtgarant portal</h1>
+  /var/log/nginx/error.log: |
+    2026/11/26 08:00:01 [warn] 812#812: the certificate "/etc/nginx/tls/2025/fullchain.pem" expires in less than 1 day (monitoring check)
+services:
+  nginx:
+    description: A high performance web server and a reverse proxy server
+    state: active
+    enabled: true
+    logs:
+      - "Nov 25 06:00:02 portal-01 systemd[1]: Started nginx.service - A high performance web server and a reverse proxy server."
+    restart:
+      succeeds_if: '(file_contains("/etc/nginx/sites-enabled/portal", "2025/fullchain.pem;") && file_contains("/etc/nginx/sites-enabled/portal", "2025/privkey.pem;") && !file_contains("/etc/nginx/sites-enabled/portal", "2026/")) || ((file_contains("/etc/nginx/sites-enabled/portal", "2026/fullchain.pem;") || file_contains("/etc/nginx/sites-enabled/portal", "2026/cert.pem;")) && file_contains("/etc/nginx/sites-enabled/portal", "2026/privkey.pem;"))'
+      logs_on_failure:
+        - "Nov 26 09:00:00 portal-01 nginx[2291]: nginx: [emerg] SSL_CTX_use_PrivateKey(\"/etc/nginx/tls/2025/privkey.pem\") failed (SSL: error:05800074:x509 certificate routines::key values mismatch)"
+        - "Nov 26 09:00:00 portal-01 nginx[2291]: nginx: configuration file /etc/nginx/nginx.conf test failed"
+quick:
+  - "cat ~/changes/CHG-2291.txt"
+  - ls /etc/nginx/tls/2026
+  - "edit /etc/nginx/sites-enabled/portal"
+  - systemctl status nginx
+objectives:
+  - id: live
+    text: obj.live
+    done_when: 'restarted("nginx") && service("nginx") == "active" && file_contains("/etc/nginx/sites-enabled/portal", "2026/privkey.pem;") && (file_contains("/etc/nginx/sites-enabled/portal", "2026/fullchain.pem;") || file_contains("/etc/nginx/sites-enabled/portal", "2026/cert.pem;"))'
+  - id: chain
+    text: obj.chain
+    done_when: 'restarted("nginx") && service("nginx") == "active" && file_contains("/etc/nginx/sites-enabled/portal", "2026/privkey.pem;") && file_contains("/etc/nginx/sites-enabled/portal", "2026/fullchain.pem;")'
+  - {id: change, text: obj.change, procedure: true, done_when: 'exists("/home/ops/changes/CHG-2291.txt") && !file_contains("/home/ops/changes/CHG-2291.txt", ": ?")'}
+  - id: inventory
+    text: obj.inventory
+    procedure: true
+    done_when: '(file_contains("/home/ops/inventory/certificates.txt", "2027-06-11") || file_contains("/home/ops/inventory/certificates.txt", "11-06-2027") || file_contains("/home/ops/inventory/certificates.txt", "Jun 11 2027") || file_contains("/home/ops/inventory/certificates.txt", "11 Jun 2027") || file_contains("/home/ops/inventory/certificates.txt", "11 juni 2027")) && !file_contains("/home/ops/inventory/certificates.txt", "2026-11-26")'
+hints:
+  - {id: read-change, when: 'commands >= 3 && !touched("/home/ops/changes/CHG-2291.txt")', text: hint.change}
+  - {id: delivery, when: 'touched("/home/ops/changes/CHG-2291.txt") && !touched("/etc/nginx/tls/2026") && commands >= 5', text: hint.delivery}
+  - {id: config, when: 'touched("/etc/nginx/tls/2026") && !touched("/etc/nginx/sites-enabled/portal") && commands >= 7', text: hint.config}
+  - {id: mismatch, when: 'restarted("nginx") && service("nginx") == "failed"', text: hint.mismatch}
+  - {id: cert-only, when: 'restarted("nginx") && service("nginx") == "active" && file_contains("/etc/nginx/sites-enabled/portal", "2026/cert.pem;") && !file_contains("/etc/nginx/sites-enabled/portal", "2026/fullchain.pem;")', text: hint.chain}
+  - {id: paperwork, when: 'restarted("nginx") && service("nginx") == "active" && file_contains("/etc/nginx/sites-enabled/portal", "2026/fullchain.pem;") && (file_contains("/home/ops/changes/CHG-2291.txt", ": ?") || file_contains("/home/ops/inventory/certificates.txt", "2026-11-26"))', text: hint.paperwork}
+events:
+  - id: rollback-gone
+    when: '(removed("/etc/nginx/tls/2025/fullchain.pem") || removed("/etc/nginx/tls/2025/privkey.pem")) && !(restarted("nginx") && service("nginx") == "active" && file_contains("/etc/nginx/sites-enabled/portal", "2026/privkey.pem;"))'
+    say: event.rollback_gone
+    money: -150
+    reset: true
+  - id: key-gone
+    when: 'removed("/etc/nginx/tls/2026/privkey.pem")'
+    say: event.key_gone
+    money: -200
+    reset: true
+  - id: delivery-gone
+    when: 'removed("/etc/nginx/tls/2026/fullchain.pem") || removed("/etc/nginx/tls/2026/cert.pem") || removed("/etc/nginx/tls/2026/chain.pem")'
+    say: event.delivery_gone
+    money: -25
+    reset: true

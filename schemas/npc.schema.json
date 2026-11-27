@@ -38,6 +38,10 @@
         "facing": { "enum": ["up", "down", "left", "right"] }
       }
     },
+    "role": {
+      "enum": ["coach"],
+      "description": "coach: the career coach; after her lines the career path screen opens (DESIGN.md, Career paths)"
+    },
     "dialogue": {
       "type": "array",
       "minItems": 1,
@@ -48,7 +52,8 @@
         "required": ["lines"],
         "properties": {
           "when": { "$ref": "common.schema.json#/$defs/expr", "description": "a progress condition, e.g. quest(\"disk-full\") == \"done\"" },
-          "lines": { "$ref": "common.schema.json#/$defs/lines" }
+          "lines": { "$ref": "common.schema.json#/$defs/lines" },
+          "intro": { "type": "boolean", "description": "also said before a quest's offer when its condition holds (a mentor greeting their own mentee, say)" }
         }
       }
     }

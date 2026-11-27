@@ -1,7 +1,6 @@
-# A battle quest, the first Medior design interview. Medior City has no map yet, so until it
-# does, Ingrid (Medior City's staff engineer, who guards the gate in Junior Village) gives it
-# once her gate interview is won: talking to her starts it (trigger: npc), where she stands
-# (her spawn slot gate-medior). When the Medior City map lands, move giver and start there.
+# A battle quest, the first Medior design interview. Hugo, principal engineer, asks it at his
+# whiteboard on the Medior City plaza (npc-5) once the gate interview is won: talking to him
+# starts it (trigger: npc). Until Medior City had a map, Ingrid asked it at the gate.
 schema: 1
 id: url-shortener
 author: {name: "Nines team"}
@@ -12,8 +11,8 @@ branch: design
 paths: [swe, sre]
 roadmap_node: design-url-shortener
 requires: [rate-limiter-interview]
-giver: ingrid
-start: {map: junior-village, object: gate-medior}
+giver: hugo
+start: {map: medior-city, object: npc-5}
 reward: {money: 400, xp: 50}
 dialogue:
   offer: [offer.1, offer.2]

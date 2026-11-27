@@ -1,0 +1,25 @@
+# Medior City's side hustle (DESIGN.md, Side hustles), light on purpose. Mo, in the back alley
+# behind the Grachtgarant tower, has a client who wants out of the car park without paying. The
+# "hack" is abstract: the pay station's maintenance session was left open by a technician (the
+# vendor's default: it never times out), and the player edits one file in it. No technique, no
+# tool, no payload; the lesson at the end points to reporting it instead. Only for players who
+# already went shady (karma -20 or below): Mo does not know anyone cleaner.
+schema: 1
+id: parking-garage
+author: {name: "Nines team"}
+title: title
+summary: summary
+stage: medior
+branch: security
+paths: [ethical, systems]
+roadmap_node: security-defaults
+requires: [rate-limiter-interview]
+kind: hustle
+available_when: 'karma <= -20'
+giver: mo
+start: {map: medior-city, object: garage-pay-station}
+reward: {money: 400, xp: 20, karma: -15}
+dialogue:
+  offer: [offer.1, offer.2]
+  active: [active.1]
+  done: [done.1, done.2]

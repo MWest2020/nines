@@ -1,0 +1,22 @@
+# A battle quest, the Software Engineer path's first in Medior City. Lars, the path's mentor,
+# opens a 900-line pull request on purpose and defends it: talking to him starts it
+# (trigger: npc), where he stands (his spawn slot npc-2). Open once a career path is chosen;
+# players on other paths can take it as a side quest.
+schema: 1
+id: code-review
+author: {name: "Nines team"}
+title: title
+summary: summary
+stage: medior
+branch: cicd
+paths: [swe]
+roadmap_node: cicd-code-review
+requires: [rate-limiter-interview]
+available_when: 'path_chosen'
+giver: lars
+start: {map: medior-city, object: npc-2}
+reward: {money: 420, xp: 45}
+dialogue:
+  offer: [offer.1, offer.2]
+  active: [active.1]
+  done: [done.1]

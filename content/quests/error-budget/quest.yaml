@@ -1,0 +1,22 @@
+# A battle quest, the SRE path's first in Medior City. Amara, the path's mentor, walks the player
+# through a slow-burning payments API before they join her on-call rotation: talking to her
+# starts it (trigger: npc), where she stands (her spawn slot npc-3). Open once a career path is
+# chosen; players on other paths can take it as a side quest.
+schema: 1
+id: error-budget
+author: {name: "Nines team"}
+title: title
+summary: summary
+stage: medior
+branch: observability
+paths: [sre]
+roadmap_node: observability-slo
+requires: [rate-limiter-interview]
+available_when: 'path_chosen'
+giver: amara
+start: {map: medior-city, object: npc-3}
+reward: {money: 430, xp: 50}
+dialogue:
+  offer: [offer.1, offer.2]
+  active: [active.1]
+  done: [done.1]

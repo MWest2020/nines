@@ -1,0 +1,18 @@
+# Lars, senior developer and the Software Engineer path's mentor in Medior City. No sprite yet:
+# a placeholder tinted in the palette's water blue.
+schema: 1
+id: lars
+author: {name: "Nines team"}
+name: npc.name
+tint: "#2860a0"
+spawn: {map: medior-city, slot: npc-2, facing: down}
+dialogue:
+  - when: 'quest("code-review") == "done"'
+    lines: [npc.after]
+  - when: '!path_chosen'
+    lines: [npc.nopath]
+  - when: 'career_path("swe")'
+    lines: [npc.mentor.1, npc.mentor.2]
+    intro: true
+  - lines: [npc.side]
+    intro: true

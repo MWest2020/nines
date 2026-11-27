@@ -125,6 +125,10 @@ export class HudScene extends Phaser.Scene {
       this.toast(t(change.arrested ? 'ui.toast.arrested' : 'ui.toast.caught', { amount: change.fine }), C.orange);
     } else if (change.kind === 'contractor') {
       this.toast(t(change.on ? 'ui.toast.contractor_on' : 'ui.toast.contractor_off'), change.on ? C.orange : C.leaf);
+    } else if (change.kind === 'path') {
+      const path = store.content.roadmap.paths.find((p) => p.id === change.path);
+      this.toast(t('ui.toast.path', { path: path ? t(path.title) : change.path }), C.gold);
+      if (change.fee > 0) this.toast(t('ui.toast.money_lost', { amount: change.fee }), C.orange);
     } else if (change.kind === 'locale' && this.menu) {
       const focus = this.menu.focus;
       this.closeMenu();

@@ -1,0 +1,24 @@
+# The career coach in front of the Career Centre (DESIGN.md, Career paths: the choice at Medior
+# City). role: coach opens the career screen after her lines; once a path is chosen she names
+# its mentor, and the same screen offers a paid switch (issue #24's default).
+schema: 1
+id: joyce
+author: {name: "Nines team"}
+name: npc.name
+tint: "#e89858"
+role: coach
+spawn: {map: medior-city, slot: npc-1, facing: down}
+dialogue:
+  - when: 'career_path("swe")'
+    lines: [mentor.swe, again]
+  - when: 'career_path("sre")'
+    lines: [mentor.sre, again]
+  - when: 'career_path("devops")'
+    lines: [mentor.devops, again]
+  - when: 'career_path("platform")'
+    lines: [mentor.platform, again]
+  - when: 'career_path("systems")'
+    lines: [mentor.systems, again]
+  - when: 'career_path("ethical")'
+    lines: [mentor.ethical, again]
+  - lines: [intro.1, intro.2]

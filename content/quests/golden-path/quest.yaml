@@ -1,0 +1,23 @@
+# A battle quest, the Platform Engineer path's first in Medior City. Kim, the path's mentor,
+# designs a golden-path template with the player (namespace, quotas, a Deployment; CKAD domain
+# "Application Environment, Configuration and Security", our own questions): talking to her
+# starts it (trigger: npc), where she stands (her spawn slot npc-4). Open once a career path is
+# chosen; players on other paths can take it as a side quest.
+schema: 1
+id: golden-path
+author: {name: "Nines team"}
+title: title
+summary: summary
+stage: medior
+branch: kubernetes
+paths: [platform]
+roadmap_node: ckad-config-security
+requires: [rate-limiter-interview]
+available_when: 'path_chosen'
+giver: kim
+start: {map: medior-city, object: npc-4}
+reward: {money: 450, xp: 50}
+dialogue:
+  offer: [offer.1, offer.2]
+  active: [active.1]
+  done: [done.1]

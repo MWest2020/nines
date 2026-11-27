@@ -1,0 +1,15 @@
+schema: 1
+id: ruben
+author: {name: "Nines team"}
+name: npc.name
+tint: "#c86848"
+spawn: {map: the-stack, slot: npc-1, facing: down}
+dialogue:
+  - when: 'quest("pipeline-secrets") == "done"'
+    lines: [npc.after]
+  - when: '!path_chosen'
+    lines: [npc.coach]
+  - when: 'career_path("devops")'
+    lines: [npc.mentor]
+    intro: true
+  - lines: [npc.idle]

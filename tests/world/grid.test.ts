@@ -7,6 +7,7 @@ import {
   ahead,
   approach,
   canEnter,
+  closedGates,
   doorTiles,
   type Facing,
   facingOf,
@@ -16,6 +17,7 @@ import {
   objectNamed,
   objectsAt,
   objectTile,
+  openMaps,
   readMap,
   reachable,
   type WorldMap,
@@ -29,12 +31,14 @@ const world = (id: string): WorldMap => {
 };
 
 describe('the world grid', () => {
-  it('both maps are in the bundle at the sizes DESIGN.md gives', () => {
-    expect(content().maps.map((m) => m.id).sort()).toEqual(['junior-village', 'server-room']);
+  it('the maps are in the bundle at the sizes DESIGN.md gives', () => {
+    expect(content().maps.map((m) => m.id).sort()).toEqual(['junior-village', 'medior-city', 'server-room', 'the-stack']);
     const v = world('junior-village');
     const r = world('server-room');
     expect([v.width, v.height]).toEqual([40, 30]);
     expect([r.width, r.height]).toEqual([15, 10]);
+    expect([world('medior-city').width, world('medior-city').height]).toEqual([44, 34]);
+    expect([world('the-stack').width, world('the-stack').height]).toEqual([20, 12]);
   });
 
   it('the player starts on open ground in Junior Village, facing down', () => {
@@ -182,5 +186,39 @@ describe('tap to walk: paths on the grid', () => {
 describe('own art', () => {
   it('the committed PNGs are what tools/art/draw-art.mjs draws', () => {
     expect(() => execFileSync(process.execPath, [join(ROOT, 'tools', 'art', 'draw-art.mjs'), '--check'], { stdio: 'pipe' })).not.toThrow();
+  });
+});
+
+describe('the gate to Medior City', () => {
+  const allWorlds = () => content().maps.map((m) => readMap(m.id, m.map));
+  it('is two doors on the village road, shut until the road to Medior City is open', () => {
+    const w = world('junior-village');
+    const gates = w.objects.filter((o) => o.type === 'door' && o.props.town === 'medior');
+    expect(gates.map((g) => [g.name, g.x, g.y, g.props.to_map])).toEqual([
+      ['road-to-medior-1', 39, 14, 'medior-city'],
+      ['road-to-medior-2', 39, 15, 'medior-city'],
+    ]);
+    expect([...closedGates(w, () => false)].sort()).toEqual(['39,14', '39,15']);
+    expect(closedGates(w, () => true).size).toBe(0);
+    // shut: no walk reaches the road east, and no step onto it
+    const occupied = new Set([...closedGates(w, () => false)]);
+    expect(findPath(w, objectNamed(w, 'player-start')!, { x: 39, y: 15 }, occupied, doorTiles(w))).toBeNull();
+    expect(canEnter(w, 39, 14, occupied)).toBe(false);
+    // the rest of the road is a wall: the gate is the only way east
+    for (const y of [13, 16]) expect(isSolid(w, 39, y)).toBe(true);
+    // open: a walk from the start reaches the gate door
+    expect(findPath(w, objectNamed(w, 'player-start')!, { x: 39, y: 15 }, new Set(), doorTiles(w))).not.toBeNull();
+  });
+  it('keeps Medior City and its interior out of reach while shut, and lets a save back in once open', () => {
+    expect([...openMaps(allWorlds(), () => false)].sort()).toEqual(['junior-village', 'server-room']);
+    expect([...openMaps(allWorlds(), () => true)].sort()).toEqual(['junior-village', 'medior-city', 'server-room', 'the-stack']);
+  });
+  it('has a way back: the city road leads to the village, next to the gate', () => {
+    const city = world('medior-city');
+    const back = city.objects.filter((o) => o.type === 'door' && o.props.to_map === 'junior-village');
+    expect(back.length).toBeGreaterThan(0);
+    for (const d of back) expect(d.props.town).toBeUndefined();
+    const exit = objectNamed(world('junior-village'), back[0]!.props.to_point!)!;
+    expect([exit.x, exit.y]).toEqual([38, 15]);
   });
 });

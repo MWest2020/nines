@@ -345,9 +345,15 @@ export const tick = (game: GameState): GameState => ({ ...game, ticks: game.tick
 
 export type PathRefusal = 'unknown' | 'closed' | 'chosen';
 
+/** What a career change costs at the coach (issue 24 on GitHub, its default: a paid change). */
+export const CAREER_CHANGE_FEE = 300;
+
+export type ChangeRefusal = 'unknown' | 'closed' | 'none' | 'same' | 'money';
+
 /**
  * Choose a career path. It is chosen at Medior City, so the road there must be open; it is
- * chosen once (switching is a later design question). Choosing the same path again is a no-op.
+ * chosen once, and changing it later is changePath (a fee at the coach). Choosing the same path
+ * again is a no-op.
  */
 export function choosePath(game: GameState, rules: Pick<Rules, 'quests' | 'roadmap'>, pathId: string): { ok: true; game: GameState } | { ok: false; game: GameState; reason: PathRefusal } {
   if (!rules.roadmap.paths.some((p) => p.id === pathId)) return { ok: false, game, reason: 'unknown' };
@@ -355,6 +361,24 @@ export function choosePath(game: GameState, rules: Pick<Rules, 'quests' | 'roadm
   if (game.path !== null) return { ok: false, game, reason: 'chosen' };
   if (!townOpen(game, rules, 'medior')) return { ok: false, game, reason: 'closed' };
   return { ok: true, game: { ...game, path: pathId } };
+}
+
+/**
+ * Change career path at the coach: only once a path is chosen, to a different one, for
+ * CAREER_CHANGE_FEE (money never goes below zero, so the fee must be there). XP, quests and
+ * karma stay: what you learned on the old path is still yours.
+ */
+export function changePath(
+  game: GameState,
+  rules: Pick<Rules, 'quests' | 'roadmap'>,
+  pathId: string,
+): { ok: true; game: GameState; fee: number } | { ok: false; game: GameState; reason: ChangeRefusal } {
+  if (!rules.roadmap.paths.some((p) => p.id === pathId)) return { ok: false, game, reason: 'unknown' };
+  if (!townOpen(game, rules, 'medior')) return { ok: false, game, reason: 'closed' };
+  if (game.path === null) return { ok: false, game, reason: 'none' };
+  if (game.path === pathId) return { ok: false, game, reason: 'same' };
+  if (game.money < CAREER_CHANGE_FEE) return { ok: false, game, reason: 'money' };
+  return { ok: true, fee: CAREER_CHANGE_FEE, game: { ...game, money: game.money - CAREER_CHANGE_FEE, path: pathId } };
 }
 
 // ---- the Career Trail

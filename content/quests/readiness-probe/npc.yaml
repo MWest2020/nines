@@ -1,0 +1,12 @@
+schema: 1
+id: jesse
+author: {name: "Nines team"}
+name: npc.name
+tint: "#58a058"
+spawn: {map: the-stack, slot: npc-3, facing: left}
+dialogue:
+  - when: 'quest("readiness-probe") == "done"'
+    lines: [npc.after]
+  - when: '!path_chosen'
+    lines: [npc.coach]
+  - lines: [npc.idle]
