@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- the adaptive icon's ground: night (#183048) from DESIGN.md's palette, as in tools/art/draw-art.mjs -->
+    <color name="ic_launcher_background">#183048</color>
+    <!-- the game's background (index.html, src/main.ts): the launch screen and the window behind the WebView -->
+    <color name="nines_ink">#101820</color>
+</resources>
