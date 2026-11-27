@@ -6,13 +6,14 @@
 // interface being taught, so they stay as the real tools print them.
 
 import type { Translate } from '../../core/i18n';
-import type { ScenarioSpec } from '../../content/types';
+import type { DeploymentSpec, ScenarioSpec } from '../../content/types';
 import { type Compiled, type Env, test } from '../../rules/expr';
 import { has, own, setOwn } from '../../rules/own';
 import { validateNinesCi } from '../ci';
 import { gitChanges, pipelineFile } from '../facts';
 import { basename, dirname, isUnder, join, relativeTo, resolve } from '../path';
 import { formatHuman, kblocks } from '../size';
+import { manifestId, objectKey, resourceName, significant } from '../manifest';
 import { makePods, podSuffix, signature, type SimState } from '../state';
 import { isDir, listDir, mountFor, mountUsed, move, remove, sizeOf, subtree } from '../vfs';
 import { type FlagSpec, type Flags, parseFlags } from './parse';
@@ -68,7 +69,7 @@ export const USAGE: Record<string, string> = {
   edit: 'edit <file>',
   systemctl: 'systemctl status|restart <unit>',
   journalctl: 'journalctl -u <unit> [-n N]',
-  kubectl: 'kubectl get pods | kubectl logs <pod> | kubectl rollout restart deployment/<name>',
+  kubectl: 'kubectl get pods | kubectl describe pod [pod] | kubectl logs <pod> | kubectl apply -f <file> | kubectl rollout restart deployment/<name>',
   git: 'git status | git add <path...> | git commit -m "message"',
   clear: 'clear',
   exit: 'exit',
@@ -529,8 +530,8 @@ const journalctl: Command = (ctx, args) => {
 const kubectl: Command = (ctx, args) => {
   const r = flags(ctx, 'kubectl', args, {
     bool: 'Ap',
-    value: 'no',
-    long: { namespace: 'value', 'all-namespaces': 'bool', tail: 'value', previous: 'bool', output: 'value' },
+    value: 'nof',
+    long: { namespace: 'value', 'all-namespaces': 'bool', tail: 'value', previous: 'bool', output: 'value', filename: 'value', follow: 'bool' },
   });
   if (isResult(r)) return r;
   const { f, rest } = r;
@@ -554,16 +555,51 @@ const kubectl: Command = (ctx, args) => {
         ),
       ]);
     }
+    case 'describe': {
+      if (!['pods', 'pod', 'po'].includes(rest[1] ?? '')) return usage();
+      const name = rest[2];
+      // like kubectl: an exact name, else every pod whose name starts with it
+      const here = ctx.s.pods.filter((p) => all || p.namespace === ns);
+      const exact = here.filter((p) => p.name === name);
+      const pods = name === undefined ? here : exact.length > 0 ? exact : here.filter((p) => p.name.startsWith(name));
+      if (pods.length === 0) return name === undefined ? ok([ctx.t('sh.no_pods', { ns })]) : fail([ctx.t('sh.pod_not_found', { pod: name })]);
+      return ok(pods.flatMap((p, i) => [...(i > 0 ? [''] : []), ...describePod(p, own(ctx.spec.deployments, p.deployment))]), { pager: true });
+    }
+    case 'apply': {
+      const file = f['f'] ?? f['filename'];
+      if (typeof file !== 'string') return fail([ctx.t('sh.kubectl_need_file')]);
+      const p = abs(ctx, file);
+      const node = ctx.s.fs[p];
+      if (!node) return fail([ctx.t('sh.kubectl_no_path', { path: file })]);
+      const targets = node.type === 'dir'
+        ? listDir(ctx.s, p).filter((n) => /\.ya?ml$/.test(n) && ctx.s.fs[join(p, n)]?.type === 'file').map((n) => ({ path: join(p, n), shown: join(file, n) }))
+        : [{ path: p, shown: file }];
+      const out: string[] = [];
+      let bad = false;
+      for (const target of targets) {
+        const r = applyManifest(ctx, target.path, target.shown, ns);
+        out.push(r.line);
+        bad ||= r.bad;
+      }
+      return bad ? { out, exit: 1, fail: true } : ok(out);
+    }
     case 'logs': {
-      const target = rest[1];
+      // -f is a filename for apply, so here it arrives holding the target: logs -f <pod> follows
+      const follow = typeof f['f'] === 'string' || f['follow'] === true;
+      const target = rest[1] ?? (typeof f['f'] === 'string' ? f['f'] : undefined);
       if (!target) return usage();
-      const pod = target.includes('/')
-        ? ctx.s.pods.find((p) => p.namespace === ns && `deployment/${p.deployment}` === target.replace(/^deploy\//, 'deployment/'))
-        : ctx.s.pods.find((p) => p.namespace === ns && p.name === target);
+      const dep = /^(?:deployments?|deploy)\/(.+)$/.exec(target)?.[1];
+      const matches = dep !== undefined ? ctx.s.pods.filter((p) => p.namespace === ns && p.deployment === dep) : [];
+      const pod = dep !== undefined ? matches[0] : ctx.s.pods.find((p) => p.namespace === ns && p.name === target);
       if (!pod) return fail([ctx.t('sh.pod_not_found', { pod: target })]);
       const tailRaw = f['tail'];
       const n = typeof tailRaw === 'string' ? Number(tailRaw) : -1;
-      return ok(n >= 0 ? (n === 0 ? [] : pod.logs.slice(-n)) : [...pod.logs]);
+      return ok([
+        // kubectl says which pod it picked when a deployment has several
+        ...(matches.length > 1 ? [`Found ${matches.length} pods, using pod/${pod.name}`] : []),
+        ...(n >= 0 ? (n === 0 ? [] : pod.logs.slice(-n)) : pod.logs),
+        ...(follow ? [ctx.t('sh.follow_note')] : []),
+      ]);
     }
     case 'rollout': {
       if (rest[1] !== 'restart') return usage();
@@ -590,6 +626,78 @@ const kubectl: Command = (ctx, args) => {
       return usage();
   }
 };
+
+/** Phase, container state and events of a pod, as kubectl describe pod prints them (abridged). */
+function describePod(p: SimState['pods'][number], spec: DeploymentSpec | undefined): string[] {
+  const rs = p.name.slice(0, p.name.lastIndexOf('-'));
+  const phase = p.status === 'Pending' || p.status === 'ImagePullBackOff' ? 'Pending' : 'Running';
+  const ready = p.status === 'Running';
+  const image = spec?.image ?? `${p.deployment}:latest`;
+  const state: string[] =
+    p.status === 'Running'
+      ? ['    State:          Running']
+      : p.status === 'Error'
+        ? ['    State:          Terminated', '      Reason:       Error', '      Exit Code:    1']
+        : p.status === 'Pending'
+          ? [] // not scheduled yet: no node, so no container state
+          : ['    State:          Waiting', `      Reason:       ${p.status}`];
+  if (p.status === 'CrashLoopBackOff') state.push('    Last State:     Terminated', '      Reason:       Error', '      Exit Code:    1');
+  const seen = (n: number) => (n > 1 ? `20s (x${n} over ${p.age})` : p.age);
+  const events: string[] =
+    p.status === 'Running'
+      ? [
+          `  Normal   Pulled     ${p.age.padEnd(19)}kubelet  Container image "${image}" already present on machine`,
+          `  Normal   Started    ${p.age.padEnd(19)}kubelet  Started container ${p.deployment}`,
+        ]
+      : p.status === 'Pending'
+        ? [`  Warning  FailedScheduling  ${p.age.padEnd(12)}default-scheduler  0/3 nodes are available: 3 Insufficient cpu.`]
+        : p.status === 'ImagePullBackOff'
+          ? [
+              `  Warning  Failed     ${seen(p.restarts + 1).padEnd(19)}kubelet  Failed to pull image "${image}": not found`,
+              `  Normal   BackOff    ${seen(p.restarts + 1).padEnd(19)}kubelet  Back-off pulling image "${image}"`,
+            ]
+          : [`  Warning  BackOff    ${seen(p.restarts + 1).padEnd(19)}kubelet  Back-off restarting failed container ${p.deployment} in pod ${p.name}_${p.namespace}`];
+  return [
+    `Name:             ${p.name}`,
+    `Namespace:        ${p.namespace}`,
+    ...(p.status === 'Pending' ? ['Node:             <none>'] : []),
+    `Labels:           app=${p.deployment}`,
+    `Status:           ${phase}`,
+    `Controlled By:    ReplicaSet/${rs}`,
+    'Containers:',
+    `  ${p.deployment}:`,
+    `    Image:          ${image}`,
+    ...state,
+    `    Ready:          ${ready ? 'True' : 'False'}`,
+    `    Restart Count:  ${p.restarts}`,
+    ...(spec?.config_map ? ['    Environment Variables from:', `      ${spec.config_map}  ConfigMap  Optional: false`] : []),
+    'Events:',
+    '  Type     Reason     Age                From     Message',
+    '  ----     ------     ----               ----     -------',
+    ...events,
+  ];
+}
+
+/**
+ * kubectl apply -f for one file: the cluster now runs this content for the object the file
+ * names (kind, metadata.namespace or the -n namespace, metadata.name), whichever file it came
+ * from. Only the shape is checked (kind and name, no tabs in the indentation, as YAML forbids
+ * them); comments and blank lines never make a change. The content is what a scenario's
+ * applied_value() and applied_contains() read.
+ */
+function applyManifest(ctx: Ctx, path: string, shown: string, ns: string): { line: string; bad: boolean } {
+  const node = ctx.s.fs[path];
+  const text = node?.type === 'file' ? (node.content ?? '') : '';
+  const tab = text.split('\n').findIndex((l) => /^[ ]*\t/.test(l));
+  if (tab >= 0) return { bad: true, line: ctx.t('sh.kubectl_yaml_tab', { path: shown, line: tab + 1 }) };
+  const id = manifestId(text);
+  if (!id) return { bad: true, line: ctx.t('sh.kubectl_invalid', { path: shown }) };
+  const key = objectKey(id, ns);
+  const before = own(ctx.s.cluster, key);
+  setOwn(ctx.s.cluster, key, text);
+  const how = before === undefined ? 'created' : significant(before) === significant(text) ? 'unchanged' : 'configured';
+  return { bad: false, line: `${resourceName(id.kind)}/${id.name} ${how}` };
+}
 
 // ------------------------------------------------------------------ git
 

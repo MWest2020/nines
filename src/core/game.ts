@@ -9,11 +9,13 @@
 // pays through the same path. Every reward is paid once: a quest that is done stays done, and
 // a positive event pays once per quest and event however often the terminal is replayed.
 // Penalties are consequences and cost every time (ARCHITECTURE.md, Consequences).
+// Hints cost AI tokens and scale a quest's money and XP down (core/tokens.ts).
 
 import type { BranchId, ContentBundle, LocaleId, QuestEntry, Stage } from '../content/types';
 import { own } from '../rules/own';
 import { questState } from './progress';
 import type { GameState } from './save';
+import { addTokens, paidHints, rewardPercent, scaled } from './tokens';
 
 /** The parts of the content bundle the rules read. */
 export type Rules = Pick<ContentBundle, 'quests' | 'roadmap' | 'shop'>;
@@ -32,7 +34,8 @@ function effect(game: GameState, rules: Rules, name: 'income_per_quest' | 'hint_
   return sum;
 }
 
-/** How much sooner hints come: passed to createSession and startBattle as hintBoost. */
+/** How much sooner hints unlock (the Pi's local model notices sooner that you are stuck):
+ *  passed to createSession and startBattle as hintBoost. Asking still costs a token. */
 export const hintBoost = (game: GameState, rules: Rules): number => effect(game, rules, 'hint_boost');
 export const incomePerQuest = (game: GameState, rules: Rules): number => effect(game, rules, 'income_per_quest');
 
@@ -41,7 +44,7 @@ export type BuyRefusal = 'unknown' | 'owned' | 'locked' | 'money';
 export function canBuy(game: GameState, rules: Rules, itemId: string): { ok: true } | { ok: false; reason: BuyRefusal } {
   const item = rules.shop.items.find((i) => i.id === itemId);
   if (!item) return { ok: false, reason: 'unknown' };
-  if (game.items.includes(item.id)) return { ok: false, reason: 'owned' };
+  if (!item.consumable && game.items.includes(item.id)) return { ok: false, reason: 'owned' };
   if (!item.requires.every((r) => game.items.includes(r))) return { ok: false, reason: 'locked' };
   if (game.money < item.price) return { ok: false, reason: 'money' };
   return { ok: true };
@@ -53,7 +56,10 @@ export function buy(game: GameState, rules: Rules, itemId: string): BuyResult {
   const check = canBuy(game, rules, itemId);
   if (!check.ok) return { ok: false, game, reason: check.reason };
   const item = rules.shop.items.find((i) => i.id === itemId)!;
-  return { ok: true, price: item.price, game: { ...game, money: game.money - item.price, items: [...game.items, item.id] } };
+  const paid = { ...game, money: game.money - item.price };
+  // a consumable (AI credits) is used up at once: its tokens are added, nothing is owned
+  if (item.consumable) return { ok: true, price: item.price, game: addTokens(paid, item.effects.tokens ?? 0) };
+  return { ok: true, price: item.price, game: { ...paid, items: [...game.items, item.id] } };
 }
 
 // ---- quests
@@ -71,11 +77,18 @@ export function startQuest(game: GameState, rules: Rules, id: string): { ok: tru
 
 export interface Reward {
   quest: string;
-  /** the quest's own money */
+  /** the quest's own money, after hints */
   money: number;
-  /** extra money from owned homelab items */
+  /** extra money from owned homelab items (never scaled) */
   income: number;
+  /** XP, after hints */
   xp: number;
+  /** the share paid: 100, less PENALTY_PERCENT per AI hint taken, at least FLOOR_PERCENT */
+  percent: number;
+  /** AI hints taken on this quest */
+  hints: number;
+  /** what the quest pays without hints */
+  full: { money: number; xp: number };
   branch: BranchId;
   tech_debt: number;
   /** the Career Trail node that lights up */
@@ -97,10 +110,14 @@ export function completeQuest(game: GameState, rules: Rules, id: string): Comple
   if (state === 'locked' || state === 'done') return { ok: false, game, reason: state };
   const q = entry.quest;
   const income = incomePerQuest(game, rules);
+  const hints = paidHints(game, rules, id);
+  const percent = rewardPercent(hints);
+  const money = scaled(q.reward.money, percent);
+  const xp = scaled(q.reward.xp, percent);
   const next: GameState = {
     ...game,
-    money: game.money + q.reward.money + income,
-    xp: { ...game.xp, [q.branch]: (own(game.xp, q.branch) ?? 0) + q.reward.xp },
+    money: game.money + money + income,
+    xp: { ...game.xp, [q.branch]: (own(game.xp, q.branch) ?? 0) + xp },
     tech_debt: game.tech_debt + (q.reward.tech_debt ?? 0),
     quests: { ...game.quests, [id]: 'done' },
   };
@@ -110,7 +127,19 @@ export function completeQuest(game: GameState, rules: Rules, id: string): Comple
   return {
     ok: true,
     game: next,
-    reward: { quest: id, money: q.reward.money, income, xp: q.reward.xp, branch: q.branch, tech_debt: q.reward.tech_debt ?? 0, node: q.roadmap_node, unlocked },
+    reward: {
+      quest: id,
+      money,
+      income,
+      xp,
+      percent,
+      hints,
+      full: { money: q.reward.money, xp: q.reward.xp },
+      branch: q.branch,
+      tech_debt: q.reward.tech_debt ?? 0,
+      node: q.roadmap_node,
+      unlocked,
+    },
   };
 }
 
@@ -173,6 +202,22 @@ export const setPlayer = (game: GameState, player: GameState['player']): GameSta
 
 /** Count a pager tick (the world calls this on a map change). */
 export const tick = (game: GameState): GameState => ({ ...game, ticks: game.ticks + 1 });
+
+// ---- career paths (DESIGN.md, Career paths)
+
+export type PathRefusal = 'unknown' | 'closed' | 'chosen';
+
+/**
+ * Choose a career path. It is chosen at Medior City, so the road there must be open; it is
+ * chosen once (switching is a later design question). Choosing the same path again is a no-op.
+ */
+export function choosePath(game: GameState, rules: Pick<Rules, 'quests' | 'roadmap'>, pathId: string): { ok: true; game: GameState } | { ok: false; game: GameState; reason: PathRefusal } {
+  if (!rules.roadmap.paths.some((p) => p.id === pathId)) return { ok: false, game, reason: 'unknown' };
+  if (game.path === pathId) return { ok: true, game };
+  if (game.path !== null) return { ok: false, game, reason: 'chosen' };
+  if (!townOpen(game, rules, 'medior')) return { ok: false, game, reason: 'closed' };
+  return { ok: true, game: { ...game, path: pathId } };
+}
 
 // ---- the Career Trail
 

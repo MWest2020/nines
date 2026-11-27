@@ -2,9 +2,11 @@
 
 A retro top-down RPG about growing from Junior to Senior engineer. Walk a career trail in a
 pixel-art town, fix simulated servers in an in-game terminal, earn money for homelab gear, and
-pick a track (SRE or Platform Engineering) on the way to Senior.
+pick a path (software, SRE, DevOps, platform or systems engineer) on the way to Senior. Hints
+come from an AI that costs tokens and takes a cut of your reward.
 
-No tracking, no ads, no network calls. It runs from static files and offline on Android.
+No tracking, no ads, no third-party analytics. It runs from static files and offline on Android;
+any online feature will be opt-in (AGENTS.md, rule 3).
 Play it in the browser: https://mwest2020.github.io/nines/ (every green push to main deploys; the MVP is still being built).
 
 ```sh

@@ -4,6 +4,7 @@ import type { ScenarioSpec } from '../content/types';
 import type { Env } from '../rules/expr';
 import { has, own, setOwn } from '../rules/own';
 import { validateNinesCi } from './ci';
+import { manifestValue } from './manifest';
 import { join } from './path';
 import { signature, type SimState } from './state';
 import { diskUsage, sizeOf } from './vfs';
@@ -68,6 +69,11 @@ export function scenarioEnv(src: FactSource): Env {
         const n = s().fs[String(p)];
         return n?.type === 'file' && (n.content ?? '').includes(String(needle));
       },
+      applied_contains: (obj, needle) => {
+        const applied = own(s().cluster, String(obj));
+        return applied !== undefined && applied.includes(String(needle));
+      },
+      applied_value: (obj, key) => manifestValue(own(s().cluster, String(obj)) ?? '', String(key)),
       service: (name) => own(s().services, String(name))?.state ?? 'inactive',
       restarted: (name) => s().restarted.includes(String(name)),
       pods_running: (dep) => {

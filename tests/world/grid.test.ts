@@ -72,13 +72,13 @@ describe('the world grid', () => {
     expect(ahead(entrance.x, entrance.y, 'down')).toEqual({ x: exit.x, y: exit.y });
   });
 
-  it('the server room racks are terminals: the two server-room quests\' and two spare cameo racks, reachable from the entrance', () => {
+  it('the server room racks are terminals: the server-room quests\' (the Kubernetes jump host too) and two spare cameo racks, reachable from the entrance', () => {
     const r = world('server-room');
     const racks = r.objects.filter((o) => o.type === 'terminal').map((o) => o.name).sort();
-    expect(racks).toEqual(['cameo-rack-1', 'cameo-rack-2', 'rack-app-01', 'rack-web-01']);
+    expect(racks).toEqual(['cameo-rack-1', 'cameo-rack-2', 'rack-app-01', 'rack-k8s-01', 'rack-web-01']);
     // more quests may start here (a cameo claims a spare rack), but not on a machine that is not there
     const starts = content().quests.filter((q) => q.quest.start.map === 'server-room').map((q) => q.quest.start.object);
-    expect(starts).toEqual(expect.arrayContaining(['rack-app-01', 'rack-web-01']));
+    expect(starts).toEqual(expect.arrayContaining(['rack-app-01', 'rack-k8s-01', 'rack-web-01']));
     for (const s of starts) expect(racks).toContain(s);
     const seen = reachable(r, [objectNamed(r, 'entrance')!]);
     for (const name of racks) {

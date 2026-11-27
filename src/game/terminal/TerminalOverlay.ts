@@ -17,18 +17,23 @@ import { complete } from '../../terminal/complete';
 import { gutter, INDENT, insertIndent, isDirty, lineCol, lineCount, normalizeText, tabLines } from '../../terminal/editor';
 import { down, type History, newHistory, record, up } from '../../terminal/history';
 import { pushBack } from '../back';
+import { type HintGate, hintCards } from '../ui/hintcard';
 import { followVisualViewport } from '../touch/viewport';
 
 export interface TerminalHost {
   t: Translate;
   /** the homelab's hint boost (the Raspberry Pi's "hints come one try sooner") */
   hintBoost: number;
+  /** AI tokens: an unlocked hint shows its price and is revealed once paid (core/tokens.ts).
+   *  Without a gate, hints show at once. */
+  hints?: HintGate;
   /** locale key of the quest giver's name: they speak the consequences */
   speaker?: string;
   /** apply money and flags from fired events; returns the money actually gained or lost */
   applyEvents(events: readonly FiredEvent[]): number;
-  /** the last objective was met: pay the reward. Null when it was paid before. */
-  complete(): { money: number; xp: number } | null;
+  /** the last objective was met: pay the reward. Null when it was paid before. `hints` AI hints
+   *  brought it down to `percent` of the full reward. */
+  complete(): { money: number; income: number; xp: number; percent: number; hints: number } | null;
   /** the overlay has closed and removed itself */
   closed(won: boolean): void;
 }
@@ -87,6 +92,7 @@ export class TerminalOverlay {
   private readonly unfollow: () => void;
   private history: History = newHistory();
   private dialogs: Dialog[] = [];
+  /** locale keys (in this quest's folder) of the hints unlocked so far, oldest first */
   private hints: string[] = [];
   private won = false;
   private closedAlready = false;
@@ -415,7 +421,7 @@ export class TerminalOverlay {
         this.queue({ ...(this.host.speaker ? { speaker: this.t(this.host.speaker) } : {}), text, ...(extra ? { extra } : {}), button: this.t('ui.terminal.next') });
       });
     }
-    for (const h of r.hints) this.hints.push(this.t(questKey(this.quest.id, h)));
+    this.hints.push(...r.hints);
     this.renderSide(r);
     this.promptEl.textContent = prompt(this.session.state);
     if (r.justWon) {
@@ -423,7 +429,7 @@ export class TerminalOverlay {
       const reward = this.host.complete();
       this.queue({
         text: this.t('ui.terminal.won'),
-        extra: reward ? this.t('ui.quest.reward', { money: reward.money, xp: reward.xp }) : this.t('ui.terminal.won_again'),
+        extra: reward ? this.rewardText(reward) : this.t('ui.terminal.won_again'),
         button: this.t('ui.terminal.continue'),
         then: () => this.close(),
       });
@@ -441,11 +447,36 @@ export class TerminalOverlay {
     );
     const done = r.objectives.filter((o) => o.done).length;
     this.objCount.textContent = `${done}/${r.objectives.length}`;
+    this.renderHints();
+  }
+
+  private renderHints(): void {
     if (this.hints.length === 0) {
       this.hintList.replaceChildren(el('p', 'nt-nohint', this.t('ui.terminal.no_hint')));
-    } else {
-      this.hintList.replaceChildren(...this.hints.map((h, i) => el('p', i === this.hints.length - 1 ? 'nt-hint nt-latest' : 'nt-hint', h)));
+      return;
     }
+    const last = this.hints.length - 1;
+    this.hintList.replaceChildren(
+      ...hintCards(this.hints, {
+        t: this.t,
+        ...(this.host.hints ? { gate: this.host.hints } : {}),
+        text: (k) => this.t(questKey(this.quest.id, k)),
+        changed: () => {
+          this.renderHints();
+          // back to the command line on a desktop; a phone keeps its keyboard down
+          if (window.matchMedia?.('(pointer: fine)').matches) this.input.focus({ preventScroll: true });
+        },
+        cls: (_, i) => (i === last ? 'nt-hint nt-latest' : 'nt-hint'),
+      }),
+    );
+  }
+
+  /** The quest's own reward (scaled by AI hints), the hint line, then the homelab's unscaled income. */
+  private rewardText(r: { money: number; income: number; xp: number; percent: number; hints: number }): string {
+    const parts = [this.t('ui.quest.reward', { money: r.money, xp: r.xp })];
+    if (r.hints > 0) parts.push(this.t(r.hints === 1 ? 'ui.reward.hints_one' : 'ui.reward.hints_many', { hints: r.hints, percent: r.percent }));
+    if (r.income > 0) parts.push(this.t('ui.toast.income', { amount: r.income }));
+    return parts.join(' ');
   }
 
   // ---- dialogue inside the overlay: consequences and the win

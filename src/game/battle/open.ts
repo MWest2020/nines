@@ -56,6 +56,7 @@ function rewardLines(api: GameApi, reward: Reward | null): string[] {
   const branch = store.content.roadmap.branches.find((b) => b.id === reward.branch);
   const lines = [t('ui.toast.reward', { money: reward.money, xp: reward.xp, branch: branch ? t(branch.title) : reward.branch })];
   if (reward.income > 0) lines.push(t('ui.toast.income', { amount: reward.income }));
+  if (reward.hints > 0) lines.push(t(reward.hints === 1 ? 'ui.reward.hints_one' : 'ui.reward.hints_many', { hints: reward.hints, percent: reward.percent }));
   return lines;
 }
 
@@ -85,6 +86,7 @@ export async function openBattle(game: Phaser.Game, api: GameApi, questId: strin
       attacker,
       speaker: npc ? api.t(npc.key(npc.spec.name)) : attacker,
       portrait: portraitOf(game, api, npc?.spec.id),
+      hints: { offer: (key) => api.hintOffer(entry.id, key), ask: (key) => api.askHint(entry.id, key) },
       record: (outcome) => {
         const reward = api.recordBattle(entry.id, outcome);
         if (outcome === 'lost') return [];

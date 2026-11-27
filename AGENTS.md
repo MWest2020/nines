@@ -1,7 +1,8 @@
 # Rules for agents working on Nines
 
 Read this, then ARCHITECTURE.md and DESIGN.md, before changing anything. These rules come
-from Mark's brief (26 Nov 2026); a reviewer blocks a pull request that breaks one.
+from Mark's brief (26 Nov 2026, rule 3 revised 27 Nov 2026); a reviewer blocks a pull request
+that breaks one.
 
 ## Hard constraints
 
@@ -15,10 +16,16 @@ from Mark's brief (26 Nov 2026); a reviewer blocks a pull request that breaks on
 2. **Every asset is recorded.** A row in ASSETS.md (path, source, author, licence) in the same
    commit that adds the file. `npm test` fails on an unlisted binary outside `content/`. A
    quest sprite records its source and licence in its `npc.yaml` (licence `CC0-1.0`).
-3. **No network at runtime.** No tracking, no analytics, no ads, no fonts or scripts from a
-   CDN, no `fetch` to anywhere but the game's own files. Saves stay in `localStorage`. The CSP
-   in `index.html` stays strict and `tests/guards.test.ts` stays green. Never weaken either to
-   make something work; find another way or ask.
+3. **Privacy kept sensible; network features opt-in.** Nines is not a children's app (Mark,
+   27 Nov 2026), so "no network" is no longer absolute: optional online features such as
+   share-my-progress may come (DESIGN.md, Share my progress). What stays: no third-party
+   analytics, no ads and no tracking unless Mark asks for them; no fonts or scripts from a CDN.
+   Every network feature is opt-in (off until the player turns it on), documented in
+   ARCHITECTURE.md and PLAY_STORE.md (Data safety) before it ships, and approved by Mark when it
+   adds a server or a public endpoint. Until such a feature lands the game makes no requests
+   beyond its own files: saves stay in `localStorage`, the CSP in `index.html` stays strict and
+   `tests/guards.test.ts` stays green. Loosen either only in the pull request that adds the
+   feature, never to make something else work.
 4. **Fully static.** `npm ci && npm run build` produces `dist/`, which must run from GitHub
    Pages (a sub-path) and offline inside the Android app. Relative URLs only (`base: './'`).
 5. **Content is data, not code.** Quests, NPCs, dialogue, scenarios and conditions live in
@@ -72,8 +79,10 @@ browsers.
   `systemd-run --user --scope -q -p MemoryMax=3G -p MemorySwapMax=0 ./gradlew --no-daemon ...`,
   then `./gradlew --stop`. Check `pgrep -f 'GradleDaemon|gradlew'` first and wait if one runs.
 - The app id is `work.westerweel.nines` (Mark, 26 Nov 2026), configurable with `NINES_APP_ID`.
-- GitHub Pages is not set up yet. A Pages deploy is a public surface: it needs Mark's own
-  explicit go-ahead in the conversation where it is built.
+- GitHub Pages deploys main to https://mwest2020.github.io/nines/ (Mark's "mag openbaar", 26 Nov
+  2026). Any other new public surface needs his explicit go-ahead.
+- Hints cost AI tokens (DESIGN.md, AI tokens). A new hint in content costs the player a token,
+  so it must be worth one: point the way, never just print the answer.
 
 ## Acceptance (from the brief)
 
@@ -82,4 +91,5 @@ browsers.
 - All three MVP quests completable on desktop and on an Android device.
 - A fourth quest needs only a new `/content` folder (proved by a sample cameo in its own commit).
 - ASSETS.md lists a source and licence for every asset.
-- No runtime network requests: verified in the browser's devtools and documented.
+- No runtime network requests: verified in the browser's devtools and documented (until an
+  opt-in network feature lands under rule 3).

@@ -8,7 +8,7 @@ title: title
 summary: summary
 stage: junior
 branch: incident
-track: any
+paths: [sre, devops]
 roadmap_node: incident-pager
 requires: [service-down, broken-pipeline]
 giver: bas

@@ -5,7 +5,7 @@ title: title
 summary: summary
 stage: junior
 branch: cicd
-track: any
+paths: [devops, platform, swe]
 roadmap_node: cicd-pipeline
 requires: []
 giver: ravi

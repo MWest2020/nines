@@ -11,6 +11,7 @@ import { createTranslator, type Translate } from '../core/i18n';
 import type { SaveSlot } from '../core/persist';
 import { progressEnv } from '../core/progress';
 import type { GameState } from '../core/save';
+import * as tokens from '../core/tokens';
 import { type Conversation, conversation } from '../core/talk';
 import type { FiredEvent } from '../sim/session';
 
@@ -18,6 +19,7 @@ export type Change =
   | { kind: 'reward'; reward: rules.Reward }
   | { kind: 'money'; delta: number }
   | { kind: 'purchase'; item: string; price: number }
+  | { kind: 'hint'; quest: string; charged: number }
   | { kind: 'quest'; id: string }
   | { kind: 'locale'; locale: LocaleId }
   | { kind: 'other' };
@@ -34,7 +36,8 @@ export class GameStore {
     game: GameState,
     readonly slot: SaveSlot,
   ) {
-    this.state = game;
+    // a path the roadmap does not have (a hand-edited save, a renamed path) is no choice at all
+    this.state = game.path !== null && !content.roadmap.paths.some((p) => p.id === game.path) ? { ...game, path: null } : game;
     this.translate = createTranslator(content.locales, game.locale);
   }
 
@@ -98,6 +101,20 @@ export class GameStore {
   /** hintBoost for createSession and startBattle: what the owned homelab gear adds. */
   hintBoost(): number {
     return rules.hintBoost(this.state, this.content);
+  }
+
+  // ---- AI tokens (core/tokens.ts)
+
+  /** What asking the AI for this hint would cost now. */
+  hintOffer(questId: string, key: string): tokens.HintOffer {
+    return tokens.hintOffer(this.state, this.content, questId, key);
+  }
+
+  /** Pay for a hint (saved at once: a reload never refunds it). False when refused. */
+  takeHint(questId: string, key: string): boolean {
+    const r = tokens.takeHint(this.state, this.content, questId, key);
+    if (r.ok && r.charged > 0) this.commit(r.game, { kind: 'hint', quest: questId, charged: r.charged }, true);
+    return r.ok;
   }
 
   currentQuest(): string | null {

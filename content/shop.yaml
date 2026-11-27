@@ -1,4 +1,5 @@
-# Homelab gear. Effects are the only levers; the engine knows these two.
+# Homelab gear. Effects are the only levers; the engine knows these three. A consumable is
+# bought again and again and only adds tokens (core/tokens.ts: a hint costs one).
 schema: 1
 items:
   - id: raspberry-pi
@@ -9,3 +10,11 @@ items:
     effects:
       income_per_quest: 10
       hint_boost: 1
+  - id: ai-credits
+    title: item.ai_credits
+    description: item.ai_credits.desc
+    price: 40
+    requires: []
+    consumable: true
+    effects:
+      tokens: 3

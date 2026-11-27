@@ -3,6 +3,7 @@
 
 import type { PodStatus, ScenarioSpec } from '../content/types';
 import { setOwn } from '../rules/own';
+import { manifestId, objectKey } from './manifest';
 import { dirname, isUnder, normalize } from './path';
 import { parseSize, utf8Length } from './size';
 
@@ -64,6 +65,9 @@ export interface SimState {
   shownHints: string[];
   /** bumps on every kubectl rollout, so new pod names are deterministic */
   generation: number;
+  /** what the cluster runs: object key ("configmap/shop/shop-api-config") -> the manifest text
+   *  last applied for it (kubectl apply -f), from whichever file */
+  cluster: Record<string, string>;
 }
 
 export function ensureDir(fs: Record<string, FsNode>, p: string): void {
@@ -158,6 +162,14 @@ export function createState(spec: ScenarioSpec): SimState {
     pods.push(...makePods(name, d, 0, d.status, d.restarts ?? 0, '42m', d.logs ?? []));
   }
 
+  // manifests the cluster already runs: their objects, with the files' content at the start
+  const cluster: Record<string, string> = {};
+  for (const raw of spec.cluster ?? []) {
+    const n = fs[normalize(raw)];
+    const id = n?.type === 'file' && n.content !== undefined ? manifestId(n.content) : null;
+    if (id) setOwn(cluster, objectKey(id, 'default'), n!.type === 'file' ? n!.content! : '');
+  }
+
   let git: GitState | null = null;
   if (spec.git) {
     const root = normalize(spec.git.root);
@@ -196,5 +208,6 @@ export function createState(spec: ScenarioSpec): SimState {
     firedEvents: [],
     shownHints: [],
     generation: 0,
+    cluster,
   };
 }

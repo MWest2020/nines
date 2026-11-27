@@ -8,6 +8,7 @@ import type { LocaleId } from '../../content/types';
 import type { QuestRefusal, Reward } from '../../core/game';
 import type { Params } from '../../core/i18n';
 import type { GameState } from '../../core/save';
+import type { HintOffer } from '../../core/tokens';
 import { type Conversation, findNpc } from '../../core/talk';
 import type { FiredEvent } from '../../sim/session';
 import { type DialogueLine, type GameApi, setGameApi } from '../api';
@@ -155,6 +156,14 @@ export class GameUi implements GameApi {
 
   hintBoost(): number {
     return this.store.hintBoost();
+  }
+
+  hintOffer(questId: string, key: string): HintOffer {
+    return this.store.hintOffer(questId, key);
+  }
+
+  askHint(questId: string, key: string): boolean {
+    return this.store.takeHint(questId, key);
   }
 
   enterMap(player: GameState['player']): string | null {

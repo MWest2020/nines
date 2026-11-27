@@ -24,6 +24,8 @@ export class HudScene extends Phaser.Scene {
   private ui!: GameUi;
   dialogue!: DialogueBox;
   private money!: Phaser.GameObjects.BitmapText;
+  /** AI tokens, next to the money */
+  private tokens!: Phaser.GameObjects.BitmapText;
   private quest!: Phaser.GameObjects.BitmapText;
   private toasts: Phaser.GameObjects.Container[] = [];
   private menu: { layer: Phaser.GameObjects.Container; buttons: Button[]; focus: number; release: () => void } | null = null;
@@ -38,6 +40,7 @@ export class HudScene extends Phaser.Scene {
     g.fillStyle(hex(C.ink), 0.85).fillRect(0, 0, VIEW.width, BAR_H);
     g.fillStyle(hex(C.slate), 1).fillRect(0, BAR_H, VIEW.width, 1);
     this.money = pixelText(this, 3, 1, '', C.gold);
+    this.tokens = pixelText(this, 30, 1, '', C.lilac);
     this.quest = pixelText(this, 46, 1, '', C.paper);
     this.icon(VIEW.width - 2 * ICON.w - 2, (ig, x) => {
       // the menu: three bars
@@ -84,11 +87,14 @@ export class HudScene extends Phaser.Scene {
   private refresh(): void {
     const { store, t } = this.ui;
     this.money.setText(t('ui.money', { amount: store.game.money }));
+    this.tokens.setText(t('ui.hud.tokens', { n: store.game.tokens }));
+    this.tokens.setX(3 + measure(this.money.text) + 6);
     const q = store.currentQuest();
     const label = q ? t(questKey(q, 'title')) : t('ui.hud.no_quest');
-    this.quest.setText(ellipsize(label, VIEW.width - 46 - 2 * ICON.w - 6));
+    const qx = Math.max(46, this.tokens.x + measure(this.tokens.text) + 8);
+    this.quest.setText(ellipsize(label, VIEW.width - qx - 2 * ICON.w - 6));
     this.quest.setAlpha(q ? 1 : 0.6);
-    this.quest.setX(Math.max(46, measure(this.money.text) + 10));
+    this.quest.setX(qx);
   }
 
   private onChange(change: Change): void {
@@ -103,7 +109,8 @@ export class HudScene extends Phaser.Scene {
       this.toast(change.delta < 0 ? t('ui.toast.money_lost', { amount: -change.delta }) : t('ui.toast.money_gained', { amount: change.delta }), change.delta < 0 ? C.orange : C.gold);
     } else if (change.kind === 'purchase') {
       const item = store.content.shop.items.find((i) => i.id === change.item);
-      this.toast(t('ui.toast.bought', { item: item ? t(item.title) : change.item }), C.leaf);
+      if (item?.consumable) this.toast(t('ui.toast.tokens', { n: item.effects.tokens ?? 0 }), C.lilac);
+      else this.toast(t('ui.toast.bought', { item: item ? t(item.title) : change.item }), C.leaf);
     } else if (change.kind === 'locale' && this.menu) {
       const focus = this.menu.focus;
       this.closeMenu();

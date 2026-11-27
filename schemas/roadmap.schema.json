@@ -5,7 +5,7 @@
   "description": "The Career Trail: towns (stages), branches (routes) and the nodes on them.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "towns", "branches", "nodes"],
+  "required": ["schema", "towns", "branches", "paths", "nodes"],
   "properties": {
     "schema": { "$ref": "common.schema.json#/$defs/schemaVersion" },
     "towns": {
@@ -33,6 +33,21 @@
         "properties": {
           "id": { "$ref": "common.schema.json#/$defs/branch" },
           "title": { "$ref": "common.schema.json#/$defs/localeKey" }
+        }
+      }
+    },
+    "paths": {
+      "type": "array",
+      "minItems": 1,
+      "description": "the career paths chosen at Medior City (DESIGN.md, Career paths)",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "pitch"],
+        "properties": {
+          "id": { "$ref": "common.schema.json#/$defs/path" },
+          "title": { "$ref": "common.schema.json#/$defs/localeKey" },
+          "pitch": { "$ref": "common.schema.json#/$defs/localeKey", "description": "one line on what the path is about" }
         }
       }
     },

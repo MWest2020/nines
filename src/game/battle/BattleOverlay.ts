@@ -19,6 +19,7 @@ import { type BattleRound, type Grade, questKey } from '../../content/types';
 import type { Translate } from '../../core/i18n';
 import * as S from '../../battle/screen';
 import { pushBack } from '../back';
+import { type HintGate, hintCards } from '../ui/hintcard';
 
 export interface OverlayOptions {
   t: Translate;
@@ -29,6 +30,9 @@ export interface OverlayOptions {
   speaker: string;
   /** a fresh head-only portrait for each message group, or null for none */
   portrait: () => HTMLCanvasElement | null;
+  /** AI tokens: an unlocked hint shows its price and is revealed once paid. Without a gate,
+   *  hints show at once. */
+  hints?: HintGate;
   /** A try ended: record it. Returns lines (translated) to show under the verdict. */
   record: (outcome: 'won' | 'lost') => string[];
   parent?: HTMLElement;
@@ -337,8 +341,15 @@ class BattleOverlay {
     this.hintToggle.setAttribute('aria-label', t('ui.battle.hints_count', { n: hints.length }));
     if (hints.length > 0) {
       const box = el('section', 'nb-hints');
-      box.append(el('h3', undefined, t('ui.battle.hint')));
-      for (const k of hints) box.append(el('p', undefined, t(questKey(s.quest, k))));
+      box.append(
+        el('h3', undefined, t('ui.battle.hint')),
+        ...hintCards(hints, {
+          t,
+          ...(this.opts.hints ? { gate: this.opts.hints } : {}),
+          text: (k) => t(questKey(s.quest, k)),
+          changed: () => this.renderSide(),
+        }),
+      );
       this.side.append(box);
     }
   }

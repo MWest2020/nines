@@ -1,0 +1,108 @@
+# jump-01: shop-api crash-loops after a ConfigMap change. What it teaches, at KCNA level
+# (Kubernetes Fundamentals): pods belong to a Deployment, resources live in a namespace, kubectl
+# get / describe / logs, a ConfigMap feeding a container's environment (envFrom), the manifest
+# file as the source of truth (kubectl apply -f), and why a rollout restart is the quick way to
+# get new pods: containers read their environment when they start. A crash-looping container
+# would pick the fix up at its next restart attempt, but that back-off can take up to five
+# minutes; a running pod would never pick it up. The simulator keeps the pods crashing until the
+# restart, which is the point of the last hint.
+schema: 1
+host: jump-01
+user: dev
+home: /home/dev
+motd: motd
+mounts:
+  - {path: /, device: /dev/sda1, size: 20G, base_used: 4G}
+dirs: [/tmp]
+files:
+  /home/dev/handover.txt: |
+    From: Mila (platform team)
+    - shop-api runs on the cluster in the namespace "shop". kubectl on this box is set up for it.
+    - Its manifests live in ~/shop-k8s. Change the files, then kubectl apply them. Nobody edits
+      the cluster by hand: the files are the truth.
+    - This morning Joost "tidied up" the config. Since then the pods keep restarting.
+  /home/dev/shop-k8s/deployment.yaml: |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: shop-api
+      namespace: shop
+    spec:
+      replicas: 2
+      selector:
+        matchLabels:
+          app: shop-api
+      template:
+        metadata:
+          labels:
+            app: shop-api
+        spec:
+          containers:
+            - name: shop-api
+              image: registry.example.test/shop-api:1.8.0
+              ports:
+                - containerPort: 8080
+              envFrom:
+                - configMapRef:
+                    name: shop-api-config
+  /home/dev/shop-k8s/configmap.yaml: |
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: shop-api-config
+      namespace: shop
+    data:
+      DB_HOST: postgres.shop.svc.cluster.local
+      DB_PORT: "5432"
+      LOG_LEVEL: verbose
+# what the cluster runs at the start: the objects in both manifests, as they are on disk
+cluster: [/home/dev/shop-k8s/deployment.yaml, /home/dev/shop-k8s/configmap.yaml]
+deployments:
+  shop-api:
+    namespace: shop
+    replicas: 2
+    status: CrashLoopBackOff
+    restarts: 7
+    image: registry.example.test/shop-api:1.8.0
+    config_map: shop-api-config
+    logs:
+      - "2026-11-27T08:41:09Z INFO  starting shop-api 1.8.0"
+      - "2026-11-27T08:41:09Z INFO  reading configuration from the environment"
+      - "2026-11-27T08:41:09Z FATAL invalid LOG_LEVEL \"verbose\": must be one of debug, info, warn, error"
+    restart:
+      # New pods start healthy once the cluster's ConfigMap (from whichever file it was applied)
+      # has one of the four values the log names; quotes and a trailing comment do not matter.
+      succeeds_if: >-
+        applied_value("configmap/shop/shop-api-config", "LOG_LEVEL") == "info"
+        || applied_value("configmap/shop/shop-api-config", "LOG_LEVEL") == "debug"
+        || applied_value("configmap/shop/shop-api-config", "LOG_LEVEL") == "warn"
+        || applied_value("configmap/shop/shop-api-config", "LOG_LEVEL") == "error"
+      logs_on_success:
+        - "2026-11-27T09:02:31Z INFO  starting shop-api 1.8.0"
+        - "2026-11-27T09:02:31Z INFO  reading configuration from the environment"
+        - "2026-11-27T09:02:31Z INFO  connected to postgres.shop.svc.cluster.local:5432"
+        - "2026-11-27T09:02:32Z INFO  listening on :8080"
+      logs_on_failure:
+        - "2026-11-27T09:02:31Z INFO  starting shop-api 1.8.0"
+        - "2026-11-27T09:02:31Z INFO  reading configuration from the environment"
+        - "2026-11-27T09:02:31Z FATAL invalid LOG_LEVEL \"verbose\": must be one of debug, info, warn, error"
+quick:
+  - "cat ~/handover.txt"
+  - kubectl get pods -n shop
+  - kubectl describe pods -n shop
+  - kubectl logs deployment/shop-api -n shop
+  - "ls ~/shop-k8s"
+  - help kubectl
+objectives:
+  - {id: running, text: obj.running, done_when: 'pods_running("shop-api")'}
+hints:
+  - {id: start, when: 'commands >= 3 && !ran("kubectl")', text: hint.start}
+  - {id: logs, when: 'ran("kubectl get") && !ran("kubectl logs") && (fails >= 1 || commands >= 6)', text: hint.logs}
+  - {id: edit, when: 'ran("kubectl logs") && !ran("edit") && (fails >= 2 || commands >= 9)', text: hint.edit}
+  - {id: apply, when: 'ran("edit") && !ran("kubectl apply") && (restarted("shop-api") || commands >= 12)', text: hint.apply}
+  - {id: restart, when: 'ran("kubectl apply") && applied_value("configmap/shop/shop-api-config", "LOG_LEVEL") != "verbose" && !pods_running("shop-api") && (fails >= 3 || commands >= 14)', text: hint.restart}
+events:
+  - id: manifest-gone
+    when: 'removed("/home/dev/shop-k8s/configmap.yaml")'
+    say: event.manifest_gone
+    reset: true

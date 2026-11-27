@@ -201,15 +201,15 @@ def edit_file(page: Page, text: str) -> None:
     page.locator(".nt-editor").wait_for(state="hidden")
 
 
-def finish(page: Page, title_part: str, reward: str | None = None) -> None:
+def finish(page: Page, title_part: str, reward: str | list[str] | None = None) -> None:
     """The win: the overlay celebrates, Continue closes it, the giver's done lines follow."""
     dialog = page.locator(".nt-dialog")
     dialog.wait_for(state="visible", timeout=5000)
     text = dialog.inner_text()
     assert "Quest complete" in text, text
     assert "Reward" in text, text
-    if reward is not None:
-        assert reward in text, text
+    for part in [reward] if isinstance(reward, str) else reward or []:
+        assert part in text, (part, text)
     page.keyboard.press("Enter")  # the Continue button has focus
     page.locator(".nt-overlay").wait_for(state="detached", timeout=5000)
     # The giver's "done" lines follow in the HUD dialogue box. Press Enter until the world is
@@ -324,7 +324,7 @@ def broken_pipeline(page: Page, shots: Path | None) -> None:
     finish(page, "Broken pipeline")
 
 
-def service_down(page: Page, shots: Path | None, reward: str | None = None) -> None:
+def service_down(page: Page, shots: Path | None, reward: str | list[str] | None = None) -> None:
     run(page, "systemctl status nginx", "failed")
     run(page, "journalctl -u nginx", 'unknown directive "listn"')
     # Esc on a changed buffer asks for a second Esc before it throws the change away
@@ -380,11 +380,16 @@ def shop(page: Page, p: Player, village: Grid, shots: Path | None) -> None:
 
 
 # The Career Trail (src/game/ui/TrailScene.ts), on the canvas: the screen sits under the 12 px HUD
-# band; the chosen town's branch rows start at view y 52, 13 apart; a done stone is a filled gold
-# diamond 9 px wide on its row, an open one an outline, a locked one a grey square.
+# band; the chosen town's branch rows start at view y 52, 13 apart (11 when a town has six rows);
+# a done stone is a filled gold diamond 9 px wide on its row, an open one an outline, a locked one
+# a grey square.
 BAND = 12
 GOLD = (0xF8, 0xD0, 0x70)
-TRAIL_ROWS = [52 + 13 * r for r in range(5)]
+
+
+def trail_rows() -> list[int]:
+    n = len(junior_trail()[0])
+    return [52 + (13 if n <= 5 else 11) * r for r in range(n)]
 
 
 def png_pixels(data: bytes) -> tuple[int, int, int, list[bytes]]:
@@ -436,7 +441,7 @@ def done_stones(page: Page) -> list[list[float]]:
         return all(abs(row[x + i] - GOLD[i]) <= 16 for i in range(3))
 
     rows_found = []
-    for ry in TRAIL_ROWS:
+    for ry in trail_rows():
         centres, run = [], 0
         for cx in range(100, 241):
             if cx < 240 and gold(cx, BAND + ry):
@@ -509,6 +514,88 @@ def its_always_dns(page: Page, shots: Path | None) -> None:
     finish(page, "It's always DNS")
 
 
+CONFIGMAP_FIXED = """apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shop-api-config
+  namespace: shop
+data:
+  DB_HOST: postgres.shop.svc.cluster.local
+  DB_PORT: "5432"
+  LOG_LEVEL: info
+"""
+
+
+def ask_the_ai(page: Page, shots: Path | None) -> None:
+    """A hint that has unlocked shows its price first (DESIGN.md, AI tokens); asking pays a token,
+    shows the hint, and is saved at once."""
+    card = page.locator(".nt-hints .nh-card")
+    card.wait_for(state="visible", timeout=5000)
+    text = card.inner_text()
+    assert "Ask the AI?" in text and "-1 token" in text and "-20% XP" in text, text
+    if shots:
+        page.screenshot(path=str(shots / "terminal-ask-ai.png"))
+    before = save_game(page)["tokens"]
+    card.locator(".nh-ask").click()
+    page.wait_for_function("t => JSON.parse(localStorage.getItem('nines.save')).game.tokens === t", arg=before - 1, timeout=5000)
+    assert page.locator(".nt-hints .nh-card").count() == 0
+    hint = page.locator(".nt-hints .nt-hint").last.inner_text()
+    assert "kubectl get pods" in hint, hint
+    print(f"  asked the AI: tokens {before} -> {before - 1}, hint: {hint[:60]}...")
+
+
+def crashloop_config(page: Page, shots: Path | None) -> None:
+    """The first Kubernetes quest (content/quests/crashloop-config), with one paid hint."""
+    run(page, "ls")
+    run(page, "pwd")
+    run(page, "cat ~/handover.txt", "namespace")
+    ask_the_ai(page, shots)
+    run(page, "kubectl get pods -n shop", "CrashLoopBackOff")
+    run(page, "kubectl describe pods -n shop", "Back-off restarting failed container")
+    run(page, "kubectl logs deployment/shop-api -n shop", "invalid LOG_LEVEL")
+    run(page, "edit ~/shop-k8s/configmap.yaml")
+    page.locator(".nt-editor").wait_for(state="visible")
+    edit_file(page, CONFIGMAP_FIXED)
+    run(page, "kubectl apply -f ~/shop-k8s/configmap.yaml", "configmap/shop-api-config configured")
+    run(page, "kubectl rollout restart deployment/shop-api -n shop")
+    # 80% of 175 after one hint; the Pi's 10 on its own line (never scaled)
+    finish(page, "CrashLoopBackOff", reward=["€140 and 20 XP", "1 AI hint: 80% of the full reward", "+€10 from your homelab"])
+
+
+def leave_pager(page: Page) -> None:
+    """The 3 AM pager (night-pager) may go off on a map change once its quests are done; the
+    roll depends on the new game's random seed. Leave the call: leaving costs nothing."""
+    page.wait_for_timeout(800)
+    if page.locator(".nb-battle").count() > 0:
+        page.keyboard.press("Escape")
+        page.locator(".nb-battle").wait_for(state="detached", timeout=5000)
+        page.wait_for_timeout(400)
+        print("  the pager went off on the way; left the call")
+
+
+def buy_ai_credits(page: Page, p: Player, village: Grid, shots: Path | None) -> None:
+    """AI credits: the shop's second page, bought with the keyboard; three tokens for €40."""
+    leave_pager(page)
+    before = save_game(page)
+    spot, facing = village.stand_by("homelab-store", p.pos)
+    p.go_to(village, spot)
+    p.face(facing)
+    page.keyboard.press("Enter")  # the Homelab Store opens on the Pi, owned: ‹ has the focus
+    page.wait_for_timeout(700)
+    page.keyboard.press("Enter")  # ‹ turns to the AI credits; Buy takes the focus
+    page.wait_for_timeout(400)
+    if shots:
+        page.screenshot(path=str(shots / "shop-ai-credits.png"))
+    page.keyboard.press("Enter")
+    page.wait_for_function("t => JSON.parse(localStorage.getItem('nines.save')).game.tokens === t", arg=before["tokens"] + 3, timeout=5000)
+    after = save_game(page)
+    assert after["money"] == before["money"] - 40, (before["money"], after["money"])
+    assert "ai-credits" not in after["items"], after["items"]
+    page.keyboard.press("Escape")
+    page.wait_for_timeout(500)
+    print(f"  bought AI credits: tokens {before['tokens']} -> {after['tokens']}, money {before['money']} -> {after['money']}")
+
+
 def play(page: Page, village: Grid, room: Grid, shots: Path | None) -> None:
     _, sx, sy = village.objects["player-start"]
     p = Player(page, "junior-village", (sx, sy), "down")
@@ -539,7 +626,7 @@ def play(page: Page, village: Grid, room: Grid, shots: Path | None) -> None:
     # 4. the Pi pays 10 more after the next quest: 175 + 10
     print("quest: service-down")
     open_terminal(page, p, room, "rack-app-01")
-    service_down(page, shots, reward="€185")
+    service_down(page, shots, reward=["€175", "+€10 from your homelab"])
 
     # the three MVP quests are done and paid, and the Pi is owned
     save = save_game(page)
@@ -569,6 +656,24 @@ def play(page: Page, village: Grid, room: Grid, shots: Path | None) -> None:
     assert save["money"] == 320, save["money"]
     assert save["xp"] == {"cicd": 25, "linux": 40, "incident": 25}, save["xp"]
     print(f"  save: quests {quests}, money {save['money']}, xp {save['xp']}")
+    assert save["tokens"] == 3, save["tokens"]  # no hint asked for yet
+
+    # 7. the Kubernetes quest on the jump host rack-k8s-01, with one hint from the AI
+    print("quest: crashloop-config (Kubernetes, one AI hint)")
+    open_terminal(page, p, room, "rack-k8s-01")
+    crashloop_config(page, shots)
+    save = save_game(page)
+    assert save["quests"].get("crashloop-config") == "done", save["quests"]
+    assert save["hints"] == {"crashloop-config": ["hint.start"]}, save["hints"]
+    assert save["tokens"] == 2 and save["money"] == 470, (save["tokens"], save["money"])
+    assert save["xp"].get("kubernetes") == 20, save["xp"]  # 80% of 25
+
+    # 8. more tokens from the shop
+    print("shop: AI credits")
+    through_door(page, p, room, "exit", "junior-village", (vx, vy), "down")
+    buy_ai_credits(page, p, village, shots)
+    save = save_game(page)
+    assert save["tokens"] == 5 and save["money"] == 430, (save["tokens"], save["money"])
     if shots:
         page.screenshot(path=str(shots / "world-after.png"))
 

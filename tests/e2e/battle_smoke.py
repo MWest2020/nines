@@ -374,10 +374,21 @@ def play_friday(browser, origin: str, outside: list) -> list[str]:
     page.wait_for_selector(".nb-answer [data-id]")
     check(page.locator(".nb-value").first.inner_text() == "100", "confidence refilled")
     check("Hint" in side_text(page), "a hint shows on the second try")
+    # the hint asks first: one AI token, and 20% off this quest's reward (DESIGN.md, AI tokens)
     if PHONE == "portrait":
         page.locator(".nb-hintcount").click()
         page.wait_for_timeout(150)
+    card = page.locator(".nb-side .nh-card").first
+    check(card.is_visible() and "-1 token" in card.inner_text() and "-20% XP" in card.inner_text(), "the hint shows its price: -1 token, -20% XP")
+    if PHONE == "portrait":
         shots.append(shot(page, "battle-hints-open.png"))
+    tokens = game_save(page)["tokens"]
+    check(tokens == 3, "a version-2 save moved to version 3 with three tokens")
+    card.locator(".nh-ask").click()
+    page.wait_for_timeout(200)
+    check(game_save(page)["tokens"] == 2, "asking the AI cost one token, saved at once")
+    check(page.locator(".nb-side .nh-card").count() < 2 and "Hint" in page.locator(".nb-side").inner_text(), "the paid hint shows")
+    if PHONE == "portrait":
         page.locator(".nb-hintcount").click()
     rounds = 0
     while page.locator(".nb-answer [data-id]").count() > 0:
@@ -399,6 +410,8 @@ def play_friday(browser, origin: str, outside: list) -> list[str]:
     page.wait_for_selector(".nb-end:not([hidden])")
     check("You held your ground." in page.locator(".nb-end").inner_text(), "the retry wins")
     check(game_save(page)["quests"].get("friday-scope") == "done", "the save has the win")
+    end = page.locator(".nb-end").inner_text()
+    check(game_save(page)["money"] == 160 and "1 AI hint: 80%" in end, "one AI hint: the win paid 80% (€160 of €200)")
     if not PHONE:
         page.set_viewport_size({"width": 390, "height": 844})
         page.wait_for_timeout(200)

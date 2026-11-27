@@ -7,7 +7,9 @@ import type { LocaleId } from '../content/types';
 export const SAVE_KEY = 'nines.save';
 /** Unreadable saves are kept as nines.save.unreadable.1, .2, ...: never overwritten. */
 export const BACKUP_PREFIX = 'nines.save.unreadable.';
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
+/** AI tokens in a new game, and what a version-2 save is given when it moves to version 3. */
+export const START_TOKENS = 3;
 
 export type QuestState = 'active' | 'done';
 
@@ -27,6 +29,13 @@ export interface GameState {
   ticks: number;
   /** one-off rewards already paid, as "<quest>/<event>", so replaying a terminal never pays twice */
   claimed: string[];
+  /** AI tokens: each hint taken costs one (core/tokens.ts) */
+  tokens: number;
+  /** hints already paid for, per quest, as the hint's locale key: shown free from then on, and
+   *  their number scales that quest's reward down */
+  hints: Record<string, string[]>;
+  /** the career path chosen at Medior City; null until then */
+  path: string | null;
   player: { map: string; x: number; y: number; facing: 'up' | 'down' | 'left' | 'right' };
 }
 
@@ -49,6 +58,9 @@ export function newGame(locale: LocaleId, seed = 0): GameState {
     seed,
     ticks: 0,
     claimed: [],
+    tokens: START_TOKENS,
+    hints: {},
+    path: null,
     player: { map: 'junior-village', x: 7, y: 6, facing: 'down' },
   };
 }
@@ -59,6 +71,10 @@ export const MIGRATIONS: Record<number, (game: Record<string, unknown>) => Recor
   // keeps its own), a pager tick count and the one-off rewards already paid. A version-1 save
   // never paid an event reward, so the list starts empty.
   1: (game) => ({ ...game, seed: seedFrom(JSON.stringify(game)), ticks: 0, claimed: [] }),
+  // 3 (paths and tokens, 27 Nov 2026): hints now cost AI tokens. A version-2 player took every
+  // hint for free so far; they start with the same tokens as a new game and no hint is counted
+  // against a quest, done or not. No path is chosen yet (Medior City has no map).
+  2: (game) => ({ ...game, tokens: START_TOKENS, hints: {}, path: null }),
 };
 
 /** A seed derived from text (FNV-1a), for saves that predate the seed: pure and repeatable. */
@@ -135,6 +151,14 @@ export function deserialize(raw: string | null, fallbackLocale: LocaleId): LoadO
       seed: Number.isInteger(game['seed']) ? (game['seed'] as number) >>> 0 : seedFrom(raw),
       ticks: Number.isInteger(game['ticks']) && (game['ticks'] as number) >= 0 ? (game['ticks'] as number) : 0,
       claimed: strings(game['claimed']),
+      // a broken count repairs to 0, never to a gift (MIGRATIONS[2] gives a version-2 save its 3)
+      tokens: Number.isInteger(game['tokens']) && (game['tokens'] as number) >= 0 ? (game['tokens'] as number) : 0,
+      hints: Object.fromEntries(
+        Object.entries(isObj(game['hints']) ? game['hints'] : {})
+          .map(([q, v]) => [q, strings(v)] as const)
+          .filter(([, v]) => v.length > 0),
+      ),
+      path: typeof game['path'] === 'string' && game['path'] !== '' ? game['path'] : null,
       player: {
         map: typeof player['map'] === 'string' ? player['map'] : base.player.map,
         x: num(player['x'], base.player.x),

@@ -6,7 +6,7 @@ title: title
 summary: summary
 stage: junior
 branch: cicd
-track: any
+paths: [swe, devops]
 roadmap_node: cicd-release-scope
 requires: [broken-pipeline]
 giver: daan

@@ -85,8 +85,9 @@ title: title                            # locale keys, from this folder's locale
 summary: summary
 stage: junior                           # junior | medior | senior
 branch: linux                           # linux, networking, git, cicd, containers, iac,
-                                        # observability, incident or design
-track: any                              # any | sre | platform
+                                        # observability, incident, design or kubernetes
+paths: [systems, sre]                   # the career paths it counts towards: swe, sre,
+                                        # devops, platform, systems (all five for everyone)
 roadmap_node: linux-services            # a node in content/roadmap.yaml, on the same branch
 requires: []                            # quest ids that must be done first; [] for none
 giver: yara                             # the id in your npc.yaml
@@ -246,7 +247,9 @@ Nov 26 09:00:00.
 objectives:                             # all true = quest complete (at most 8)
   - {id: api, text: obj.api, done_when: 'service("invoice-api") == "active"'}
   - {id: names, text: obj.names, done_when: 'file_contains("/etc/hosts", "localhost") && file_contains("/etc/hosts", "api-02")'}
-hints:                                  # the first newly true one is shown (at most 12)
+hints:                                  # the first newly true one unlocks (at most 12); the
+                                        # player pays an AI token to read it, so each hint text
+                                        # is unique and worth a token (DESIGN.md, AI tokens)
   - {id: status, when: 'commands >= 3 && !ran("systemctl status") && !ran("journalctl")', text: hint.status}
   - {id: resolved, when: '(ran("journalctl") || ran("systemctl status")) && service("invoice-api") == "failed" && commands >= 6', text: hint.resolved}
   - {id: hosts, when: '(ran("journalctl") || ran("systemctl status")) && service("invoice-api") == "failed" && (fails >= 2 || commands >= 10)', text: hint.hosts}

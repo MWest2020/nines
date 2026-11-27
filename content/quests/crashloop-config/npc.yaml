@@ -1,0 +1,10 @@
+schema: 1
+id: mila
+author: {name: "Nines team"}
+name: npc.name
+tint: "#4880c8"
+spawn: {map: junior-village, slot: npc-5, facing: down}
+dialogue:
+  - when: 'quest("crashloop-config") == "done"'
+    lines: [npc.after]
+  - lines: [npc.idle]

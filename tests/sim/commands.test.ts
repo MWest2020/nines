@@ -245,13 +245,86 @@ describe('kubectl', () => {
     expect(after.split(/\s+/)[0]).not.toBe(name);
     expect(sh(s, `kubectl logs ${after.split(/\s+/)[0]}`)).toBe('listening on :8080');
   });
+  it('describe pod: phase, container state, last state, envFrom and the back-off event', () => {
+    const k8s = session({
+      ...FIXTURE,
+      deployments: { api: { namespace: 'shop', status: 'CrashLoopBackOff', restarts: 6, image: 'registry.example.test/api:1.8.0', config_map: 'api-config' } },
+    });
+    const name = run(k8s, 'kubectl get pods -n shop').out[1]!.split(/\s+/)[0]!;
+    const r = run(k8s, `kubectl describe pod ${name} -n shop`);
+    expect(r.ui).toEqual({ pager: true });
+    const out = r.out.join('\n');
+    expect(out).toMatch(new RegExp(`^Name:\\s+${name}$`, 'm'));
+    expect(out).toMatch(/^Namespace:\s+shop$/m);
+    expect(out).toMatch(/^Status:\s+Running$/m); // a crash-looping pod's phase is still Running
+    expect(out).toMatch(/State:\s+Waiting\n\s+Reason:\s+CrashLoopBackOff\n\s+Last State:\s+Terminated\n\s+Reason:\s+Error\n\s+Exit Code:\s+1/);
+    expect(out).toMatch(/Ready:\s+False\n\s+Restart Count:\s+6/);
+    expect(out).toMatch(/Environment Variables from:\n\s+api-config\s+ConfigMap\s+Optional: false/);
+    expect(out).toMatch(/Warning\s+BackOff\s+.*Back-off restarting failed container api/);
+    // every pod in the namespace without a name; the default namespace has none
+    expect(sh(k8s, 'kubectl describe pods -n shop')).toContain(`Name:             ${name}`);
+    expect(sh(k8s, 'kubectl describe pods')).toBe('No resources found in default namespace.');
+  });
+  it('apply -f: created, configured, unchanged; tabs, a missing path or a missing kind fail', () => {
+    const cm = 'apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: api-config\n  namespace: shop\ndata:\n  LOG_LEVEL: verbose\n';
+    const k8s = session({
+      ...FIXTURE,
+      files: { ...FIXTURE.files, '/home/dev/k8s/cm.yaml': cm, '/home/dev/k8s/new.yaml': 'kind: Secret\nmetadata:\n  name: "db"\n', '/home/dev/k8s/notes.txt': 'x' },
+      cluster: ['/home/dev/k8s/cm.yaml'],
+      objectives: [{ id: 'cm', text: 'obj', done_when: 'applied_value("configmap/shop/api-config", "LOG_LEVEL") == "info"' }],
+    });
+    expect(sh(k8s, 'kubectl apply -f k8s/cm.yaml')).toBe('configmap/api-config unchanged');
+    // a comment or a blank line is no change
+    saveFile(k8s, '/home/dev/k8s/cm.yaml', `# tidied\n${cm}\n`);
+    expect(sh(k8s, 'kubectl apply -f k8s/cm.yaml')).toBe('configmap/api-config unchanged');
+    saveFile(k8s, '/home/dev/k8s/cm.yaml', cm.replace('verbose', 'info'));
+    // saved but not applied: the cluster still runs the old config
+    expect(run(k8s, 'pwd').won).toBe(false);
+    expect(sh(k8s, 'kubectl apply -f /home/dev/k8s/cm.yaml')).toBe('configmap/api-config configured');
+    expect(run(k8s, 'pwd').won).toBe(true);
+    expect(sh(k8s, 'kubectl apply --filename=k8s/new.yaml')).toBe('secret/db created');
+    // the object counts, not the file: the same Secret from another file, and in another namespace
+    saveFile(k8s, '/tmp/db.yaml', 'kind: Secret\nmetadata:\n  name: db\ndata:\n  x: eQ==\n');
+    expect(sh(k8s, 'kubectl apply -f /tmp/db.yaml')).toBe('secret/db configured');
+    expect(sh(k8s, 'kubectl apply -f /tmp/db.yaml -n other')).toBe('secret/db created');
+    // a directory applies its YAML files, in name order
+    expect(sh(k8s, 'kubectl apply -f k8s')).toBe('configmap/api-config unchanged\nsecret/db configured');
+    expect(sh(k8s, 'kubectl apply')).toBe('error: must specify one of -f and -k');
+    expect(sh(k8s, 'kubectl apply -f nope.yaml')).toBe('error: the path "nope.yaml" does not exist');
+    expect(sh(k8s, 'kubectl apply -f k8s/notes.txt')).toBe('error: error validating "k8s/notes.txt": error validating data: kind or metadata.name not set');
+    saveFile(k8s, '/home/dev/k8s/cm.yaml', cm.replace('  LOG_LEVEL', '\tLOG_LEVEL'));
+    const tab = run(k8s, 'kubectl apply -f k8s/cm.yaml');
+    expect(tab.exit).toBe(1);
+    expect(tab.out).toEqual(['error: error parsing k8s/cm.yaml: error converting YAML to JSON: yaml: line 7: found character that cannot start any token']);
+    expect(run(k8s, 'pwd').won).toBe(true); // a failed apply changes nothing
+  });
+  it('describe by name prefix; logs -f follows; Deployment kinds print with their group', () => {
+    const k8s = session({ ...FIXTURE, deployments: { api: { namespace: 'shop', replicas: 2, status: 'Running', logs: ['up'] } } });
+    const out = sh(k8s, 'kubectl describe pod api -n shop');
+    expect(out.match(/^Name:/gm)).toHaveLength(2);
+    expect(sh(k8s, 'kubectl logs -f deployments/api -n shop').split('\n')).toEqual([
+      expect.stringMatching(/^Found 2 pods, using pod\/api-/),
+      'up',
+      '(Following is not simulated here; these are the last lines.)',
+    ]);
+    const d = session({ ...FIXTURE, files: { ...FIXTURE.files, '/home/dev/d.yaml': 'apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: api\n' } });
+    expect(sh(d, 'kubectl apply -f d.yaml')).toBe('deployment.apps/api created');
+  });
+  it('a Pending pod has no node and no container state', () => {
+    const k8s = session({ ...FIXTURE, deployments: { api: { status: 'Pending' } } });
+    const out = sh(k8s, 'kubectl describe pods');
+    expect(out).toMatch(/^Node:\s+<none>$/m);
+    expect(out).not.toMatch(/State:/);
+    expect(out).toMatch(/FailedScheduling/);
+  });
   it('namespaces and errors', () => {
     const s = fresh();
     expect(sh(s, 'kubectl get pods -n kube-system')).toBe('No resources found in kube-system namespace.');
     expect(run(s, 'kubectl get pods -A').out[0]).toMatch(/^NAMESPACE\s+NAME/);
     expect(sh(s, 'kubectl logs nope')).toBe('Error from server (NotFound): pods "nope" not found');
     expect(sh(s, 'kubectl rollout restart deployment/nope')).toBe('Error from server (NotFound): deployments.apps "nope" not found');
-    expect(sh(s, 'kubectl describe pod x')).toMatch(/^usage: kubectl/);
+    expect(sh(s, 'kubectl describe pod x')).toBe('Error from server (NotFound): pods "x" not found');
+    expect(sh(s, 'kubectl describe deployment api')).toMatch(/^usage: kubectl/);
   });
 });
 

@@ -8,7 +8,7 @@ title: title
 summary: summary
 stage: senior
 branch: design
-track: any
+paths: [swe]
 roadmap_node: design-ticket-booking
 # requires: until a gate guards the road to Senior Summit, the Junior gate is the last one;
 # switch this to that gate battle when it exists (issue #14).

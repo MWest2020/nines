@@ -5,7 +5,7 @@ title: title
 summary: summary
 stage: junior
 branch: linux
-track: any
+paths: [sre, systems, devops]
 roadmap_node: linux-disk
 requires: []
 giver: femke
