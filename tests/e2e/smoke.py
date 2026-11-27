@@ -713,7 +713,8 @@ def bakery_hotfix_contractor(page: Page, shots: Path | None) -> None:
     dialog.locator(".nt-again").click()
     dialog.wait_for(state="hidden", timeout=5000)
     assert page.locator(".nt-head .nt-practice").is_visible(), "the practice tag in the header"
-    assert "Practice run" in term_text(page), term_text(page)
+    # xterm draws on its next frame: wait for the practice line, not just the dialog
+    page.wait_for_function("s => document.querySelector('.nt-screen .xterm-rows').innerText.includes(s)", arg="Practice run", timeout=5000)
     assert objectives(page)[0] == 0, objectives(page)
     # Femke's rules say commit: from home git names the repository, then it just works
     run(page, "git status", "The repository on this machine is /srv/bakery")
