@@ -16,6 +16,7 @@ import { createSession, type FiredEvent, prompt, run, type RunResult, saveFile, 
 import { complete } from '../../terminal/complete';
 import { gutter, INDENT, insertIndent, isDirty, lineCol, lineCount, normalizeText, tabLines } from '../../terminal/editor';
 import { down, type History, newHistory, record, up } from '../../terminal/history';
+import { pushBack } from '../back';
 import { followVisualViewport } from '../touch/viewport';
 
 export interface TerminalHost {
@@ -96,6 +97,8 @@ export class TerminalOverlay {
   /** Esc was pressed once on a changed buffer: a second Esc discards */
   private escArmed = false;
   private editorOriginal = '';
+  /** unregisters the Android back button's handler (src/game/back.ts) */
+  private readonly unback: () => void;
   private readonly quickBar: HTMLDivElement;
 
   constructor(
@@ -285,6 +288,8 @@ export class TerminalOverlay {
 
     this.print([t(questKey(quest.id, scenario.motd)), ''], SGR.dim);
     this.handle(run(this.session, ''));
+    // The Android back button: Esc in the editor (a changed buffer asks twice), else ✕.
+    this.unback = pushBack(() => (this.editor.box.hidden ? this.close() : this.editorEscape()));
     this.focus();
   }
 
@@ -522,14 +527,18 @@ export class TerminalOverlay {
       this.closeEditor(true);
     } else if (e.key === 'Escape') {
       e.preventDefault();
-      // a changed buffer needs a second Esc, so one stray key does not throw the work away
-      if (isDirty(this.editorOriginal, a.value) && !this.escArmed) {
-        this.escArmed = true;
-        this.renderEditor();
-        return;
-      }
-      this.closeEditor(false);
+      this.editorEscape();
     }
+  }
+
+  private editorEscape(): void {
+    // a changed buffer needs a second Esc, so one stray key does not throw the work away
+    if (isDirty(this.editorOriginal, this.editor.area.value) && !this.escArmed) {
+      this.escArmed = true;
+      this.renderEditor();
+      return;
+    }
+    this.closeEditor(false);
   }
 
   private renderEditor(): void {
@@ -569,6 +578,7 @@ export class TerminalOverlay {
   close(): void {
     if (this.closedAlready) return;
     this.closedAlready = true;
+    this.unback();
     this.resize?.disconnect();
     this.unfollow();
     this.term.dispose();

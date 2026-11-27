@@ -10,6 +10,7 @@ import { installTouchControls } from './game/touch/controls';
 import { CANVAS } from './game/touch/layout';
 import { registerOffline } from './game/offline';
 import { getGameApi } from './game/api';
+import { installBackButton } from './game/back';
 import type { HudScene } from './game/ui/HudScene';
 import { installGameApi, UI_SCENES } from './game/ui/install';
 import { WorldScene } from './game/WorldScene';
@@ -44,6 +45,8 @@ new Phaser.Game({
     // or narrow windows, the on-screen controls (src/game/touch).
     postBoot: (game) => {
       installTouchControls(game, getGameApi(game), { toggleMenu: () => (game.scene.getScene('hud') as HudScene | null)?.toggleMenu() });
+      // the Android app's back button (src/game/back.ts)
+      installBackButton(game, getGameApi(game));
     },
   },
   // World scenes first; the UI scenes draw over them.
