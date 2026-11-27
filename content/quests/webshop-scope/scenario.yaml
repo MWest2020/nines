@@ -193,7 +193,7 @@ objectives:
     check:
       file: /home/pentest/engagement/finding-01.txt
       mentions:
-        - {any: ["false", deny, remov, disabl, verwijder, uitzet, uit te zetten, afscherm, block, blokkeer], missing: check.close_missing}
+        - {any: ["false", deny, denied, remov, disabl, "debug off", "switch off", "turn off", "turned off", verwijder, uitzet, uit te zetten, afscherm, block, blokkeer, "403"], missing: check.close_missing}
   - id: rotate
     text: obj.rotate
     check:

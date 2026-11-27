@@ -16,3 +16,4 @@ hint.edit: "The log names the culprit: LOG_LEVEL must be debug, info, warn or er
 hint.apply: "Saving the file changes your disk, not the cluster. kubectl apply -f sends a file to the cluster: the one you fixed."
 hint.restart: "A container reads its environment when it starts. These would pick up the fix at their next restart attempt, but the back-off can take minutes. A rollout restart of the Deployment starts fresh pods now (mind the namespace)."
 event.manifest_gone: "You deleted the ConfigMap's manifest. The cluster still runs the broken copy, and now the source of truth is gone too. The file is back: fix it instead."
+event.hand_edit: "Mila, over your shoulder: \"kubectl edit changes the cluster, not the file. Handy at 3 AM, but the next apply of ~/shop-k8s brings 'verbose' straight back. Fix the file too.\""

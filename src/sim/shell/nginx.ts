@@ -30,7 +30,8 @@ const DIRECTIVES = new Set(
   allow deny auth_basic auth_basic_user_file limit_req limit_req_zone limit_conn limit_conn_zone error_page internal
   charset resolver real_ip_header set_real_ip_from map geo split_clients multi_accept use daemon master_process
   worker_cpu_affinity load_module env open_file_cache satisfy sub_filter stub_status http2 ssl_dhparam
-  large_client_header_buffers client_body_buffer_size limit_except break location_modifier`.split(/\s+/),
+  large_client_header_buffers client_body_buffer_size limit_except break uwsgi_param uwsgi_pass
+  uwsgi_read_timeout scgi_pass scgi_param grpc_pass index_file absolute_redirect port_in_redirect`.split(/\s+/),
 );
 
 export type NginxTest = { ok: true; files: string[]; lines: string[] } | { ok: false; files: string[]; lines: string[] };
@@ -85,51 +86,52 @@ export function nginxTest(s: SimState): NginxTest | null {
     return tokenize(n.content ?? '', path);
   };
   try {
-    let tokens = read(ROOT, null);
-    let depth = 0;
     let sawEvents = false;
     // inside types, map, geo and split_clients the lines are data, not directives
     const blocks: string[] = [];
     const dataBlock = () => ['types', 'map', 'geo', 'split_clients'].includes(blocks.at(-1) ?? '');
-    let stmt: Token[] = [];
-    for (let i = 0; i < tokens.length; i++) {
-      const t = tokens[i]!;
-      if (t.text === ';' || t.text === '{') {
-        const head = stmt[0];
-        if (!head) throw new ConfError(`unexpected "${t.text}" in ${t.file}:${t.line}`);
-        if (dataBlock()) {
-          if (t.text === '{') throw new ConfError(`unexpected "{" in ${t.file}:${t.line}`);
+    /** One file's statements; an included file is parsed in place and must close its own blocks. */
+    const parse = (tokens: Token[], file: string): void => {
+      const depthAtStart = blocks.length;
+      let stmt: Token[] = [];
+      for (const t of tokens) {
+        if (t.text === ';' || t.text === '{') {
+          const head = stmt[0];
+          if (!head) throw new ConfError(`unexpected "${t.text}" in ${t.file}:${t.line}`);
+          if (dataBlock()) {
+            if (t.text === '{') throw new ConfError(`unexpected "{" in ${t.file}:${t.line}`);
+            stmt = [];
+            continue;
+          }
+          if (!DIRECTIVES.has(head.text)) throw new ConfError(`unknown directive "${head.text}" in ${head.file}:${head.line}`);
+          // a statement that runs over into the next line's directive lost its ";"
+          const runOn = stmt.slice(1).find((x) => x.line > head.line && DIRECTIVES.has(x.text) && x.text !== head.text);
+          if (runOn) throw new ConfError(`directive "${head.text}" is not terminated by ";" in ${head.file}:${head.line}`);
+          if (t.text === '{') {
+            blocks.push(head.text);
+            if (head.text === 'events' && blocks.length === 1) sawEvents = true;
+          } else if (head.text === 'include') {
+            const arg = stmt[1];
+            if (!arg) throw new ConfError(`invalid number of arguments in "include" directive in ${head.file}:${head.line}`);
+            const pattern = normalize(arg.text.startsWith('/') ? arg.text : `/etc/nginx/${arg.text}`);
+            const hits = hasGlob(pattern) ? expandGlob(s, pattern).filter((p) => s.fs[p]?.type === 'file') : [pattern];
+            for (const p of hits) parse(read(p, head), p);
+          } else if (stmt.length === 1 && !['break', 'internal', 'ssl_stapling', 'http2', 'multi_accept'].includes(head.text)) {
+            throw new ConfError(`invalid number of arguments in "${head.text}" directive in ${head.file}:${head.line}`);
+          }
           stmt = [];
-          continue;
-        }
-        if (!DIRECTIVES.has(head.text)) throw new ConfError(`unknown directive "${head.text}" in ${head.file}:${head.line}`);
-        // a statement that runs over into the next line's directive lost its ";"
-        const runOn = stmt.slice(1).find((x) => x.line > head.line && DIRECTIVES.has(x.text) && x.text !== head.text);
-        if (runOn) throw new ConfError(`directive "${head.text}" is not terminated by ";" in ${head.file}:${head.line}`);
-        if (t.text === '{') {
-          depth++;
-          blocks.push(head.text);
-          if (head.text === 'events' && depth === 1) sawEvents = true;
-        } else if (head.text === 'include') {
-          const arg = stmt[1];
-          if (!arg) throw new ConfError(`invalid number of arguments in "include" directive in ${head.file}:${head.line}`);
-          const pattern = normalize(arg.text.startsWith('/') ? arg.text : `/etc/nginx/${arg.text}`);
-          const hits = hasGlob(pattern) ? expandGlob(s, pattern).filter((p) => s.fs[p]?.type === 'file') : [pattern];
-          const included = hits.flatMap((p) => read(p, head));
-          tokens = [...tokens.slice(0, i + 1), ...included, ...tokens.slice(i + 1)];
-        } else if (stmt.length === 1 && !['break', 'internal', 'ssl_stapling', 'http2', 'multi_accept'].includes(head.text)) {
-          throw new ConfError(`invalid number of arguments in "${head.text}" directive in ${head.file}:${head.line}`);
-        }
-        stmt = [];
-      } else if (t.text === '}') {
-        if (stmt.length > 0) throw new ConfError(`directive "${stmt[0]!.text}" is not terminated by ";" in ${stmt[0]!.file}:${stmt[0]!.line}`);
-        if (depth === 0) throw new ConfError(`unexpected "}" in ${t.file}:${t.line}`);
-        depth--;
-        blocks.pop();
-      } else stmt.push(t);
-    }
-    const lastTok = tokens.at(-1);
-    if (stmt.length > 0 || depth > 0) throw new ConfError(`unexpected end of file, expecting "${depth > 0 && stmt.length === 0 ? '}' : ';'}" in ${lastTok?.file ?? ROOT}:${lastTok?.line ?? 1}`);
+        } else if (t.text === '}') {
+          if (stmt.length > 0 && !dataBlock()) throw new ConfError(`directive "${stmt[0]!.text}" is not terminated by ";" in ${stmt[0]!.file}:${stmt[0]!.line}`);
+          if (blocks.length <= depthAtStart) throw new ConfError(`unexpected "}" in ${t.file}:${t.line}`);
+          blocks.pop();
+          stmt = [];
+        } else stmt.push(t);
+      }
+      const last = tokens.at(-1);
+      const open = blocks.length > depthAtStart;
+      if (stmt.length > 0 || open) throw new ConfError(`unexpected end of file, expecting "${open && stmt.length === 0 ? '}' : ';'}" in ${file}:${last?.line ?? 1}`);
+    };
+    parse(read(ROOT, null), ROOT);
     if (!sawEvents) throw new ConfError(`no "events" section in configuration`);
     return { ok: true, files, lines: [`nginx: the configuration file ${ROOT} syntax is ok`, `nginx: configuration file ${ROOT} test is successful`] };
   } catch (e) {

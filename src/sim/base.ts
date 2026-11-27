@@ -88,8 +88,18 @@ export function baseFiles(spec: ScenarioSpec): Record<string, string> {
       '',
     ].join('\n'),
     '/etc/motd': `Welcome to ${spec.host} (Nines Linux 1.0, ${KERNEL.release} ${KERNEL.machine}).\nBe kind to this machine; it is the only one it has.\n`,
+    // where nginx is installed, its package's own include files are there too
+    ...(spec.files?.['/etc/nginx/nginx.conf'] !== undefined ? NGINX_PACKAGE_FILES : {}),
   };
 }
+
+/** The include files the nginx package ships (abridged), for configs that include them. */
+const NGINX_PACKAGE_FILES: Record<string, string> = {
+  '/etc/nginx/mime.types': 'types {\n  text/html html htm;\n  text/css css;\n  application/javascript js;\n  application/json json;\n  image/png png;\n}\n',
+  '/etc/nginx/uwsgi_params': 'uwsgi_param QUERY_STRING $query_string;\nuwsgi_param REQUEST_METHOD $request_method;\nuwsgi_param REQUEST_URI $request_uri;\nuwsgi_param REMOTE_ADDR $remote_addr;\n',
+  '/etc/nginx/fastcgi_params': 'fastcgi_param QUERY_STRING $query_string;\nfastcgi_param REQUEST_METHOD $request_method;\nfastcgi_param REQUEST_URI $request_uri;\n',
+  '/etc/nginx/proxy_params': 'proxy_set_header Host $http_host;\nproxy_set_header X-Real-IP $remote_addr;\nproxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n',
+};
 
 /** HH:MM:SS of the machine's fake clock: 09:00 plus seven seconds per command. */
 export function clockTime(commands: number): string {

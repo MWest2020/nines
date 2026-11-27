@@ -16,3 +16,4 @@ hint.edit: "De log noemt de boosdoener: LOG_LEVEL moet debug, info, warn of erro
 hint.apply: "Opslaan verandert je schijf, niet het cluster. kubectl apply -f stuurt een bestand naar het cluster: het bestand dat je hebt hersteld."
 hint.restart: "Een container leest zijn omgeving bij het starten. Deze zouden de fix bij hun volgende herstartpoging oppikken, maar de back-off kan minuten duren. Een rollout restart van de Deployment start nu verse pods (let op de namespace)."
 event.manifest_gone: "Je hebt het manifest van de ConfigMap verwijderd. Het cluster draait nog steeds de kapotte versie, en nu is ook de bron van de waarheid weg. Het bestand is terug: herstel het liever."
+event.hand_edit: "Mila, over je schouder: \"kubectl edit verandert het cluster, niet het bestand. Handig om drie uur 's nachts, maar de volgende apply van ~/shop-k8s zet 'verbose' er zo weer in. Repareer het bestand ook.\""
