@@ -323,6 +323,18 @@
     },
     {
      "height": 0,
+     "id": 15,
+     "name": "npc-5",
+     "point": true,
+     "rotation": 0,
+     "type": "spawn",
+     "visible": true,
+     "width": 0,
+     "x": 392,
+     "y": 280
+    },
+    {
+     "height": 0,
      "id": 9,
      "name": "server-room-exit",
      "point": true,
@@ -421,7 +433,7 @@
   }
  ],
  "nextlayerid": 7,
- "nextobjectid": 15,
+ "nextobjectid": 16,
  "orientation": "orthogonal",
  "renderorder": "right-down",
  "tiledversion": "1.10.2",

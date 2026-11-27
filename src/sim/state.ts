@@ -64,6 +64,8 @@ export interface SimState {
   shownHints: string[];
   /** bumps on every kubectl rollout, so new pod names are deterministic */
   generation: number;
+  /** what the cluster runs: manifest path -> the content last applied from it (kubectl apply -f) */
+  cluster: Record<string, string>;
 }
 
 export function ensureDir(fs: Record<string, FsNode>, p: string): void {
@@ -158,6 +160,14 @@ export function createState(spec: ScenarioSpec): SimState {
     pods.push(...makePods(name, d, 0, d.status, d.restarts ?? 0, '42m', d.logs ?? []));
   }
 
+  // manifests the cluster already runs: their content at the start
+  const cluster: Record<string, string> = {};
+  for (const raw of spec.cluster ?? []) {
+    const p = normalize(raw);
+    const n = fs[p];
+    if (n?.type === 'file' && n.content !== undefined) setOwn(cluster, p, n.content);
+  }
+
   let git: GitState | null = null;
   if (spec.git) {
     const root = normalize(spec.git.root);
@@ -196,5 +206,6 @@ export function createState(spec: ScenarioSpec): SimState {
     firedEvents: [],
     shownHints: [],
     generation: 0,
+    cluster,
   };
 }

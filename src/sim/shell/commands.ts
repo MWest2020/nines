@@ -6,7 +6,7 @@
 // interface being taught, so they stay as the real tools print them.
 
 import type { Translate } from '../../core/i18n';
-import type { ScenarioSpec } from '../../content/types';
+import type { DeploymentSpec, ScenarioSpec } from '../../content/types';
 import { type Compiled, type Env, test } from '../../rules/expr';
 import { has, own, setOwn } from '../../rules/own';
 import { validateNinesCi } from '../ci';
@@ -68,7 +68,7 @@ export const USAGE: Record<string, string> = {
   edit: 'edit <file>',
   systemctl: 'systemctl status|restart <unit>',
   journalctl: 'journalctl -u <unit> [-n N]',
-  kubectl: 'kubectl get pods | kubectl logs <pod> | kubectl rollout restart deployment/<name>',
+  kubectl: 'kubectl get pods | kubectl describe pod [pod] | kubectl logs <pod> | kubectl apply -f <file> | kubectl rollout restart deployment/<name>',
   git: 'git status | git add <path...> | git commit -m "message"',
   clear: 'clear',
   exit: 'exit',
@@ -529,8 +529,8 @@ const journalctl: Command = (ctx, args) => {
 const kubectl: Command = (ctx, args) => {
   const r = flags(ctx, 'kubectl', args, {
     bool: 'Ap',
-    value: 'no',
-    long: { namespace: 'value', 'all-namespaces': 'bool', tail: 'value', previous: 'bool', output: 'value' },
+    value: 'nof',
+    long: { namespace: 'value', 'all-namespaces': 'bool', tail: 'value', previous: 'bool', output: 'value', filename: 'value' },
   });
   if (isResult(r)) return r;
   const { f, rest } = r;
@@ -553,6 +553,31 @@ const kubectl: Command = (ctx, args) => {
             `${nsCol(p.namespace)}${p.name.padEnd(w)}${(p.status === 'Running' ? '1/1' : '0/1').padEnd(8)}${p.status.padEnd(sw)}${String(p.restarts).padEnd(11)}${p.age}`,
         ),
       ]);
+    }
+    case 'describe': {
+      if (!['pods', 'pod', 'po'].includes(rest[1] ?? '')) return usage();
+      const name = rest[2];
+      const pods = ctx.s.pods.filter((p) => (all || p.namespace === ns) && (name === undefined || p.name === name));
+      if (pods.length === 0) return name === undefined ? ok([ctx.t('sh.no_pods', { ns })]) : fail([ctx.t('sh.pod_not_found', { pod: name })]);
+      return ok(pods.flatMap((p, i) => [...(i > 0 ? [''] : []), ...describePod(p, own(ctx.spec.deployments, p.deployment))]), { pager: true });
+    }
+    case 'apply': {
+      const file = f['f'] ?? f['filename'];
+      if (typeof file !== 'string') return fail([ctx.t('sh.kubectl_need_file')]);
+      const p = abs(ctx, file);
+      const node = ctx.s.fs[p];
+      if (!node) return fail([ctx.t('sh.kubectl_no_path', { path: file })]);
+      const targets = node.type === 'dir'
+        ? listDir(ctx.s, p).filter((n) => /\.ya?ml$/.test(n) && ctx.s.fs[join(p, n)]?.type === 'file').map((n) => ({ path: join(p, n), shown: join(file, n) }))
+        : [{ path: p, shown: file }];
+      const out: string[] = [];
+      let bad = false;
+      for (const target of targets) {
+        const r = applyManifest(ctx, target.path, target.shown);
+        out.push(r.line);
+        bad ||= r.bad;
+      }
+      return bad ? { out, exit: 1, fail: true } : ok(out);
     }
     case 'logs': {
       const target = rest[1];
@@ -590,6 +615,75 @@ const kubectl: Command = (ctx, args) => {
       return usage();
   }
 };
+
+/** Phase, container state and events of a pod, as kubectl describe pod prints them (abridged). */
+function describePod(p: SimState['pods'][number], spec: DeploymentSpec | undefined): string[] {
+  const rs = p.name.slice(0, p.name.lastIndexOf('-'));
+  const phase = p.status === 'Pending' || p.status === 'ImagePullBackOff' ? 'Pending' : 'Running';
+  const ready = p.status === 'Running';
+  const image = spec?.image ?? `${p.deployment}:latest`;
+  const state: string[] =
+    p.status === 'Running'
+      ? ['    State:          Running']
+      : p.status === 'Error'
+        ? ['    State:          Terminated', '      Reason:       Error', '      Exit Code:    1']
+        : p.status === 'Pending'
+          ? ['    State:          Waiting', '      Reason:       ContainerCreating']
+          : ['    State:          Waiting', `      Reason:       ${p.status}`];
+  if (p.status === 'CrashLoopBackOff') state.push('    Last State:     Terminated', '      Reason:       Error', '      Exit Code:    1');
+  const seen = (n: number) => (n > 1 ? `20s (x${n} over ${p.age})` : p.age);
+  const events: string[] =
+    p.status === 'Running'
+      ? [
+          `  Normal   Pulled     ${p.age.padEnd(19)}kubelet  Container image "${image}" already present on machine`,
+          `  Normal   Started    ${p.age.padEnd(19)}kubelet  Started container ${p.deployment}`,
+        ]
+      : p.status === 'Pending'
+        ? [`  Warning  FailedScheduling  ${p.age.padEnd(12)}default-scheduler  0/3 nodes are available: 3 Insufficient cpu.`]
+        : p.status === 'ImagePullBackOff'
+          ? [
+              `  Warning  Failed     ${seen(p.restarts + 1).padEnd(19)}kubelet  Failed to pull image "${image}": not found`,
+              `  Normal   BackOff    ${seen(p.restarts + 1).padEnd(19)}kubelet  Back-off pulling image "${image}"`,
+            ]
+          : [`  Warning  BackOff    ${seen(p.restarts + 1).padEnd(19)}kubelet  Back-off restarting failed container ${p.deployment} in pod ${p.name}_${p.namespace}`];
+  return [
+    `Name:             ${p.name}`,
+    `Namespace:        ${p.namespace}`,
+    `Labels:           app=${p.deployment}`,
+    `Status:           ${phase}`,
+    `Controlled By:    ReplicaSet/${rs}`,
+    'Containers:',
+    `  ${p.deployment}:`,
+    `    Image:          ${image}`,
+    ...state,
+    `    Ready:          ${ready ? 'True' : 'False'}`,
+    `    Restart Count:  ${p.restarts}`,
+    ...(spec?.config_map ? ['    Environment Variables from:', `      ${spec.config_map}  ConfigMap  Optional: false`] : []),
+    'Events:',
+    '  Type     Reason     Age                From     Message',
+    '  ----     ------     ----               ----     -------',
+    ...events,
+  ];
+}
+
+/**
+ * kubectl apply -f for one file: the cluster now runs this content. Only the shape is checked
+ * (kind, metadata.name, no tabs in the indentation, as YAML forbids them); the content is what a
+ * scenario's applied_contains() reads.
+ */
+function applyManifest(ctx: Ctx, path: string, shown: string): { line: string; bad: boolean } {
+  const node = ctx.s.fs[path];
+  const text = node?.type === 'file' ? (node.content ?? '') : '';
+  const tab = text.split('\n').findIndex((l) => /^[ ]*\t/.test(l));
+  if (tab >= 0) return { bad: true, line: ctx.t('sh.kubectl_yaml_tab', { path: shown, line: tab + 1 }) };
+  const kind = /^kind:[ ]*([A-Za-z]+)[ ]*$/m.exec(text)?.[1];
+  const name = /^metadata:[ ]*\n(?:[ ]+.*\n)*?[ ]+name:[ ]*["']?([a-z0-9][a-z0-9.-]*)["']?[ ]*$/m.exec(text)?.[1];
+  if (!kind || !name) return { bad: true, line: ctx.t('sh.kubectl_invalid', { path: shown }) };
+  const before = own(ctx.s.cluster, path);
+  setOwn(ctx.s.cluster, path, text);
+  const how = before === undefined ? 'created' : before === text ? 'unchanged' : 'configured';
+  return { bad: false, line: `${kind.toLowerCase()}/${name} ${how}` };
+}
 
 // ------------------------------------------------------------------ git
 

@@ -26,6 +26,7 @@ export const SCENARIO_FACTS: Registry = {
     exists: { args: ['string'], returns: 'boolean', pathArgs: [0] },
     removed: { args: ['string'], returns: 'boolean', pathArgs: [0] },
     file_contains: { args: ['string', 'string'], returns: 'boolean', pathArgs: [0] },
+    applied_contains: { args: ['string', 'string'], returns: 'boolean', pathArgs: [0] },
     service: { args: ['string'], returns: 'string', values: SERVICE_STATES },
     restarted: { args: ['string'], returns: 'boolean' },
     pods_running: { args: ['string'], returns: 'boolean' },

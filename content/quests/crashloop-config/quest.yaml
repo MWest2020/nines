@@ -1,0 +1,21 @@
+# The first piece of the Kubernetes learning path (DESIGN.md, Kubernetes learning path): Junior,
+# KCNA level, domain "Kubernetes Fundamentals". A Deployment's pods crash-loop after a ConfigMap
+# change; the player reads the pods, their description and logs, fixes the manifest, applies it
+# and restarts the rollout. Mila stands on the square (npc-5); the jump host is rack-k8s-01.
+schema: 1
+id: crashloop-config
+author: {name: "Nines team"}
+title: title
+summary: summary
+stage: junior
+branch: kubernetes
+paths: [platform, sre, devops]
+roadmap_node: k8s-fundamentals
+requires: []
+giver: mila
+start: {map: server-room, object: rack-k8s-01}
+reward: {money: 175, xp: 25}
+dialogue:
+  offer: [offer.1, offer.2]
+  active: [active.1]
+  done: [done.1, done.2]

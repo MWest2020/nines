@@ -208,6 +208,18 @@
      "width": 0,
      "x": 184,
      "y": 104
+    },
+    {
+     "height": 0,
+     "id": 7,
+     "name": "rack-k8s-01",
+     "point": true,
+     "rotation": 0,
+     "type": "terminal",
+     "visible": true,
+     "width": 0,
+     "x": 200,
+     "y": 56
     }
    ],
    "opacity": 1,
@@ -218,7 +230,7 @@
   }
  ],
  "nextlayerid": 7,
- "nextobjectid": 7,
+ "nextobjectid": 8,
  "orientation": "orthogonal",
  "renderorder": "right-down",
  "tiledversion": "1.10.2",

@@ -68,6 +68,10 @@ export function scenarioEnv(src: FactSource): Env {
         const n = s().fs[String(p)];
         return n?.type === 'file' && (n.content ?? '').includes(String(needle));
       },
+      applied_contains: (p, needle) => {
+        const applied = own(s().cluster, String(p));
+        return applied !== undefined && applied.includes(String(needle));
+      },
       service: (name) => own(s().services, String(name))?.state ?? 'inactive',
       restarted: (name) => s().restarted.includes(String(name)),
       pods_running: (dep) => {

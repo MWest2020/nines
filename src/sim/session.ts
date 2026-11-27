@@ -116,7 +116,7 @@ function resetMachine(session: Session, work: SimState): SimState {
 }
 
 /** Flags that take a value before the subcommand, e.g. kubectl -n default get pods. */
-const LEADING_VALUE_FLAGS: Record<string, string[]> = { kubectl: ['-n', '--namespace', '-o', '--output'] };
+const LEADING_VALUE_FLAGS: Record<string, string[]> = { kubectl: ['-n', '--namespace', '-o', '--output', '-f', '--filename'] };
 
 function subcommandOf(name: string, args: string[]): string | undefined {
   if (!SUBCOMMANDS.has(name)) return undefined;

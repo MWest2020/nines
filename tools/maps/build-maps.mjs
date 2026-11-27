@@ -223,6 +223,7 @@ function juniorVillage() {
   m.object('gate-medior', 'spawn', 37, 14); // Ingrid, on the road to Medior City
   m.object('cameo-1', 'spawn', 12, 23);
   m.object('cameo-2', 'spawn', 33, 22);
+  m.object('npc-5', 'spawn', 24, 17); // Mila, on the square
   m.object('server-room-exit', 'spawn', 7, 13, { facing: 'down' });
   m.object('server-room-door', 'door', 7, 12, { to_map: 'server-room', to_point: 'entrance' });
   m.object('ravi-laptop', 'terminal', 9, 21);
@@ -273,6 +274,9 @@ function serverRoom() {
   m.object('exit', 'door', 7, 9, { to_map: 'junior-village', to_point: 'server-room-exit' });
   m.object('rack-web-01', 'terminal', 4, 3);
   m.object('rack-app-01', 'terminal', 10, 3);
+  m.object('cameo-rack-1', 'terminal', 3, 6);
+  m.object('cameo-rack-2', 'terminal', 11, 6);
+  m.object('rack-k8s-01', 'terminal', 12, 3); // the Kubernetes jump host
   return m;
 }
 
