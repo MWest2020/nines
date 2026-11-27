@@ -18,6 +18,7 @@ import './battle.css';
 import { type BattleRound, type Grade, questKey } from '../../content/types';
 import type { Translate } from '../../core/i18n';
 import * as S from '../../battle/screen';
+import { pushBack } from '../back';
 
 export interface OverlayOptions {
   t: Translate;
@@ -74,6 +75,8 @@ class BattleOverlay {
   private grabbed: string | null = null;
   private readonly lines: string[] = [];
   private readonly before: Element | null;
+  /** unregisters the Android back button's handler (src/game/back.ts) */
+  private readonly unback: () => void;
 
   constructor(
     private readonly opts: OverlayOptions,
@@ -137,12 +140,15 @@ class BattleOverlay {
       throw err;
     }
     window.addEventListener('keydown', this.onKey, true);
+    // The Android back button: the same as Escape (drop a grabbed card, else leave).
+    this.unback = pushBack(() => (this.grabbed ? this.drop() : this.close()));
     this.focusFirst();
   }
 
   // ---- lifecycle
 
   private close(): void {
+    this.unback();
     window.removeEventListener('keydown', this.onKey, true);
     this.root.remove();
     if (this.before instanceof HTMLElement && this.before.isConnected) this.before.focus();

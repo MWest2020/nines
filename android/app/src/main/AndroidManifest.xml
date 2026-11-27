@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- allowBackup off, and the data extraction rules exclude everything on Android 12+: the save
+         (the WebView's localStorage) never leaves the device. PLAY_STORE.md, Data safety. -->
+    <application
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme"
+        tools:targetApi="31">
+
+        <!-- No screenOrientation: portrait and landscape both, following the phone's rotation
+             (the game lays itself out for either; ARCHITECTURE.md, Android). -->
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
+            android:name=".MainActivity"
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:launchMode="singleTask"
+            android:exported="true">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+        </activity>
+    </application>
+
+    <!-- No permissions. The game makes no network calls: Capacitor serves the bundled files from
+         inside the app (WebViewLocalServer answers https://localhost/ itself), which needs no
+         INTERNET permission. Removing it, also from anything a library might merge in, makes the
+         no-network promise one the OS enforces (AGENTS.md, rule 3). -->
+    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
+</manifest>

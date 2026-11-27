@@ -7,7 +7,14 @@ coverage/
 # Android signing material never enters the repo
 *.jks
 *.keystore
+*.p12
+*.pfx
+*.pem
+*.key
+*.env
+keystore.env
 keystore.properties
+signing.properties
 android/app/release/
 __pycache__/
 test-results/

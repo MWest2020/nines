@@ -1,0 +1,97 @@
+import groovy.json.JsonSlurper
+
+apply plugin: 'com.android.application'
+
+// The version name follows package.json; the version code is passed per Play upload
+// (-PninesVersionCode=N, PLAY_STORE.md, Release) and is 1 for a plain build.
+def packageVersion = new JsonSlurper().parse(rootProject.file('../package.json')).version
+
+// Release signing comes only from the environment, never from a file in the repository:
+// NINES_KEYSTORE (path to the upload keystore), NINES_KEYSTORE_PASSWORD, NINES_KEY_ALIAS and
+// NINES_KEY_PASSWORD. With none of them set, the release build is unsigned (CI builds it that
+// way); with only some of them set, the build stops, so a typo never gives a quietly unsigned AAB.
+def signingVars = ['NINES_KEYSTORE', 'NINES_KEYSTORE_PASSWORD', 'NINES_KEY_ALIAS', 'NINES_KEY_PASSWORD']
+def signingEnv = signingVars.collectEntries { [(it): System.getenv(it)] }
+def signingSet = signingVars.findAll { signingEnv[it] }
+def signed = signingSet.size() == signingVars.size()
+if (!signingSet.isEmpty() && !signed) {
+    throw new GradleException("Release signing needs all of ${signingVars.join(', ')}; missing: ${(signingVars - signingSet).join(', ')} (PLAY_STORE.md, Release)")
+}
+def keystore = signed ? new File(signingEnv['NINES_KEYSTORE']) : null
+if (signed && !keystore.isFile()) {
+    throw new GradleException("NINES_KEYSTORE points to a file that does not exist: ${keystore}")
+}
+// A signed build is for Play: it needs its own version code, and the real package name.
+def appId = System.getenv('NINES_APP_ID') ?: "work.westerweel.nines"
+if (signed && !project.hasProperty('ninesVersionCode')) {
+    throw new GradleException("A signed build needs -PninesVersionCode=N, higher than the last Play upload (PLAY_STORE.md, Release)")
+}
+if (signed && appId != "work.westerweel.nines") {
+    throw new GradleException("A signed build must use the app id work.westerweel.nines; unset NINES_APP_ID (it is ${appId})")
+}
+
+android {
+    namespace = "work.westerweel.nines"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        // work.westerweel.nines (Mark, 26 Nov 2026); NINES_APP_ID overrides it, as in capacitor.config.ts
+        applicationId appId
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode((project.findProperty('ninesVersionCode') ?: '1') as Integer)
+        versionName packageVersion
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    if (signed) {
+        signingConfigs {
+            upload {
+                storeFile keystore
+                storePassword signingEnv['NINES_KEYSTORE_PASSWORD']
+                keyAlias signingEnv['NINES_KEY_ALIAS']
+                keyPassword signingEnv['NINES_KEY_PASSWORD']
+            }
+        }
+    }
+    buildTypes {
+        release {
+            if (signed) signingConfig signingConfigs.upload
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+// Say it out loud when a release build is unsigned: fine for CI and a look inside, not for Play.
+gradle.taskGraph.whenReady { graph ->
+    if (!signed && graph.allTasks.any { it.project == project && it.name.toLowerCase().contains('release') }) {
+        logger.warn("""
+            |NINES: the release build is UNSIGNED. Play needs a signed AAB: set NINES_KEYSTORE,
+            |NINES_KEYSTORE_PASSWORD, NINES_KEY_ALIAS and NINES_KEY_PASSWORD (PLAY_STORE.md, Release).
+            |""".stripMargin())
+    }
+}

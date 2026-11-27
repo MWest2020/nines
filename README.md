@@ -24,5 +24,5 @@ uv run --with-requirements tests/e2e/requirements.txt python tests/e2e/smoke.py
 - [docs/reference/roadmap.yml](docs/reference/roadmap.yml): phases and what "done" means
 - [docs/content-backlog.md](docs/content-backlog.md): battle topics still to write
 
-Status: MVP build. Junior Village and its three terminal quests are playable on desktop; touch
-controls and battles in the game are still to come.
+Status: Android phase. The game is playable in the browser and on touch screens; the Android
+app (`android/`, Capacitor) builds in CI, and a test on a real phone is next.

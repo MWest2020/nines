@@ -1,7 +1,7 @@
 // Draws Nines' own pixel art: the player, the three Junior Village NPCs, the tinted placeholder
-// NPC and our own tiles (server racks, laptop, raised floor, ...). Everything is own work,
-// released CC0, in the 26-colour palette of DESIGN.md. Re-running this script rebuilds the
-// same pixels, so the PNGs in the repository are reproducible from this file.
+// NPC, our own tiles (server racks, laptop, raised floor, ...) and the Android launcher icons.
+// Everything is own work, released CC0, in the 26-colour palette of DESIGN.md. Re-running this
+// script rebuilds the same pixels, so the PNGs in the repository are reproducible from this file.
 //
 //   node tools/art/draw-art.mjs           write the PNGs
 //   node tools/art/draw-art.mjs --check   exit 1 when a committed PNG differs from this script
@@ -382,9 +382,61 @@ export function drawTiles() {
 
 export const TILES_FILE = 'assets/tiles/nines-tiles.png';
 
+// ---- the Android launcher icon: the player, standing and facing you, on a night-blue ground
+//
+// Whole-number scales only, so the pixels stay square. Per density (mdpi 1x ... xxxhdpi 4x):
+// the legacy square and round icons are 48 dp with the player at 2 px per pixel per dp-scale;
+// the adaptive icon's foreground is 108 dp with the player at 4, inside its 66 dp safe circle
+// (the ground is the colour ic_launcher_background in android/app/src/main/res/values).
+
+const ICON_DENSITIES = { mdpi: 1, hdpi: 1.5, xhdpi: 2, xxhdpi: 3, xxxhdpi: 4 };
+export const ICON_GROUND = P.night;
+
+function playerFrame() {
+  const sheet = drawCharacter(CHARACTERS.player);
+  const frame = image(16, 16);
+  for (let y = 0; y < 16; y++) frame.data.set(sheet.data.subarray((y * 48 + 16) * 4, (y * 48 + 32) * 4), y * 16 * 4);
+  return frame;
+}
+
+function iconImage(size, scale, ground) {
+  const img = image(size, size);
+  const r = size / 2;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const inside = ground === 'square' || (ground === 'round' && (x + 0.5 - r) ** 2 + (y + 0.5 - r) ** 2 <= r * r);
+      if (inside) set(img, x, y, ICON_GROUND);
+    }
+  }
+  const frame = playerFrame();
+  const off = (size - 16 * scale) / 2;
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      const i = (y * 16 + x) * 4;
+      if (frame.data[i + 3] === 0) continue;
+      for (let j = 0; j < scale; j++) for (let k = 0; k < scale; k++) img.data.set(frame.data.subarray(i, i + 4), ((off + y * scale + j) * size + off + x * scale + k) * 4);
+    }
+  }
+  return img;
+}
+
+export function drawIcons() {
+  const res = 'android/app/src/main/res';
+  return [
+    ...Object.entries(ICON_DENSITIES).flatMap(([name, d]) => [
+      [`${res}/mipmap-${name}/ic_launcher.png`, iconImage(48 * d, 2 * d, 'square')],
+      [`${res}/mipmap-${name}/ic_launcher_round.png`, iconImage(48 * d, 2 * d, 'round')],
+      [`${res}/mipmap-${name}/ic_launcher_foreground.png`, iconImage(108 * d, 4 * d, 'none')],
+    ]),
+    // the store listing's 512 x 512 icon (PLAY_STORE.md): full square, Play rounds the corners
+    ['assets/store/icon-512.png', iconImage(512, 24, 'square')],
+  ];
+}
+
 export function allArt() {
   const out = Object.values(CHARACTERS).map((c) => [c.file, drawCharacter(c)]);
   out.push([TILES_FILE, drawTiles()]);
+  out.push(...drawIcons());
   return out;
 }
 

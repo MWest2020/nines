@@ -68,14 +68,17 @@ src/
     battle/         BattleOverlay.ts (DOM) + battle.css, open.ts (open, record, reward, gate line)
     touch/          layout.ts (pure: where the view and controls go), controls.ts (the D-pad and
                     buttons, DOM), pad.ts (their events), settings.ts, viewport.ts (soft keyboard)
-    offline.ts      registers the service worker
+    offline.ts      registers the service worker (not inside the Android app)
+    back.ts         the Android back button: window.ninesBack(), called by MainActivity.java
   offline/sw.js     the service worker (hand-written; the build adds the file list and version)
-assets/           tilesets and sheets outside content (Kenney packs, own art), each in ASSETS.md
+assets/           tilesets and sheets outside content (Kenney packs, own art), each in ASSETS.md;
+                  store/icon-512.png for the Play listing
+android/          the Capacitor Android project (committed; dist/ is copied in by `cap sync`)
 tools/
   content/load.ts         load + validate + bundle /content (Node, build time only)
   vite-plugin-content.ts  exposes the bundle as `virtual:nines-content`
   vite-plugin-sw.ts       writes dist/sw.js: src/offline/sw.js plus the built files and their hash
-  art/draw-art.mjs        draws our own sprites and tiles (reproducible; --check in npm test)
+  art/draw-art.mjs        draws our own sprites, tiles and launcher icons (reproducible; --check in npm test)
   maps/build-maps.mjs     wrote the first versions of the Tiled maps from text layouts
 schemas/          JSON Schemas for every content file
 content/          the game's data
@@ -804,28 +807,60 @@ to a listener added meanwhile; UI listeners are wrapped in `freshKeys` (`ui/widg
 ## Android (Capacitor)
 
 - `capacitor.config.ts` sets `appId` from `NINES_APP_ID`, default `work.westerweel.nines`
-  (Mark's choice, the same pattern as his other apps), `webDir: 'dist'`.
+  (Mark's choice, the same pattern as his other apps), `webDir: 'dist'`, the game's background
+  colour behind the WebView, and light system-bar icons. `android/app/build.gradle` reads the
+  same `NINES_APP_ID` for `applicationId`; the Java namespace stays `work.westerweel.nines`.
 - Flow: `npm ci && npm run build` → `npx cap sync android` copies `dist/` into
-  `android/app/src/main/assets/public` → Gradle builds the AAB. The `android/` project is
-  committed (it is source), but signing material never is: `.gitignore` excludes keystores, and
-  the release signing config reads `NINES_KEYSTORE_FILE`, `NINES_KEYSTORE_PASSWORD`,
-  `NINES_KEY_ALIAS` and `NINES_KEY_PASSWORD` from the environment.
-- Capacitor serves `dist/` from inside the APK through its local scheme; no server, no
-  network. The release manifest removes `android.permission.INTERNET` (`tools:node="remove"`),
-  which makes the no-network promise enforceable by the OS. The Android chunk verifies the app
-  still loads without it.
-- No Capacitor plugins in the MVP. Back button: the WebView's default (back, then exit) until
-  a reason appears to add `@capacitor/app`.
-- Orientation: both. The Phaser canvas (the 240x160 view and the HUD band) is scaled by an
-  integer where possible (above); the controls take the remaining space: below the view in
-  portrait, on both sides in landscape. The terminal overlay is a flex layout that shrinks when
-  the soft keyboard opens: `interactive-widget=resizes-content` in the viewport meta shrinks the
-  page in Chrome on Android, and where a browser only shrinks the visual viewport,
-  `src/game/touch/viewport.ts` fits the overlay to it, so the input line and the quick strip stay
-  above the keyboard.
-- Target SDK: the level Google Play requires for new apps at build time. The Android chunk
-  confirms it in the Play Console documentation before building (API 36 is the expected value
-  in late 2026) and records it in PLAY_STORE.md.
+  `android/app/src/main/assets/public` (gitignored, like the generated
+  `capacitor-cordova-android-plugins/`) → Gradle builds the APK or AAB. The rest of `android/` is
+  committed source, as Capacitor intends. Capacitor 8.6.0, the Gradle wrapper 8.14.3 (with its
+  distribution checksum), AGP 8.13.0, compile and target SDK 36, min SDK 24.
+- Signing material never enters the repository: both `.gitignore` files exclude keystores, and
+  the release signing config reads only `NINES_KEYSTORE`, `NINES_KEYSTORE_PASSWORD`,
+  `NINES_KEY_ALIAS` and `NINES_KEY_PASSWORD` from the environment. With none set the release is
+  unsigned (CI) and Gradle says so; with some set the build stops. `versionName` is
+  `package.json`'s version; `versionCode` is `-PninesVersionCode=N` (default 1; a signed build
+  requires it and refuses a `NINES_APP_ID` override). PLAY_STORE.md, Release, has the steps.
+- Capacitor serves `dist/` from inside the APK through its local server
+  (`https://localhost/`, answered by `WebViewLocalServer` in `shouldInterceptRequest`); no server,
+  no network. The manifest removes `android.permission.INTERNET` (`tools:node="remove"`, so no
+  library can merge it back), which makes the no-network promise enforceable by the OS: requests
+  the WebView answers itself are expected to need no permission (WebView blocks network loads
+  without it, and intercepted requests never reach the network), and anything else fails. That
+  the game loads this way is to be confirmed on a real phone
+  (https://github.com/MWest2020/nines/issues/20). The app declares no permissions at all; CI fails
+  if the built APK or the release manifest asks for one.
+- No backup: `android:allowBackup="false"` and data extraction rules that exclude everything from
+  cloud backup and device-to-device transfer (Android 12+). The save stays on the device, so Data
+  safety stays "no data collected".
+- The service worker is not registered in the app (`src/game/offline.ts` returns when
+  `window.Capacitor` exists): the files are in the APK. Capacitor injects its bridge as a
+  document-start script on any WebView that supports it (every Play-updated WebView); on an old
+  one it falls back to an inline script, which our CSP blocks, and then the worker would
+  register. Harmless (it only caches the app's own files, versioned per build), so accepted.
+- No Capacitor plugins. Back button: `MainActivity.java` registers an `OnBackPressedCallback`
+  that calls `window.ninesBack()` (`src/game/back.ts`): it closes the newest DOM overlay (the
+  terminal, with the editor's Esc rule, or a battle, like Escape), else sends the on-screen back
+  button's event while a screen, the menu or a dialogue is open. With nothing open it returns
+  false and the app moves to the background (the game saves on `visibilitychange`). The callback
+  is always enabled, so with predictive back (on at target SDK 36) the system shows no
+  back-to-home preview animation; the press itself still arrives. Untested on a device yet.
+- Orientation: both (no `screenOrientation`). The Phaser canvas (the 240x160 view and the HUD
+  band) is scaled by an integer where possible (above); the controls take the remaining space:
+  below the view in portrait, on both sides in landscape. The terminal overlay is a flex layout
+  that shrinks when the soft keyboard opens: `interactive-widget=resizes-content` in the viewport
+  meta shrinks the page in Chrome on Android, and where a browser only shrinks the visual
+  viewport, `src/game/touch/viewport.ts` fits the overlay to it, so the input line and the quick
+  strip stay above the keyboard. Target SDK 36 draws edge to edge; Capacitor's built-in
+  SystemBars (insets as CSS) and the `env(safe-area-inset-*)` padding in `touch.css` keep the
+  controls clear of the status and gesture bars.
+- Launcher icon and splash: own art (`tools/art/draw-art.mjs`, the player on night blue), no
+  Capacitor template images; the launch screen is the game's background colour.
+- Target SDK: 36, the level Google Play requires for new apps and updates since 31 Aug 2026
+  (PLAY_STORE.md, Target API level, with the link).
+- CI: the `android` job builds the debug APK and the unsigned release AAB on every pull request
+  and push to `main`, checks the APK's badging (no permissions, target 36, no backup) and
+  uploads both as workflow artifacts. No secrets.
 
 ## Dependencies
 
@@ -842,7 +877,8 @@ Pinned exactly, each version published at least two weeks before it was added (c
 | ajv | 8.20.0 | dev | JSON Schema validation, build time only (it generates code, so it never ships) |
 | @types/node | 22.20.5 | dev | types for tools and tests |
 | @xterm/xterm | 6.0.0 | runtime | the terminal's output renderer (MIT); no addons; published 22 Dec 2025, the current release |
-| @capacitor/core, cli, android | 8.x | Android phase | pinned when that phase starts |
+| @capacitor/android | 8.6.0 | Android app only (in `dependencies` so its MIT notice ships in THIRD-PARTY-LICENSES.txt) | the native WebView shell that serves `dist/` inside the app; published 28 Oct 2026, the version Bazibo runs on the same toolchain |
+| @capacitor/cli, @capacitor/core | 8.6.0 | dev | `npx cap sync android`; core is what the CLI requires, the web code never imports it (Capacitor injects its bridge) |
 | playwright (Python) | 1.65.1 | e2e only (CI and by hand), never shipped or in package.json | the browser smoke tests in `tests/e2e/`, hash-pinned in `tests/e2e/requirements.txt` |
 
 ## Testing and CI
@@ -853,9 +889,9 @@ Pinned exactly, each version published at least two weeks before it was added (c
   (every question type, meters in bounds, retry, hints, seeded cards, triggers) and every
   battle in content played perfectly, all wrong and at random.
 - `.github/workflows/ci.yml` on every pull request and every push to `main`: `npm ci`, content
-  validation, `npm test`, `npm run build`, `npm run check:dist`, the browser smoke tests.
-  Actions pinned to commit SHAs,
-  read-only token.
+  validation, `npm test`, `npm run build`, `npm run check:dist`, the browser smoke tests; in a
+  separate `android` job, the debug APK and the unsigned release AAB with a badging check,
+  uploaded as workflow artifacts. Actions pinned to commit SHAs, read-only token, no secrets.
 - `tests/e2e/smoke.py` (Python Playwright, no npm dependency): serves `dist/` under a sub-path.
   Desktop: loads the game once, waits for the service worker, goes offline and reloads, then
   (all offline) walks the player to Ravi's laptop and the two server-room racks with the
