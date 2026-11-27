@@ -123,9 +123,13 @@ export interface Reward {
   contract: boolean;
 }
 
-/** An independent contractor's terminal job: procedures skipped, more money, damage billed. */
+/**
+ * An independent contractor's terminal job: a job whose scenario has procedures to skip. Only
+ * there are procedures skipped, the money raised and damage billed; elsewhere a contractor works
+ * like anyone else (DESIGN.md, Independent contractor).
+ */
 export const contracted = (game: GameState, entry: QuestEntry | undefined): boolean =>
-  game.contractor && entry !== undefined && entry.scenario !== undefined && questKind(entry) === 'job';
+  game.contractor && entry !== undefined && questKind(entry) === 'job' && (entry.scenario?.objectives.some((o) => o.procedure === true) ?? false);
 
 export type CompleteResult = { ok: true; game: GameState; reward: Reward } | { ok: false; game: GameState; reason: QuestRefusal };
 
@@ -148,14 +152,18 @@ function pay(game: GameState, rules: Rules, entry: QuestEntry): CompleteResult {
   const q = entry.quest;
   const kind = questKind(entry);
   const contract = contracted(game, entry);
-  const income = incomePerQuest(game, rules);
+  // community service can come round again; its XP and the homelab's income are paid once
+  const serviceKey = `service/${id}`;
+  const again = kind === 'service' && game.claimed.includes(serviceKey);
+  const income = again ? 0 : incomePerQuest(game, rules);
   const hints = paidHints(game, rules, id);
   const percent = rewardPercent(hints);
   const money = scaled(scaled(q.reward.money, percent), contract ? CONTRACT_PERCENT : 100);
-  const xp = scaled(q.reward.xp, percent);
+  const xp = again ? 0 : scaled(q.reward.xp, percent);
   let next: GameState = {
     ...game,
     money: game.money + money + income,
+    ...(kind === 'service' && !again ? { claimed: [...game.claimed, serviceKey] } : {}),
     xp: { ...game.xp, [q.branch]: (own(game.xp, q.branch) ?? 0) + xp },
     tech_debt: game.tech_debt + (q.reward.tech_debt ?? 0),
     quests: { ...game.quests, [id]: 'done' },
@@ -195,7 +203,7 @@ function pay(game: GameState, rules: Rules, entry: QuestEntry): CompleteResult {
 // ---- hustles (DESIGN.md, Side hustles)
 
 export type HustleResult =
-  | { ok: true; outcome: 'clean'; game: GameState; reward: Reward; roll: number; risk: number }
+  | { ok: true; outcome: 'clean'; game: GameState; reward: Reward; roll: number; risk: number; lesson: boolean }
   | {
       ok: true;
       outcome: 'caught';
@@ -208,6 +216,7 @@ export type HustleResult =
       strikes: number;
       arrested: { fine: number } | null;
       agency: { fine: number } | null;
+      lesson: boolean;
     }
   | { ok: false; game: GameState; reason: QuestRefusal };
 
@@ -224,9 +233,13 @@ export function finishHustle(game: GameState, rules: Rules, id: string, risk: nu
   if (state === 'locked' || state === 'done') return { ok: false, game, reason: state };
   const r = clampRisk(risk);
   const dice = riskRoll(game, id);
+  // the responsible-disclosure line is told at a hustle's first ending, not at every retry
+  const lessonKey = `lesson/${id}`;
+  const lesson = !game.claimed.includes(lessonKey);
+  const told = (g: GameState): GameState => (lesson ? { ...g, claimed: [...g.claimed, lessonKey] } : g);
   if (dice >= r) {
     const paid = pay(game, rules, entry);
-    return paid.ok ? { ok: true, outcome: 'clean', game: paid.game, reward: paid.reward, roll: dice, risk: r } : paid;
+    return paid.ok ? { ok: true, outcome: 'clean', game: told(paid.game), reward: paid.reward, roll: dice, risk: r, lesson } : paid;
   }
   const strikes = game.strikes + 1;
   const arrest = strikes >= ARREST_AFTER;
@@ -247,7 +260,7 @@ export function finishHustle(game: GameState, rules: Rules, id: string, risk: nu
     karma += k2.karma;
     arrested = { fine: f2.paid };
   }
-  return { ok: true, outcome: 'caught', game: g, roll: dice, risk: r, fine: taken, karma, strikes, arrested, agency: k1.agency };
+  return { ok: true, outcome: 'caught', game: told(g), roll: dice, risk: r, fine: taken, karma, strikes, arrested, agency: k1.agency, lesson };
 }
 
 /** A battle's end. Won completes its quest (and pays, once); lost keeps it active and costs nothing. */

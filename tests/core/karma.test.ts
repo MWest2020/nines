@@ -152,8 +152,10 @@ describe('side hustles: the seeded risk roll', () => {
     const r = finishHustle(g, rules(), 'vending-prices', 10);
     expect(r).toMatchObject({ ok: true, outcome: 'clean', risk: 10 });
     if (!r.ok || r.outcome !== 'clean') return;
-    expect(r.reward).toMatchObject({ money: 400, xp: 15, karma: -20, kind: 'hustle' });
-    expect(r.game).toMatchObject({ money: 400, karma: -20, strikes: 0, caught: 0 });
+    expect(r.reward).toMatchObject({ money: 350, xp: 15, karma: -20, kind: 'hustle' });
+    expect(r.game).toMatchObject({ money: 350, karma: -20, strikes: 0, caught: 0 });
+    expect(r.lesson).toBe(true); // the first ending tells the lesson, once
+    expect(r.game.claimed).toContain('lesson/vending-prices');
     expect(r.game.quests['vending-prices']).toBe('done');
     // the same save, the same play: the same answer
     expect(finishHustle(g, rules(), 'vending-prices', 10)).toEqual(r);
@@ -173,6 +175,10 @@ describe('side hustles: the seeded risk roll', () => {
     expect(r).toMatchObject({ ok: true, outcome: 'caught', fine: CAUGHT_FINE, karma: CAUGHT_KARMA, strikes: 1, arrested: null, agency: null });
     expect(r.game).toMatchObject({ money: 1000 - CAUGHT_FINE, karma: CAUGHT_KARMA, strikes: 1, caught: 1, probation: false });
     expect(r.game.quests['vending-prices']).toBe('active');
+    // the retry rolls again (getting caught moved the dice on) and does not repeat the lesson
+    expect(r).toMatchObject({ lesson: true });
+    const again = finishHustle(r.game, rules(), 'vending-prices', 0);
+    expect(again).toMatchObject({ outcome: 'clean', lesson: false });
   });
   it('a fine never takes money below zero', () => {
     const g = fresh({ seed: seedWhere((r) => r < 50), money: 40 });
@@ -219,6 +225,15 @@ describe('the agency and community service', () => {
     const small = completeQuest(fresh({ karma: -5 }), rules(), 'repair-cafe');
     expect(small.game.karma).toBe(20);
   });
+  it('community service pays its XP and the homelab income once per save: no farming', () => {
+    const g = fresh({ karma: -5, items: ['raspberry-pi'] });
+    const first = completeQuest(g, rules(), 'repair-cafe');
+    expect(first.ok && first.reward).toMatchObject({ xp: 10, income: 10, money: 0 });
+    const dipped = changeKarma(first.game, rules(), -30).game; // reopens it
+    const second = completeQuest(dipped, rules(), 'repair-cafe');
+    expect(second.ok && second.reward).toMatchObject({ xp: 0, income: 0, money: 0 });
+    expect(second.game).toMatchObject({ karma: 15, xp: first.game.xp, money: first.game.money });
+  });
   it('a new dip below zero reopens community service; a dip that stays above zero does not', () => {
     const served = completeQuest(fresh({ karma: -5 }), rules(), 'repair-cafe').game;
     expect(stateOf(served, rules(), 'repair-cafe')).toBe('done');
@@ -262,11 +277,14 @@ describe('the independent contractor', () => {
     expect(hinted.ok && hinted.reward).toMatchObject({ money: 240, xp: 20, percent: 80 }); // 200 x 80% x 150%
     expect(completeQuest({ ...g, contractor: false }, rules(), 'bakery-hotfix').ok && completeQuest({ ...g, contractor: false }, rules(), 'bakery-hotfix')).toMatchObject({ reward: { money: 200, contract: false } });
   });
-  it('battles, hustles and community service are not contracts', () => {
+  it('only a job with procedures is a contract: battles, hustles, community service and plain jobs are not', () => {
     const g = fresh({ contractor: true });
     const find = (id: string) => content().quests.find((q) => q.id === id);
     expect(contracted(g, find('bakery-hotfix'))).toBe(true);
     expect(contracted(g, find('rate-limiter-interview'))).toBe(false);
+    // a job without procedures has nothing to skip: no bonus, no bill
+    expect(contracted(g, find('bank-pentest'))).toBe(false);
+    expect(contracted(g, find('disk-full'))).toBe(false);
     expect(contracted(g, find('vending-prices'))).toBe(false);
     expect(contracted(g, find('repair-cafe'))).toBe(false);
     expect(contracted({ ...g, contractor: false }, find('bakery-hotfix'))).toBe(false);
@@ -277,8 +295,10 @@ describe('the independent contractor', () => {
     expect(applyEvent(fresh({ money: 1000 }), rules(), 'bakery-hotfix', ev)).toMatchObject({ money: -120 });
     expect(applyEvent(fresh({ money: 1000, contractor: true }), rules(), 'bakery-hotfix', ev)).toMatchObject({ money: -360 });
     expect(applyEvent(fresh({ money: 200, contractor: true }), rules(), 'bakery-hotfix', ev).game.money).toBe(0);
-    // the built-in outage too
-    expect(applyEvent(fresh({ money: 1000, contractor: true }), rules(), 'disk-full', { id: 'outage', money: -100 })).toMatchObject({ money: -300 });
+    // the built-in outage too; a job without procedures is billed like anyone's
+    expect(applyEvent(fresh({ money: 1000, contractor: true }), rules(), 'bakery-hotfix', { id: 'outage', money: -100 })).toMatchObject({ money: -300 });
+    expect(applyEvent(fresh({ money: 1000, contractor: true }), rules(), 'disk-full', { id: 'outage', money: -100 })).toMatchObject({ money: -100 });
+    expect(completeQuest(fresh({ contractor: true }), rules(), 'bank-pentest')).toMatchObject({ reward: { money: 300, contract: false } });
     // a bonus is not multiplied, and a hustle's damage is not a contractor's
     expect(applyEvent(fresh({ contractor: true }), rules(), 'bakery-hotfix', { id: 'tidy', money: 50 })).toMatchObject({ money: 50 });
     expect(applyEvent(fresh({ money: 1000, contractor: true }), rules(), 'vending-prices', { id: 'outage', money: -100 })).toMatchObject({ money: -100 });

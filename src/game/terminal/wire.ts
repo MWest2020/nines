@@ -4,6 +4,7 @@
 
 import type { QuestEntry } from '../../content/types';
 import { contracted, type Reward } from '../../core/game';
+import { RISK_CAP } from '../../core/karma';
 import { findNpc } from '../../core/talk';
 import type { GameApi } from '../api';
 import { openTerminal, type TerminalOverlay } from './TerminalOverlay';
@@ -45,17 +46,20 @@ function open(api: GameApi, quest: QuestEntry, done: () => void): void {
       ...(giver ? { speaker: giver.key(giver.spec.name) } : {}),
       applyEvents: (events) => api.applyTerminalEvents(quest.id, events),
       complete: (risk) => {
+        let lesson = false;
         if (quest.quest.kind === 'hustle') {
-          const r = api.finishHustle(quest.id, risk ?? 0);
+          // no risk reported (never, for a valid hustle) fails closed: the cap
+          const r = api.finishHustle(quest.id, risk ?? RISK_CAP);
           if (!r.ok) return null;
-          if (r.outcome === 'caught') return { kind: 'caught', fine: r.fine, karma: r.karma, strikes: r.strikes, arrested: r.arrested, agency: r.agency };
+          if (r.outcome === 'caught') return { kind: 'caught', fine: r.fine, karma: r.karma, strikes: r.strikes, arrested: r.arrested, agency: r.agency, lesson: r.lesson };
           reward = r.reward;
+          lesson = r.lesson;
         } else {
           reward = api.completeQuest(quest.id);
         }
         if (!reward) return null;
         const { money, income, xp, percent, hints, karma, contract, agency } = reward;
-        return { kind: 'paid', money, income, xp, percent, hints, karma, contract, agency };
+        return { kind: 'paid', money, income, xp, percent, hints, karma, contract, agency, lesson };
       },
       closed: () => {
         current = null;

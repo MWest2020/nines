@@ -107,7 +107,7 @@ describe('the validator rejects broken content', () => {
     expect(errorsAfter(sc, (s) => s.replace("when: 'fails >= 3'", "when: 'fails >= \"3\"'"))).toMatch(/risk\.factors\[2\]\.when/);
     expect(errorsAfter(sc, (s) => s.replace('text: risk.beeping', 'text: risk.nope'))).toMatch(/unknown locale key "risk.nope"/);
     expect(errorsAfter(sc, (s) => s.replace('id: beeping', 'id: hr'))).toMatch(/risk factor ids must be unique/);
-    expect(errorsAfter(sc, (s) => s.replace('base: 10', 'base: 99'))).toMatch(/base must be <= 95/);
+    expect(errorsAfter(sc, (s) => s.replace('base: 20', 'base: 99'))).toMatch(/base must be <= 95/);
   });
   it('karma: procedures are a job\'s, and a contractor still has work to do', () => {
     const sc = 'quests/bakery-hotfix/scenario.yaml';

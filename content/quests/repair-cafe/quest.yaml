@@ -1,6 +1,6 @@
 # Community service (DESIGN.md, Karma): open whenever the player is on probation or their karma
 # is below zero. Finishing it ends probation, wipes the strikes and brings karma back to at
-# least 0. It pays no money. A karma drop below zero or a new probation opens it again.
+# least 0. It pays no money, and its XP only the first time (core/game.ts). A karma drop below zero or a new probation opens it again.
 schema: 1
 id: repair-cafe
 author: {name: "Nines team"}
@@ -9,7 +9,7 @@ summary: summary
 stage: junior
 branch: linux
 paths: [swe, sre, devops, platform, systems, ethical]
-roadmap_node: linux-services
+roadmap_node: linux-files
 requires: []
 kind: service
 available_when: 'probation || karma < 0'

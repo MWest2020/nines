@@ -8,7 +8,6 @@ import { describe, expect, it } from 'vitest';
 import type { QuestEntry, ScenarioSpec } from '../../src/content/types';
 import { questKey } from '../../src/content/types';
 import { applyEvent, completeQuest, finishHustle, type Rules, startQuest } from '../../src/core/game';
-import { riskRoll } from '../../src/core/karma';
 import { newGame } from '../../src/core/save';
 import { createSession, run, type RunResult, saveFile, type Session } from '../../src/sim/session';
 import { content, sh, steps, t } from '../helpers';
@@ -27,7 +26,7 @@ describe('the karma quests in the bundle', () => {
   it('are in both languages, tagged with paths, with the kinds and gates DESIGN.md describes', () => {
     const b = content();
     const spec = (id: string) => quest(id).quest;
-    expect(spec('vending-prices')).toMatchObject({ kind: 'hustle', available_when: 'karma <= 20', giver: 'vince', paths: ['ethical', 'systems'], reward: { money: 400, karma: -20 } });
+    expect(spec('vending-prices')).toMatchObject({ kind: 'hustle', available_when: 'karma <= 20', giver: 'vince', paths: ['ethical', 'systems'], reward: { money: 350, karma: -20 } });
     expect(spec('bank-pentest')).toMatchObject({ available_when: 'karma >= 0 && !probation', giver: 'sanne', paths: ['ethical', 'systems'], reward: { karma: 10 } });
     expect(spec('bank-pentest').kind).toBeUndefined(); // a job
     expect(spec('repair-cafe')).toMatchObject({ kind: 'service', available_when: 'probation || karma < 0', reward: { money: 0, karma: 25 } });
@@ -55,15 +54,15 @@ describe('the vending machine job (a hustle)', () => {
     return { s, win: saveFile(s, '/home/guest/drop/for-vince.txt', drop) };
   }
 
-  it('careful play: read only what the job needs, sign out, drop: 10% heat', () => {
+  it('careful play: read only what the job needs, sign out, drop: 20% heat', () => {
     const { win } = careful(true);
     expect(win.justWon).toBe(true);
-    expect(win.risk).toEqual({ percent: 10, factors: [] });
+    expect(win.risk).toEqual({ percent: 20, factors: [] });
   });
   it('staying signed in with your own library card shows in the heat before the drop', () => {
     const s = open('vending-prices');
-    expect(run(s, 'pwd').risk).toEqual({ percent: 30, factors: [{ id: 'signed-in', text: 'risk.signed_in', add: 20 }] });
-    expect(careful(false).win.risk?.percent).toBe(30);
+    expect(run(s, 'pwd').risk).toEqual({ percent: 40, factors: [{ id: 'signed-in', text: 'risk.signed_in', add: 20 }] });
+    expect(careful(false).win.risk?.percent).toBe(40);
   });
   it('sloppy play: a recursive grep walks through HR (karma event too), failed commands beep, the file is taken', () => {
     const s = open('vending-prices');
@@ -84,17 +83,25 @@ describe('the vending machine job (a hustle)', () => {
     expect(r.events.map((e) => e.id)).toEqual(['drop-gone']);
     expect(sh(s, 'cat ~/drop/for-vince.txt')).toMatch(/choco_bar: \?/);
   });
+  it('a grep pattern is not a path: grep hr README.txt reads the README, not the HR folder', () => {
+    const s = open('vending-prices');
+    run(s, 'cd /mnt/munchr-public/internal');
+    const r = run(s, 'grep hr roadmap-2027.txt');
+    expect(r.events).toEqual([]);
+    expect(r.risk?.factors.map((f) => f.id)).toEqual(['signed-in']);
+  });
   it('the risk the terminal reports goes into the roll: careful is usually clean, sloppy usually caught', () => {
-    const careful10 = careful(true).win.risk!.percent;
+    const carefulRisk = careful(true).win.risk!.percent;
     let clean = 0;
     let caught = 0;
     for (let seed = 0; seed < 200; seed++) {
       const g = { ...newGame('en', seed), money: 500 };
-      if (finishHustle(g, rules(), 'vending-prices', careful10).ok && riskRoll(g, 'vending-prices') >= careful10) clean++;
+      const c = finishHustle(g, rules(), 'vending-prices', carefulRisk);
+      if (c.ok && c.outcome === 'clean') clean++;
       const r = finishHustle(g, rules(), 'vending-prices', 100);
       if (r.ok && r.outcome === 'caught') caught++;
     }
-    expect(clean).toBeGreaterThan(150);
+    expect(clean).toBeGreaterThan(130); // about 80%
     expect(caught).toBeGreaterThan(170);
   });
 });
@@ -144,6 +151,11 @@ describe('the Polderbank pentest (ethical hacker, Junior)', () => {
     const s = open('bank-pentest');
     run(s, 'cat ~/engagement/scope.txt');
     expect(run(s, 'ls -l /srv/www/staging/exports').events).toEqual([]);
+    // listing or sizing the file itself is evidence too, not opening it
+    expect(run(s, 'ls -l /srv/www/staging/exports/db-backup-2026-11-20.sql.gz').events).toEqual([]);
+    expect(run(s, 'du -sh /srv/www/staging/exports').events).toEqual([]);
+    run(s, 'cd /srv/www/staging/exports');
+    expect(run(s, 'ls -l *').events).toEqual([]);
     expect(run(s, 'less /srv/www/staging/exports/db-backup-2026-11-20.sql.gz').events.map((e) => [e.id, e.karma])).toEqual([['opened-backup', -5]]);
   });
   it('report, do not fix: changing their config costs and is put back', () => {

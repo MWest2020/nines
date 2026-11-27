@@ -73,7 +73,7 @@ events:
     say: event.drop_gone
     reset: true
 risk:
-  base: 10
+  base: 20
   factors:
     - {id: snooped, when: 'touched("/mnt/munchr-public/internal/hr")', add: 25, text: risk.snooped}
     - {id: took, when: 'removed("/mnt/munchr-public/internal/prices-2027.csv")', add: 40, text: risk.took}

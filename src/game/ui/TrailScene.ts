@@ -50,6 +50,8 @@ const diamond = (cx: number, cy: number, r: number) => [
 export class TrailScene extends Screen {
   /** index of the town whose paths are shown; null = pick the furthest open town */
   private town: number | null = null;
+  /** focus has been placed on this town's first stone; a redraw keeps the focus where it is */
+  private placed = false;
   private detail: Phaser.GameObjects.BitmapText[] = [];
   private items: ({ kind: 'town'; index: number } | { kind: 'node'; node: TrailNode } | { kind: 'karma' } | { kind: 'close' })[] = [];
 
@@ -59,6 +61,7 @@ export class TrailScene extends Screen {
 
   override create(): void {
     this.town = null;
+    this.placed = false;
     super.create();
   }
 
@@ -135,10 +138,12 @@ export class TrailScene extends Screen {
     this.items.push({ kind: 'close' });
     out.push(...this.addButton(button(this, P.x + P.w - 6 - buttonWidth(close), P.y + 1, close, () => this.close())));
 
-    // start on the first stone of the chosen town when there is one
-    if (this.focus === 0 || this.focus >= this.items.length) {
+    // start on the first stone of the chosen town when there is one, else on the town itself
+    if (!this.placed || this.focus >= this.items.length) {
       const first = this.items.findIndex((it) => it.kind === 'node');
-      this.focus = first >= 0 ? first : this.town;
+      const here = this.items.findIndex((it) => it.kind === 'town' && it.index === this.town);
+      this.focus = first >= 0 ? first : Math.max(0, here);
+      this.placed = true;
     }
     this.showDetail(view);
     return out;
@@ -193,7 +198,7 @@ export class TrailScene extends Screen {
   private pickTown(i: number): void {
     if (i === this.town) return;
     this.town = i;
-    this.focus = 0;
+    this.placed = false;
     this.redraw();
   }
 

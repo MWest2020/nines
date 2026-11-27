@@ -19,7 +19,7 @@ kind: hustle
 available_when: 'karma <= 20'
 giver: vince
 start: {map: junior-village, object: back-alley-laptop}
-reward: {money: 400, xp: 15, karma: -20}
+reward: {money: 350, xp: 15, karma: -20}
 dialogue:
   offer: [offer.1, offer.2, offer.3]
   active: [active.1]

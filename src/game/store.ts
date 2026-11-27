@@ -41,6 +41,9 @@ export class GameStore {
   ) {
     // a path the roadmap does not have (a hand-edited save, a renamed path) is no choice at all
     this.state = game.path !== null && !content.roadmap.paths.some((p) => p.id === game.path) ? { ...game, path: null } : game;
+    // on probation, community service must be open: a repaired or hand-edited save could hold
+    // probation with the service already done, which would shut clearance work for good
+    if (this.state.probation) this.state = karma.reopenService(this.state, content);
     this.translate = createTranslator(content.locales, game.locale);
   }
 

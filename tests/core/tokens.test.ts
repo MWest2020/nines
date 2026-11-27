@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { buy, canBuy, choosePath, completeQuest, recordBattle, type Rules } from '../../src/core/game';
 import { memoryStorage, openSave } from '../../src/core/persist';
-import { deserialize, type GameState, MIGRATIONS, newGame, SAVE_KEY, serialize, START_TOKENS } from '../../src/core/save';
+import { deserialize, type GameState, MIGRATIONS, newGame, SAVE_KEY, SAVE_VERSION, serialize, START_TOKENS } from '../../src/core/save';
 import { FLOOR_PERCENT, HINT_COST, hintOffer, hintsTaken, PENALTY_PERCENT, rewardPercent, scaled, takeHint } from '../../src/core/tokens';
 import { content } from '../helpers';
 
@@ -232,12 +232,12 @@ describe('save format 3', () => {
     expect(deserialize(serialize(out.game), 'en')).toEqual(out);
     expect(hintsTaken(out.game, 'constructor')).toEqual(['y']);
   });
-  it('a version-5 save is newer: never read as 4, never written over', () => {
-    const st = memoryStorage({ [SAVE_KEY]: JSON.stringify({ format: 'nines-save', version: 5, game: { tokens: 99 } }) });
+  it('a save from a newer version is never read and never written over', () => {
+    const st = memoryStorage({ [SAVE_KEY]: JSON.stringify({ format: 'nines-save', version: SAVE_VERSION + 1, game: { tokens: 99 } }) });
     const { slot, game } = openSave(st, 'en', 1);
     expect(slot.status).toBe('newer');
     expect(slot.save({ ...game, tokens: 1 })).toBe(false);
-    expect(JSON.parse(st.data.get(SAVE_KEY)!).version).toBe(5);
+    expect(JSON.parse(st.data.get(SAVE_KEY)!).version).toBe(SAVE_VERSION + 1);
   });
   it('a version-1 save walks the whole chain', () => {
     const v1 = { format: 'nines-save', version: 1, game: { locale: 'en', money: 10 } };

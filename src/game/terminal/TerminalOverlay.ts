@@ -50,8 +50,8 @@ export interface EventsApplied {
 
 /** How a quest ended in the terminal: paid, or (a hustle) caught. */
 export type Finished =
-  | { kind: 'paid'; money: number; income: number; xp: number; percent: number; hints: number; karma: number; contract: boolean; agency: { fine: number } | null }
-  | { kind: 'caught'; fine: number; karma: number; strikes: number; arrested: { fine: number } | null; agency: { fine: number } | null };
+  | { kind: 'paid'; money: number; income: number; xp: number; percent: number; hints: number; karma: number; contract: boolean; agency: { fine: number } | null; lesson?: boolean }
+  | { kind: 'caught'; fine: number; karma: number; strikes: number; arrested: { fine: number } | null; agency: { fine: number } | null; lesson?: boolean };
 
 /** SGR colours from DESIGN.md (Terminal): prompts in ice, errors in orange. */
 const SGR = {
@@ -458,21 +458,29 @@ export class TerminalOverlay {
       if (end?.kind === 'caught') {
         // the job is not done: the quest stays open, and the terminal closes on the bad news
         this.won = false;
-        this.queue({ text: this.t(end.arrested ? 'ui.hustle.arrested' : 'ui.hustle.caught'), extra: this.caughtText(end), button: this.t('ui.terminal.continue') });
-        if (end.agency) this.queueAgency(end.agency.fine);
-        this.queue({ text: this.t('ui.hustle.lesson'), button: this.t('ui.terminal.continue'), then: () => this.close() });
+        // the lesson only at a hustle's first ending; the last dialogue closes the terminal
+        const after: Dialog[] = [];
+        if (end.agency) after.push(this.agencyDialog(end.agency.fine));
+        if (end.lesson) after.push({ text: this.t('ui.hustle.lesson'), button: this.t('ui.terminal.continue') });
+        const shut = () => this.close();
+        this.queue({ text: this.t(end.arrested ? 'ui.hustle.arrested' : 'ui.hustle.caught'), extra: this.caughtText(end), button: this.t('ui.terminal.continue'), ...(after.length === 0 ? { then: shut } : {}) });
+        after.forEach((d, i) => this.queue(i === after.length - 1 ? { ...d, then: shut } : d));
         return;
       }
-      const hustle = this.quest.quest.kind === 'hustle';
+      // a hustle paid now ends on the lesson; an agency visit follows the win; the last one closes
+      const hustle = this.quest.quest.kind === 'hustle' && end !== null;
+      const after: Dialog[] = [];
+      if (end?.agency) after.push(this.agencyDialog(end.agency.fine));
+      if (hustle && end.lesson) after.push({ text: this.t('ui.hustle.lesson'), button: this.t('ui.terminal.continue') });
+      else if (end?.agency) after.push({ text: this.t('ui.karma.agency_after'), button: this.t('ui.terminal.continue') });
+      const close = () => this.close();
       this.queue({
         text: this.t(hustle ? 'ui.hustle.clean' : 'ui.terminal.won'),
         extra: end ? this.rewardText(end) : this.t('ui.terminal.won_again'),
         button: this.t('ui.terminal.continue'),
-        ...(end?.agency || hustle ? {} : { then: () => this.close() }),
+        ...(after.length === 0 ? { then: close } : {}),
       });
-      if (end?.agency) this.queueAgency(end.agency.fine);
-      if (hustle && end) this.queue({ text: this.t('ui.hustle.lesson'), button: this.t('ui.terminal.continue'), then: () => this.close() });
-      else if (end?.agency) this.queue({ text: this.t('ui.karma.agency_after'), button: this.t('ui.terminal.continue'), then: () => this.close() });
+      after.forEach((d, i) => this.queue(i === after.length - 1 ? { ...d, then: close } : d));
     }
   }
 
@@ -482,8 +490,12 @@ export class TerminalOverlay {
   }
 
   /** The three-letter agency: a fine and probation (core/karma.ts). */
+  private agencyDialog(fine: number): Dialog {
+    return { speaker: this.t('ui.karma.agency_name'), text: this.t('ui.karma.agency'), extra: this.t('ui.karma.agency_fine', { amount: fine }), button: this.t('ui.terminal.next') };
+  }
+
   private queueAgency(fine: number): void {
-    this.queue({ speaker: this.t('ui.karma.agency_name'), text: this.t('ui.karma.agency'), extra: this.t('ui.karma.agency_fine', { amount: fine }), button: this.t('ui.terminal.next') });
+    this.queue(this.agencyDialog(fine));
   }
 
   private caughtText(end: Extract<Finished, { kind: 'caught' }>): string {

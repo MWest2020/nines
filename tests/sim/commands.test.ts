@@ -529,6 +529,32 @@ describe('touched(): what a command reached (karma quests: scope, snooping)', ()
     run(p, 'cat notes.txt | grep alpha');
     expect(touched(p, '/home/dev/notes.txt')).toBe(true);
   });
+  it('flag values and a grep pattern are not paths; du and grep -r without a folder walk the working directory', () => {
+    const s = fresh();
+    run(s, 'cd /var');
+    run(s, 'grep log /etc/app.conf'); // "log" would resolve to /var/log
+    expect(touched(s, '/var/log')).toBe(false);
+    run(s, 'tail -n 5 /etc/app.conf');
+    expect(touched(s, '/var/5')).toBe(false);
+    const d = fresh();
+    run(d, 'cd /var/lib');
+    run(d, 'du -sh');
+    expect(touched(d, '/var/lib/db/data')).toBe(true);
+  });
+  it('opened(): reading commands open files, listing and sizing do not, grep -r opens what it walks', () => {
+    const s = fresh();
+    const opened = (p: string) => scenarioEnv({ state: () => s.state, initial: s.initial, spec: s.spec, hintBoost: 0 }).funcs['opened']!(p) as boolean;
+    run(s, 'ls -l /var/log/app.log');
+    run(s, 'du -sh /var/log');
+    expect(opened('/var/log/app.log')).toBe(false);
+    expect(touched(s, '/var/log/app.log')).toBe(true);
+    run(s, 'tail -n 2 /var/log/app.log');
+    expect(opened('/var/log/app.log')).toBe(true);
+    expect(opened('/var/log')).toBe(true);
+    expect(opened('/var/lib/db/data')).toBe(false);
+    run(s, 'grep -r x /var/lib');
+    expect(opened('/var/lib/db/data')).toBe(true);
+  });
   it('survives a reset: what the player did stays done', () => {
     const s = session({ ...FIXTURE, events: [{ id: 'db', when: 'removed("/var/lib/db/data")', say: 'event.db', money: -50, reset: true }] });
     run(s, 'cat /etc/app.conf');

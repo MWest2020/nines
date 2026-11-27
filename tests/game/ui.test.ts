@@ -141,7 +141,7 @@ describe('the game store', () => {
     const clean = store.finishHustle('vending-prices', 0);
     expect(clean).toMatchObject({ ok: true, outcome: 'clean' });
     expect(changes.at(-1)?.kind).toBe('reward');
-    expect(JSON.parse(st.data.get(SAVE_KEY)!).game).toMatchObject({ karma: -20, money: 400 });
+    expect(JSON.parse(st.data.get(SAVE_KEY)!).game).toMatchObject({ karma: -20, money: 350 });
     // seed 5 rolls 50 for this job (tests/core/karma.test.ts covers the roll itself)
     const caught = make(5);
     caught.store.startQuest('vending-prices');
@@ -151,6 +151,13 @@ describe('the game store', () => {
     store.setContractor(true);
     expect(changes.at(-1)).toEqual({ kind: 'contractor', on: true });
     expect(JSON.parse(st.data.get(SAVE_KEY)!).game.contractor).toBe(true);
+  });
+
+  it('opens community service when a save holds probation with the service already done', () => {
+    const st = memoryStorage();
+    const { game, slot } = openSave(st, 'en', 1);
+    const store = new GameStore(content(), { ...game, probation: true, quests: { 'repair-cafe': 'done' } }, slot);
+    expect(store.questState('repair-cafe')).toBe('available');
   });
 
   it('pays a terminal bonus once however often the terminal is replayed, and saves it', () => {

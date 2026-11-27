@@ -63,6 +63,10 @@ export interface SimState {
   touched: string[];
   /** folders a recursive command went through (grep -r, du, rm -r): everything below counts as touched */
   swept: string[];
+  /** files a reading command (cat, less, tail, grep, edit, mv) opened, absolute */
+  opened: string[];
+  /** folders grep -r read through: every file below counts as opened */
+  read: string[];
   restarted: string[];
   flags: Record<string, boolean>;
   firedEvents: string[];
@@ -209,6 +213,8 @@ export function createState(spec: ScenarioSpec): SimState {
     ran: [],
     touched: [],
     swept: [],
+    opened: [],
+    read: [],
     restarted: [],
     flags: {},
     firedEvents: [],

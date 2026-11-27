@@ -409,20 +409,22 @@ The engine is in `src/core/karma.ts` (numbers and rules) and `src/core/game.ts` 
 | Content asks | progress facts `karma`, `probation`, `strikes`, `contractor` in any progress condition: a quest's `available_when`, NPC dialogue. Negative numbers may be written (`karma <= -20`) |
 | Clearance jobs (bank, enterprise) | `available_when: 'karma >= 0 && !probation'`: a clean record. Polderbank's pentest asks it |
 | Shady jobs | the fixer works with `karma <= 20`: too clean and he does not know you. Later side jobs can ask lower karma (`karma <= -20`) |
-| A hustle done clean | its reward and its `reward.karma` (the vending job: €400, karma -20) |
-| Caught | a €150 fine, karma -10, a strike; the job stays open and pays nothing |
+| A hustle done clean | its reward and its `reward.karma` (the vending job: €350, karma -20) |
+| Caught | a €150 fine, karma -10, a strike; the job stays open (a new roll next time) and pays nothing |
 | Arrested (the second strike) | another €500 and karma -15, and probation |
 | The agency | karma dropping to -60 or below while not on probation: the TLA (the Three-Letter Agency; in Dutch the DDL, Dienst Drie Letters) asks questions: a €400 fine and probation |
 | Probation | shuts what asks `!probation` (bank and enterprise jobs). Other work goes on: nobody is locked out of the game |
-| Community service (`kind: service`) | open on probation or below zero; ends probation, wipes the strikes and brings karma back to at least 0; pays XP and karma, no money. A new dip below zero or a new probation opens it again |
+| Community service (`kind: service`) | open on probation or below zero; ends probation, wipes the strikes and brings karma back to at least 0; pays karma, no money, and its XP (and the homelab's income) only the first time, so it cannot be farmed. A new dip below zero or a new probation opens it again; loading a save on probation reopens it too |
 | Pentests | karma up (`reward.karma`: Polderbank +10). Opening data you did not need, or leaving the scope, costs karma (events) |
 | Fines | never take money below zero |
 
-Why these numbers: a Junior quest pays €125 to €300. A clean hustle pays €400, about one and a
-half quests, for karma -20, which is enough to shut the bank until community service. Played
-carefully the risk is 10%, so the job is worth about €345 on average; played sloppily (95%) it
-is worth less than nothing and earns a strike. The second strike costs €650 on top of the
-first fine: one clean hustle does not pay for an arrest.
+Why these numbers: a Junior quest pays €125 to €300. A clean hustle pays €350, a good quest's
+worth, for karma -20, which is enough to shut the bank until community service. Played
+carefully the risk is 20%; a catch keeps the job open with a new roll, so a careful player gets
+the €350 in the end, minus about €30 in expected fines and a 4% chance of a second catch (an
+arrest: €650 more and probation), so about €290 on average. Played sloppily (95%) it is worth
+less than nothing and an arrest is likely. Community service then costs a few minutes and pays
+no money: the karma is the price.
 
 **The meter.** The Career Trail's header shows "Karma +10", a bar from -100 to +100 with a tick
 at 0, and the meter's name; the HUD toasts every change ("Karma -20: Hoodie in a stock photo").
@@ -454,17 +456,19 @@ fictional share, mounted on the kiosk). Read the README, find the price list, wr
 in the drop file. What raises the heat: going through the HR folder (a recursive grep over the
 share walks through it too, and that costs 5 karma), three failed commands (the kiosk beeps),
 twenty commands (the barista stares), taking the file instead of reading it, and still being
-signed in with your own library card when you drop. Careful play is 10%; sloppy play hits the cap.
+signed in with your own library card when you drop. Careful play is 20%; sloppy play hits the cap.
 
 *Safety.* The hack is abstract: no real technique, tool, exploit or payload, nothing that
 teaches an intrusion. Reading a folder that someone left in a public place is the whole trick,
 and the game says plainly that doing it for real is a crime (computervredebreuk in the
 Netherlands) and what to do instead: report it through the company's security.txt or bug
-bounty. Every hustle ends on that line, caught or not, and Vince himself mentions security.txt.
+bounty. A hustle's first ending, caught or not, ends on that line (once per job, so retries do
+not preach), and Vince himself mentions security.txt.
 
 **The independent contractor.** A setting in the menu, "Work as: employee / contractor",
-stored in the save (`contractor`). As a contractor, on a terminal job (not a battle, a hustle or
-community service):
+stored in the save (`contractor`). As a contractor, on a job whose scenario has procedures to
+skip (not a battle, a hustle, community service, or a job without procedures, which pays and
+bills as usual; https://github.com/MWest2020/nines/issues/28):
 
 | Rule | Value |
 | ---- | ----- |
@@ -493,7 +497,8 @@ The player proves it with `ls -l` (name, size, place) without opening the backup
 finding-01: the setting and the web path, a severity (high), and the fix (autoindex off, the
 backup out of the web root). Reading the server before the scope gets a word from Sanne; a
 recursive grep over `/srv` walks into the customer data (€100 and karma -10); opening the
-backup costs 5 karma; changing their config is put back and costs €50. It pays €300, 30 XP
+backup with a reading command (cat, less, tail, grep, edit) costs 5 karma, while `ls -l` or
+`du` on it is just evidence; changing their config is put back and costs €50. It pays €300, 30 XP
 and karma +10, and needs a clean record.
 
 **Community service.** *Repair Café* (`content/quests/repair-cafe`): Henk's stall in the park.
@@ -502,8 +507,11 @@ write in the logbook what you did. Humble on purpose.
 
 **The `touched()` fact.** Scope, snooping and peeking need to know what the player reached, so
 scenarios have `touched(path)`: true when a command named that path, or something inside it, as
-an operand (cd, cat, ls, less, edit, a pipe stage too), or when a recursive command (grep -r,
-du, rm -r) walked a folder above it. Listing a folder is not opening its files.
+an operand (cd, cat, ls, less, edit, a pipe stage too; flag values and grep's pattern are not
+operands), or when a recursive command (grep -r, du, rm -r; with no folder, the working
+directory) walked a folder above it. And `opened(path)`: true only when a reading command (cat,
+less, tail, grep, edit, mv) opened the file, or grep -r read through a folder above it. Listing
+or sizing a file touches it without opening it.
 
 ### Share my progress (design only, not built)
 

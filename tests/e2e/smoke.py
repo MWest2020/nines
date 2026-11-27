@@ -650,14 +650,14 @@ def bakery_hotfix_contractor(page: Page, shots: Path | None) -> None:
 
 
 def vending_hustle(page: Page, shots: Path | None) -> str:
-    """The side hustle: careful play (10% heat), then the seeded roll decides. Both endings are
+    """The side hustle: careful play (20% heat), then the seeded roll decides. Both endings are
     fine here: the new game's seed is random. Returns 'clean' or 'caught'."""
     heat = page.locator(".nt-heatline")
-    assert "30%" in heat.inner_text(), heat.inner_text()  # still signed in with your own card
+    assert "40%" in heat.inner_text(), heat.inner_text()  # still signed in with your own card
     run(page, "cat ~/job.txt", "library card")
     run(page, "cat /mnt/munchr-public/internal/prices-2027.csv", "choco_bar,1.10,1.25")
     run(page, "rm ~/.kiosk/signed-in-as.txt")
-    assert "10%" in heat.inner_text(), heat.inner_text()
+    assert "20%" in heat.inner_text(), heat.inner_text()
     if shots:
         page.screenshot(path=str(shots / "terminal-hustle.png"))
     run(page, "edit ~/drop/for-vince.txt")
@@ -794,7 +794,7 @@ def play(page: Page, village: Grid, room: Grid, shots: Path | None) -> None:
     outcome = vending_hustle(page, shots)
     after = save_game(page)
     if outcome == "clean":
-        assert after["karma"] == 10 - 20 and after["money"] == before["money"] + 400 + 10, (before, after)
+        assert after["karma"] == 10 - 20 and after["money"] == before["money"] + 350 + 10, (before, after)
         assert after["quests"].get("vending-prices") == "done", after["quests"]
     else:
         assert after["karma"] == 10 - 10 and after["strikes"] == 1 and after["money"] == before["money"] - 150, (before, after)

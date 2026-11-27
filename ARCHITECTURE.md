@@ -356,7 +356,8 @@ with the state they read:
 | `pods_running(deployment)` | boolean, all pods Running |
 | `ran(command)` | boolean, `"df"` or `"git commit"` |
 | `flag(name)` | boolean, set by events |
-| `touched(path)` | boolean: a command named `path` or something inside it as an operand (cd, cat, ls, less, edit, any pipe stage), or a recursive command (grep -r, du, rm -r) walked a folder above it. Listing a folder is not opening its files |
+| `touched(path)` | boolean: a command named `path` or something inside it as an operand (cd, cat, ls, less, edit, any pipe stage; not flag values or grep's pattern), or a recursive command (grep -r, du, rm -r; the working directory without an operand) walked a folder above it |
+| `opened(path)` | boolean: a reading command (cat, less, tail, grep, edit, mv) opened that file or one inside that folder, or grep -r read through a folder above it; `ls` and `du` only touch |
 | `pipeline_valid` | boolean, the pipeline file in the working tree validates |
 | `pipeline_status` | `none` \| `passed` \| `failed`, the last CI run |
 | `git_clean`, `commits`, `fails`, `commands` | boolean, numbers |
@@ -834,7 +835,8 @@ City); `karma` (-100..100), `strikes` (times caught since the last community ser
   the quest and `caught`). Clean pays through the same path as any quest; caught fines, costs
   karma and a strike and keeps the quest active; the second strike is an arrest (probation).
   `completeQuest` refuses a hustle. A service quest ends probation, wipes the strikes and lifts
-  karma to at least 0. A contractor (`contracted`: the flag, a terminal job) skips `procedure`
+  karma to at least 0; its XP and the homelab's income are paid once per save (`claimed`
+  `service/<id>`). A hustle's first ending carries `lesson` (`claimed` `lesson/<id>`). A contractor (`contracted`: the flag, a job whose scenario has a `procedure`) skips `procedure`
   objectives (`createSession` `skipProcedures`), is paid `CONTRACT_PERCENT` (150) of the money
   and billed `DAMAGE_MULTIPLIER` (3) times every penalty. The terminal shows a hustle's heat, a
   contractor's tag and skipped procedures; the HUD toasts karma changes; the Career Trail's

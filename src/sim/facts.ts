@@ -87,6 +87,11 @@ export function scenarioEnv(src: FactSource): Env {
         const st = s();
         return st.touched.some((x) => x === want || isUnder(x, want)) || st.swept.some((x) => x === want || isUnder(want, x));
       },
+      opened: (p) => {
+        const want = String(p);
+        const st = s();
+        return st.opened.some((x) => x === want || isUnder(x, want)) || st.read.some((x) => isUnder(want, x));
+      },
     },
   };
 }

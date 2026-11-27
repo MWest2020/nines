@@ -128,6 +128,8 @@ function resetMachine(session: Session, work: SimState): SimState {
   fresh.ran = work.ran;
   fresh.touched = work.touched;
   fresh.swept = work.swept;
+  fresh.opened = work.opened;
+  fresh.read = work.read;
   fresh.firedEvents = work.firedEvents;
   fresh.shownHints = work.shownHints;
   fresh.flags = work.flags;
@@ -213,6 +215,16 @@ function riskIn(session: Session, work: SimState): Risk | null {
 /** A hustle's risk of getting caught as the machine stands now; null for a scenario without one. */
 export const riskOf = (session: Session): Risk | null => riskIn(session, session.state);
 
+/** Commands that read what is inside a file (the opened() fact); listing and sizing do not. */
+const READERS = new Set(['cat', 'less', 'tail', 'grep', 'edit', 'nano', 'vi', 'vim', 'mv']);
+/** Flags whose next word is a value, never a path. */
+const VALUE_FLAGS: Record<string, string[]> = {
+  tail: ['-n'],
+  grep: ['-e', '-m', '-A', '-B', '-C'],
+  journalctl: ['-u', '-n'],
+  kubectl: ['-n', '--namespace', '-o', '--output', '--tail'],
+};
+
 /** Does a command line's words name a recursive walk (grep -r, du, rm -r)? */
 function recursive(name: string, args: readonly string[]): boolean {
   if (name === 'du') return true;
@@ -221,21 +233,43 @@ function recursive(name: string, args: readonly string[]): boolean {
 }
 
 /**
- * Record what a command reached, for the touched() fact: every operand that is an existing
- * path (relative ones resolved against the working directory), and for a recursive command
- * the folders it walked. Before the command runs, so rm still sees what it removes.
+ * Record what a command reached, for the touched() and opened() facts: every operand that is an
+ * existing path (relative ones resolved against the working directory; flag values and grep's
+ * pattern are not operands), and for a recursive command the folders it walked (the working
+ * directory when it names none). Reading commands also open the files they name, and grep -r
+ * opens everything it walks. Before the command runs, so rm still sees what it removes.
  */
 function touch(work: SimState, name: string, args: readonly string[]): void {
   const deep = recursive(name, args);
-  const operands = args.filter((a) => !a.startsWith('-') || a === '-');
-  // `cd` with no operand goes home; `cd -` goes back
+  const valueFlags = own(VALUE_FLAGS, name) ?? [];
+  const operands: string[] = [];
+  let pattern = name === 'grep' && !args.includes('-e');
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i]!;
+    if (a === '--') continue;
+    if (valueFlags.includes(a)) {
+      i++;
+      continue;
+    }
+    if (a.startsWith('-') && a !== '-') continue;
+    if (pattern) {
+      pattern = false;
+      continue;
+    }
+    operands.push(a);
+  }
+  // `cd` with no operand goes home; `cd -` goes back; du and grep -r with no operand walk the cwd
   if (name === 'cd' && operands.length === 0) operands.push(work.home);
+  if (deep && name !== 'rm' && operands.length === 0) operands.push('.');
+  const reads = READERS.has(name);
   for (const a of operands) {
-    const p = a === '-' ? work.oldpwd : resolve(work.cwd, work.home, a);
+    const p = a === '-' && name === 'cd' ? work.oldpwd : resolve(work.cwd, work.home, a);
     const n = work.fs[p];
     if (!n) continue;
     if (!work.touched.includes(p)) work.touched.push(p);
     if (deep && n.type === 'dir' && !work.swept.includes(p)) work.swept.push(p);
+    if (reads && n.type === 'file' && !work.opened.includes(p)) work.opened.push(p);
+    if (reads && deep && n.type === 'dir' && !work.read.includes(p)) work.read.push(p);
   }
 }
 
@@ -335,5 +369,6 @@ export function saveFile(session: Session, path: string, content: string): RunRe
   writeFile(work.fs, p, stripControl(content.replace(/\r\n?/g, '\n')));
   if (!work.ran.includes('edit')) work.ran.push('edit');
   if (!work.touched.includes(p)) work.touched.push(p);
+  if (!work.opened.includes(p)) work.opened.push(p);
   return settle(session, work, [], 0, undefined, []);
 }
