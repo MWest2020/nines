@@ -106,7 +106,7 @@ const isCameoObject = (name: string): boolean => /^cameo-[a-z0-9]+(-[a-z0-9]+)*$
 const CONTROL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/;
 
 /** Functions whose first argument names something; it must be a literal so it can be checked. */
-const NAME_ARGS = new Set(['service', 'pods_running', 'restarted', 'flag', 'ran', 'quest', 'has_item', 'xp']);
+const NAME_ARGS = new Set(['service', 'pods_running', 'restarted', 'flag', 'ran', 'quest', 'has_item', 'xp', 'career_path']);
 
 function callsIn(node: Node, out: { name: string; first: Node | undefined }[] = []) {
   switch (node.kind) {
@@ -800,6 +800,7 @@ export function loadContent(contentDir: string, schemaDir: string, options: Load
       if (name === 'quest' && !questIds.includes(arg)) return 'no such quest';
       if (name === 'has_item' && !shopIds.includes(arg)) return 'no such shop item';
       if (name === 'xp' && !branchIds.includes(arg)) return 'no such branch';
+      if (name === 'career_path' && !(roadmap?.paths ?? []).some((p) => p.id === arg)) return 'no such career path';
       if (name === 'flag' && !progressFlags.has(arg)) return 'no event sets that flag';
       return null;
     });

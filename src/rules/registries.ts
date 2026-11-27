@@ -57,8 +57,12 @@ export const PROGRESS_FACTS: Registry = {
     strikes: { args: [], returns: 'number' },
     /** working as an independent contractor */
     contractor: { args: [], returns: 'boolean' },
+    /** a career path has been chosen at the coach in Medior City */
+    path_chosen: { args: [], returns: 'boolean' },
   },
   funcs: {
+    /** the chosen career path is this one (a path id from roadmap.yaml) */
+    career_path: { args: ['string'], returns: 'boolean' },
     quest: { args: ['string'], returns: 'string', values: QUEST_STATES },
     xp: { args: ['string'], returns: 'number' },
     has_item: { args: ['string'], returns: 'boolean' },

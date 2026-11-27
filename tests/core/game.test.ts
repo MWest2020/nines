@@ -347,8 +347,8 @@ describe('the Career Trail', () => {
     g = frozen(won.game);
     expect(townOpen(g, rules(), 'medior')).toBe(true);
     expect(nodeState(g, rules(), 'observability-logs')).toBe('open');
-    // iac-first needs git-basics too, which no quest lights yet
-    expect(nodeState(g, rules(), 'iac-first')).toBe('locked');
+    // linux-tls needs linux-services, which only the DNS cameo lights
+    expect(nodeState(g, rules(), 'linux-tls')).toBe('locked');
   });
 
   it('XP earned is what progress conditions read, so content can unlock with it', () => {

@@ -42,7 +42,7 @@
     },
     "stage": { "enum": ["junior", "medior", "senior"] },
     "branch": {
-      "enum": ["linux", "networking", "git", "cicd", "containers", "iac", "observability", "incident", "design", "kubernetes"]
+      "enum": ["linux", "networking", "git", "cicd", "containers", "iac", "observability", "incident", "design", "kubernetes", "security"]
     },
     "path": {
       "enum": ["swe", "sre", "devops", "platform", "systems", "ethical"],

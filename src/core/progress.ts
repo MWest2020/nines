@@ -44,12 +44,14 @@ export function progressEnv(game: GameState, quests: readonly QuestSpec[]): Env 
       probation: () => game.probation,
       strikes: () => game.strikes,
       contractor: () => game.contractor,
+      path_chosen: () => game.path !== null,
     },
     funcs: {
       quest: (id) => questState(game, quests, String(id)),
       xp: (branch) => game.xp[String(branch)] ?? 0,
       has_item: (id) => game.items.includes(String(id)),
       flag: (name) => game.flags[String(name)] === true,
+      career_path: (id) => game.path === String(id),
     },
   };
 }
