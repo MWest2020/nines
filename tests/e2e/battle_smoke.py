@@ -1,6 +1,6 @@
 """Browser smoke test for the battle overlay, on the built site (dist/), by real key presses and
-clicks. Not part of `npm test` (CI has no browser); run it by hand after `npm run build`, under
-the memory cap from AGENTS.md:
+clicks. CI runs it after the terminal smoke test (tests/e2e/smoke.py, same requirements.txt).
+By hand, after `npm run build`, under the memory cap from AGENTS.md:
 
   CHROME=~/.cache/ms-playwright/chromium_headless_shell-1255/chrome-headless-shell-linux64/chrome-headless-shell \
   timeout -s KILL 900 systemd-run --user --scope -q -p MemoryMax=1500M -p MemorySwapMax=0 \

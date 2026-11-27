@@ -795,7 +795,7 @@ Pinned exactly, each version published at least two weeks before it was added (c
 | @types/node | 22.20.5 | dev | types for tools and tests |
 | @xterm/xterm | 6.0.0 | runtime | the terminal's output renderer (MIT); no addons; published 22 Dec 2025, the current release |
 | @capacitor/core, cli, android | 8.x | Android phase | pinned when that phase starts |
-| playwright (Python) | 1.65.2 | by hand only, never shipped or in package.json | the browser smoke tests in `tests/e2e/`, run through `uv run --with playwright==1.65.2` under the memory cap |
+| playwright (Python) | 1.65.1 | e2e only (CI and by hand), never shipped or in package.json | the browser smoke tests in `tests/e2e/`, hash-pinned in `tests/e2e/requirements.txt` |
 
 ## Testing and CI
 
