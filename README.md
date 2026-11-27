@@ -2,8 +2,9 @@
 
 A retro top-down RPG about growing from Junior to Senior engineer. Walk a career trail in a
 pixel-art town, fix simulated servers in an in-game terminal, earn money for homelab gear, and
-pick a path (software, SRE, DevOps, platform or systems engineer) on the way to Senior. Hints
-come from an AI that costs tokens and takes a cut of your reward.
+pick a path (software, SRE, DevOps, platform, systems engineer or ethical hacker) on the way to
+Senior. Hints come from an AI that costs tokens and takes a cut of your reward; a fixer behind the
+office pays well for shady jobs, and karma keeps score.
 
 No tracking, no ads, no third-party analytics. It runs from static files and offline on Android;
 any online feature will be opt-in (AGENTS.md, rule 3).

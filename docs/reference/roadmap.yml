@@ -4,7 +4,7 @@
 # Schema: project, goal, current (a phase id), phases [id, name, summary], and done_means for the
 # current phase [item, status done|open, evidence]. Later phases may carry their own done_means.
 project: nines
-goal: "A retro top-down RPG in the browser and on Android where you grow from Junior to Senior engineer along one of five career paths by fixing simulated machines in an in-game terminal; hints come from an AI that costs tokens; no ads or third-party tracking, any online feature opt-in; content as data."
+goal: "A retro top-down RPG in the browser and on Android where you grow from Junior to Senior engineer along one of six career paths by fixing simulated machines in an in-game terminal, with karma that tracks which side of the law you work on; hints come from an AI that costs tokens; no ads or third-party tracking, any online feature opt-in; content as data."
 current: android
 phases:
   - id: architecture
@@ -62,6 +62,17 @@ phases:
       - {item: "Policy: AGENTS.md rule 3 rewritten (not a children's app; network features opt-in, no third-party analytics or ads unless Mark asks); DESIGN.md, Share my progress (option A recommended)", status: done, evidence: "https://github.com/MWest2020/nines/pull/22"}
       - {item: "The Kubernetes path's remaining KCNA pieces, then CKAD (Medior) and CKA/CKS (Senior) content and the kubectl commands they need (docs/content-backlog.md)", status: open, evidence: "https://github.com/MWest2020/nines/blob/main/docs/content-backlog.md"}
       - {item: "Medior City map with the career coach: the path choice in play, each path's mentor, quest line and gate interview (docs/content-backlog.md, Career paths)", status: open, evidence: "https://github.com/MWest2020/nines/blob/main/DESIGN.md"}
+  - id: karma
+    name: "Karma, side hustles, the contractor and the ethical hacker"
+    summary: "Mark, 27 Nov 2026: karma paths (a fixer behind a building, fines, arrests, a three-letter agency), the independent contractor who skips procedures and pays for damage, and ethical hacker as a sixth career path"
+    done_means:
+      - {item: "Karma in the pure core: -100..100 from 0, the meter (saint, trusted, neutral, shady, wanted), progress facts karma, probation, strikes and contractor for content gates (available_when), negative numbers in the condition language, save format 4 with the v3 to v4 migration; Vitest tests for the bounds, the thresholds and the migration (tests/core/karma.test.ts)", status: done, evidence: "PR_URL"}
+      - {item: "Side hustles: quest kind hustle, a scenario risk (base plus factors), the touched() fact, a roll seeded by the save (never unseeded), caught (fine, karma, strike), arrested (big fine, probation), the agency at -60, community service (kind service) as the way back; the heat shown live in the terminal", status: done, evidence: "PR_URL"}
+      - {item: "One side job: the vending machine job (content/quests/vending-prices, Vince behind the office), abstract and fictional, ending on responsible disclosure; played careful and sloppy in tests/quests/karma.test.ts and in the browser smoke test", status: done, evidence: "PR_URL"}
+      - {item: "The independent contractor: a flag in the save and the menu, procedure objectives skipped, 150% pay, damage billed 3x; the bakery hotfix as its quest variant, played by the book and as a contractor in tests and the browser smoke test", status: done, evidence: "PR_URL"}
+      - {item: "Ethical hacker as the sixth path (schema, validator, roadmap, NL/EN pitch, content tagged); the Junior pentest of Polderbank staging (signed scope, a directory-listing misconfiguration, the finding written up), played in tests and the browser smoke test", status: done, evidence: "PR_URL"}
+      - {item: "Community service at the Repair Café (content/quests/repair-cafe); the karma meter on the Career Trail and karma toasts in the HUD; DESIGN.md, Karma", status: done, evidence: "PR_URL"}
+      - {item: "More side jobs and contractor quests, the report-it-instead variant of the vending job, and the ethical hacker's Medior line with a security branch (docs/content-backlog.md, Karma)", status: open, evidence: "https://github.com/MWest2020/nines/blob/main/docs/content-backlog.md"}
   - id: later
     name: "Later: share, cafés, minigames, swag"
     summary: "ideas Mark named on 27 Nov 2026, not designed beyond a line each; tech, memes and fun lead"
