@@ -911,7 +911,15 @@ def main() -> int:
                 outside.append(u)
 
         ctx.on("request", on_request)
-        ctx.on("requestfailed", lambda req: failed.append(f"{req.url} ({req.failure})"))
+        def on_failed(req) -> None:
+            # Offline, the service worker first asks the network for the page itself (network
+            # first for navigations) and answers from its cache when that fails: that one failure
+            # is the design, not a broken file. Any other failure counts.
+            if req.service_worker is not None and req.url == origin + BASE and "INTERNET_DISCONNECTED" in (req.failure or ""):
+                return
+            failed.append(f"{req.url} ({req.failure})")
+
+        ctx.on("requestfailed", on_failed)
         ctx.on("page", lambda pg: pg.on("pageerror", lambda e: errors.append(str(e))))
 
     with sync_playwright() as pw:
