@@ -3,7 +3,23 @@
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ahead, canEnter, facingOf, isNpcSlot, isSolid, objectNamed, objectsAt, objectTile, readMap, reachable, type WorldMap } from '../../src/world/grid';
+import {
+  ahead,
+  approach,
+  canEnter,
+  doorTiles,
+  type Facing,
+  facingOf,
+  findPath,
+  isNpcSlot,
+  isSolid,
+  objectNamed,
+  objectsAt,
+  objectTile,
+  readMap,
+  reachable,
+  type WorldMap,
+} from '../../src/world/grid';
 import { content, ROOT } from '../helpers';
 
 const world = (id: string): WorldMap => {
@@ -87,6 +103,75 @@ describe('the world grid', () => {
   it('object tiles come from the object centre, for points and rectangles', () => {
     expect(objectTile({ x: 24, y: 40 })).toEqual({ x: 1, y: 2 });
     expect(objectTile({ x: 16, y: 32, width: 16, height: 16 })).toEqual({ x: 1, y: 2 });
+  });
+});
+
+/** Walk a path step by step, checking every tile on the way can be entered. */
+function walk(w: WorldMap, from: { x: number; y: number }, steps: readonly Facing[], occupied = new Set<string>()): { x: number; y: number } {
+  let at = from;
+  for (const f of steps) {
+    at = ahead(at.x, at.y, f);
+    expect(canEnter(w, at.x, at.y, occupied), `step onto ${at.x},${at.y}`).toBe(true);
+  }
+  return at;
+}
+
+describe('tap to walk: paths on the grid', () => {
+  it('finds the shortest walk between two open tiles, and [] for no walk at all', () => {
+    const r = world('server-room');
+    const entrance = objectNamed(r, 'entrance')!;
+    expect(findPath(r, entrance, entrance)).toEqual([]);
+    const goal = { x: entrance.x, y: entrance.y - 3 };
+    const path = findPath(r, entrance, goal)!;
+    expect(path).toEqual(['up', 'up', 'up']);
+    expect(walk(r, entrance, path)).toEqual(goal);
+  });
+
+  it('refuses a solid goal, an occupied goal and a goal that cannot be reached', () => {
+    const v = world('junior-village');
+    const start = objectNamed(v, 'player-start')!;
+    expect(findPath(v, start, { x: 0, y: 0 })).toBeNull(); // the woods
+    const femke = objectNamed(v, 'npc-1')!;
+    expect(findPath(v, start, femke, new Set([`${femke.x},${femke.y}`]))).toBeNull();
+    expect(findPath(v, start, { x: -1, y: 3 })).toBeNull();
+  });
+
+  it('walks around NPCs and never through a door unless the door is the goal', () => {
+    const v = world('junior-village');
+    const start = objectNamed(v, 'player-start')!;
+    const door = objectNamed(v, 'server-room-door')!;
+    const doors = doorTiles(v);
+    expect(doors.has(`${door.x},${door.y}`)).toBe(true);
+    const occupied = new Set(['npc-1', 'npc-2', 'npc-3', 'npc-4'].map((n) => objectNamed(v, n)!).map((o) => `${o.x},${o.y}`));
+    const toDoor = findPath(v, start, door, occupied, doors)!;
+    expect(walk(v, start, toDoor, occupied)).toEqual({ x: door.x, y: door.y });
+    // a walk past the door to the tile just outside it does not step on the door
+    const exit = objectNamed(v, 'server-room-exit')!;
+    const toExit = findPath(v, start, exit, occupied, doors)!;
+    let at = { x: start.x, y: start.y };
+    for (const f of toExit) {
+      at = ahead(at.x, at.y, f);
+      expect(doors.has(`${at.x},${at.y}`)).toBe(false);
+    }
+    expect(at).toEqual({ x: exit.x, y: exit.y });
+  });
+
+  it('walks up to a terminal, an NPC and the shop counter and faces it', () => {
+    const v = world('junior-village');
+    const start = objectNamed(v, 'player-start')!;
+    const doors = doorTiles(v);
+    const occupied = new Set(['npc-1', 'npc-2', 'npc-3', 'npc-4'].map((n) => objectNamed(v, n)!).map((o) => `${o.x},${o.y}`));
+    for (const name of ['ravi-laptop', 'homelab-store', 'npc-1']) {
+      const target = objectNamed(v, name)!;
+      const a = approach(v, start, target, occupied, doors);
+      expect(a, name).not.toBeNull();
+      const at = walk(v, start, a!.path, occupied);
+      expect(ahead(at.x, at.y, a!.facing), name).toEqual({ x: target.x, y: target.y });
+    }
+    // standing next to it already: no steps, only the facing
+    const r = world('server-room');
+    const rack = objectNamed(r, 'rack-web-01')!;
+    expect(approach(r, { x: rack.x, y: rack.y + 1 }, rack)).toEqual({ path: [], facing: 'up' });
   });
 });
 

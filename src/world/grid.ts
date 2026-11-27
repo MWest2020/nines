@@ -129,3 +129,76 @@ export function facingOf(props: Record<string, string>, fallback: Facing = 'down
   const f = own(props, 'facing');
   return isFacing(f) ? f : fallback;
 }
+
+const key = (x: number, y: number): string => `${x},${y}`;
+
+/** Door tiles of a map, as "x,y" keys: a walk only steps on one when it is the goal. */
+export function doorTiles(w: WorldMap): Set<string> {
+  return new Set(w.objects.filter((o) => o.type === 'door').map((o) => key(o.x, o.y)));
+}
+
+/**
+ * The shortest walk from one tile to another (tap to walk): the steps to take, [] when already
+ * there, null when it cannot be reached. Breadth-first over the four directions, so it is
+ * deterministic. Tiles in `occupied` (NPCs) never take a step; tiles in `avoid` (doors) only
+ * when they are the goal, so a walk never leaves the map by accident.
+ */
+export function findPath(
+  w: WorldMap,
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  occupied: ReadonlySet<string> = new Set(),
+  avoid: ReadonlySet<string> = new Set(),
+): Facing[] | null {
+  if (from.x === to.x && from.y === to.y) return [];
+  if (!canEnter(w, to.x, to.y, occupied)) return null;
+  const prev = new Map<string, { from: string; dir: Facing }>();
+  const start = key(from.x, from.y);
+  const goal = key(to.x, to.y);
+  const seen = new Set([start]);
+  const queue: [number, number][] = [[from.x, from.y]];
+  while (queue.length > 0) {
+    const [x, y] = queue.shift()!;
+    for (const f of FACINGS) {
+      const n = ahead(x, y, f);
+      const k = key(n.x, n.y);
+      if (seen.has(k) || !canEnter(w, n.x, n.y, occupied) || (avoid.has(k) && k !== goal)) continue;
+      seen.add(k);
+      prev.set(k, { from: key(x, y), dir: f });
+      if (k === goal) {
+        const steps: Facing[] = [];
+        for (let at = goal; at !== start; ) {
+          const p = prev.get(at)!;
+          steps.push(p.dir);
+          at = p.from;
+        }
+        return steps.reverse();
+      }
+      queue.push([n.x, n.y]);
+    }
+  }
+  return null;
+}
+
+/**
+ * How to walk up to a tile and face it (tap an NPC, a terminal or the shop counter): the
+ * shortest walk to a free neighbour, and the facing that looks at the target from there. Null
+ * when no neighbour can be reached.
+ */
+export function approach(
+  w: WorldMap,
+  from: { x: number; y: number },
+  target: { x: number; y: number },
+  occupied: ReadonlySet<string> = new Set(),
+  avoid: ReadonlySet<string> = new Set(),
+): { path: Facing[]; facing: Facing } | null {
+  let best: { path: Facing[]; facing: Facing } | null = null;
+  for (const facing of FACINGS) {
+    // stand one step back from the target, looking towards it
+    const spot = { x: target.x - STEP[facing].dx, y: target.y - STEP[facing].dy };
+    if (avoid.has(key(spot.x, spot.y))) continue;
+    const path = findPath(w, from, spot, occupied, avoid);
+    if (path && (!best || path.length < best.path.length)) best = { path, facing };
+  }
+  return best;
+}
