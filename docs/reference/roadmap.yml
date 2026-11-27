@@ -25,8 +25,9 @@ phases:
     done_means:
       - {item: "Battle: nearby places search (Junior): geohash with neighbour cells, quadtree, ranking by exact distance", status: done, evidence: "https://github.com/MWest2020/nines/pull/11"}
       - {item: "Battle: URL shortener (Medior): ID generation, base62, caching, 301 vs 302", status: done, evidence: "https://github.com/MWest2020/nines/pull/11"}
-      - {item: "Battle: ticket booking (Senior): holds with a TTL, conditional writes or row locks, idempotency", status: open, evidence: "https://github.com/MWest2020/nines/blob/main/docs/content-backlog.md"}
-      - {item: "Battle: collaborative editor (Senior): OT vs CRDT, offline merge", status: open, evidence: "https://github.com/MWest2020/nines/blob/main/docs/content-backlog.md"}
+      - {item: "Battle: ticket booking (Senior): holds with a TTL, conditional writes or row locks, idempotency", status: done, evidence: "https://github.com/MWest2020/nines/pull/13"}
+      - {item: "Battle: collaborative editor (Senior): OT vs CRDT, offline merge", status: done, evidence: "https://github.com/MWest2020/nines/pull/13"}
+      - {item: "Senior Summit map with spawn slots npc-1 (Noor) and npc-2 (Joris): makes the two Senior interviews reachable", status: open, evidence: "https://github.com/MWest2020/nines/blob/main/ARCHITECTURE.md"}
 done_means:
   - {item: "Junior Village: one Tiled map, player movement with collision, three NPCs, the server room interior; CC0 tiles recorded in ASSETS.md", status: done, evidence: "https://github.com/MWest2020/nines/pull/8"}
   - {item: "The terminal overlay (xterm.js output, own input line, quick-command buttons, the built-in editor) runs the simulator; the three quests are completable on desktop (tests/e2e/smoke.py plays them in CI)", status: done, evidence: "https://github.com/MWest2020/nines/pull/12"}

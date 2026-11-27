@@ -1,0 +1,106 @@
+# Senior design interview: a real-time collaborative document editor. Facts checked: a version
+# check on the whole document is safe but unusable (every concurrent edit conflicts); OT (central
+# ordering, transform functions) vs sequence CRDTs (unique ordered ids, commutative merge,
+# per-character metadata, tombstones), which is debatable and scored on the reasoning: both
+# well-argued answers are graded best; intent preservation for an insert inside a concurrently
+# deleted range; reconnect after offline work with state vectors; one owning server per document;
+# snapshots plus an operation log; presence is ephemeral; fan-out arithmetic.
+schema: 1
+kind: design
+attacker: attacker
+intro: [intro.1, intro.2]
+trigger: {kind: npc}
+rounds:
+  - id: clarify
+    type: clarify
+    prompt: [clarify.prompt.1]
+    stakes: 15
+    pick: 2
+    options:
+      - {id: scale, grade: best, text: clarify.scale.text, why: clarify.scale.why}
+      - {id: offline, grade: best, text: clarify.offline.text, why: clarify.offline.why}
+      - {id: rich, grade: fair, text: clarify.rich.text, why: clarify.rich.why}
+      - {id: history, grade: fair, text: clarify.history.text, why: clarify.history.why}
+      - {id: library, grade: weak, text: clarify.library.text, why: clarify.library.why}
+      - {id: transport, grade: weak, text: clarify.transport.text, why: clarify.transport.why}
+  - id: overwrite
+    type: flaw
+    prompt: [overwrite.prompt.1]
+    stakes: 15
+    proposal: [overwrite.proposal.1, overwrite.proposal.2, overwrite.proposal.3]
+    options:
+      - {id: lost, grade: best, text: overwrite.lost.text, why: overwrite.lost.why}
+      - {id: bandwidth, grade: fair, text: overwrite.bandwidth.text, why: overwrite.bandwidth.why}
+      - {id: race, grade: weak, text: overwrite.race.text, why: overwrite.race.why}
+      - {id: locks, grade: weak, text: overwrite.locks.text, why: overwrite.locks.why}
+  - id: model
+    type: tradeoff
+    prompt: [model.prompt.1, model.prompt.2]
+    stakes: 15
+    options:
+      - {id: crdt, grade: best, text: model.crdt.text, why: model.crdt.why}
+      - {id: ot, grade: best, text: model.ot.text, why: model.ot.why}
+      - {id: converge, grade: fair, text: model.converge.text, why: model.converge.why}
+      - {id: p2p, grade: weak, text: model.p2p.text, why: model.p2p.why}
+      - {id: nodelete, grade: weak, text: model.nodelete.text, why: model.nodelete.why}
+  - id: intent
+    type: tradeoff
+    prompt: [intent.prompt.1, intent.prompt.2]
+    stakes: 15
+    options:
+      - {id: keep, grade: best, text: intent.keep.text, why: intent.keep.why}
+      - {id: drop, grade: fair, text: intent.drop.text, why: intent.drop.why}
+      - {id: revive, grade: weak, text: intent.revive.text, why: intent.revive.why}
+      - {id: raw, grade: weak, text: intent.raw.text, why: intent.raw.why}
+  - id: reconnect
+    type: order
+    prompt: [reconnect.prompt.1]
+    stakes: 15
+    items:
+      - {id: auth, text: reconnect.auth.text, why: reconnect.auth.why, rank: 1}
+      - {id: vectors, text: reconnect.vectors.text, why: reconnect.vectors.why, rank: 2}
+      - {id: missing, text: reconnect.missing.text, why: reconnect.missing.why, rank: 3}
+      - {id: persist, text: reconnect.persist.text, why: reconnect.persist.why, rank: 4}
+      - {id: broadcast, text: reconnect.broadcast.text, why: reconnect.broadcast.why, rank: 5}
+      - {id: review, text: reconnect.review.text, why: reconnect.review.why, rank: 5}
+  - id: servers
+    type: flaw
+    prompt: [servers.prompt.1]
+    stakes: 15
+    proposal: [servers.proposal.1, servers.proposal.2, servers.proposal.3]
+    options:
+      - {id: owner, grade: best, text: servers.owner.text, why: servers.owner.why}
+      - {id: cursors, grade: fair, text: servers.cursors.text, why: servers.cursors.why}
+      - {id: sockets, grade: weak, text: servers.sockets.text, why: servers.sockets.why}
+      - {id: threads, grade: weak, text: servers.threads.text, why: servers.threads.why}
+  - id: storage
+    type: tradeoff
+    prompt: [storage.prompt.1]
+    stakes: 15
+    options:
+      - {id: logsnap, grade: best, text: storage.logsnap.text, why: storage.logsnap.why}
+      - {id: latest, grade: weak, text: storage.latest.text, why: storage.latest.why}
+      - {id: logonly, grade: fair, text: storage.logonly.text, why: storage.logonly.why}
+      - {id: memory, grade: weak, text: storage.memory.text, why: storage.memory.why}
+      - {id: presence, grade: weak, text: storage.presence.text, why: storage.presence.why}
+  - id: fanout
+    type: estimate
+    prompt: [fanout.prompt.1, fanout.prompt.2]
+    stakes: 15
+    value: 12250
+    working: fanout.working
+    options:
+      - {id: lt1k, grade: weak, min: 0, max: 1000, text: fanout.lt1k.text, why: fanout.lt1k.why}
+      - {id: thousands, grade: fair, min: 1000, max: 10000, text: fanout.thousands.text, why: fanout.thousands.why}
+      - {id: tens, grade: best, min: 10000, max: 100000, text: fanout.tens.text, why: fanout.tens.why}
+      - {id: hundreds, grade: weak, min: 100000, max: 1000000, text: fanout.hundreds.text, why: fanout.hundreds.why}
+      - {id: millions, grade: weak, min: 1000000, text: fanout.millions.text, why: fanout.millions.why}
+hints:
+  - {id: model, round: model, when: 'attempts >= 1', text: hint.model}
+  - {id: intent, round: intent, when: 'attempts >= 1', text: hint.intent}
+  - {id: servers, round: servers, when: 'attempts >= 1', text: hint.servers}
+  - {id: fanout, round: fanout, when: 'attempts >= 1 || misses >= 3', text: hint.fanout}
+  - {id: breathe, when: 'confidence <= 40', text: hint.breathe}
+outro:
+  won: [won.1]
+  lost: [lost.1]

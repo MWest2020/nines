@@ -58,10 +58,12 @@ describe('the battles in content', () => {
   it('cover the three encounter kinds and the three ways to start', () => {
     const bs = battles();
     expect(bs.map((b) => [b.id, b.spec.kind, b.spec.trigger.kind, b.quest.stage])).toEqual([
+      ['collab-editor-interview', 'design', 'npc', 'senior'],
       ['friday-scope', 'stakeholder', 'npc', 'junior'],
       ['nearby-places', 'design', 'npc', 'junior'],
       ['night-pager', 'incident', 'pager', 'junior'],
       ['rate-limiter-interview', 'design', 'gate', 'junior'],
+      ['ticket-booking-interview', 'design', 'npc', 'senior'],
       ['url-shortener', 'design', 'npc', 'medior'],
     ]);
   });
@@ -95,6 +97,19 @@ describe('the battles in content', () => {
     expect(conversation(save({ 'rate-limiter-interview': 'done' }), content(), 'ingrid')).toMatchObject({ offer: 'url-shortener', battle: 'url-shortener' });
     const node = content().roadmap.nodes.find((n) => n.id === q.roadmap_node)!;
     expect([node.stage, node.branch]).toEqual(['medior', 'design']);
+  });
+  it('the Senior Summit interviews are started by their giver, who stands on the map roadmap.yaml plans for the town', () => {
+    const { roadmap, quests } = content();
+    const summit = roadmap.towns.find((t) => t.stage === 'senior')!;
+    for (const id of ['ticket-booking-interview', 'collab-editor-interview']) {
+      const q = quests.find((x) => x.id === id)!;
+      expect(q.battle?.trigger.kind, id).toBe('npc');
+      expect(q.quest.start.map, id).toBe(summit.map);
+      expect(q.npc?.spawn.map, id).toBe(summit.map);
+      expect(q.npc?.spawn.slot, id).toBe(q.quest.start.object);
+      expect(q.battle!.rounds.length, id).toBeGreaterThanOrEqual(6);
+      expect(q.battle!.rounds.length, id).toBeLessThanOrEqual(8);
+    }
   });
   it('use every question type', () => {
     const types = new Set(battles().flatMap((b) => b.spec.rounds.map((r) => r.type)));
@@ -196,13 +211,30 @@ describe('the battles in content', () => {
   it('are lost by a player who always picks the longest or the shortest cards', () => {
     const { locales } = content();
     for (const b of battles()) {
-      for (const dir of [1, -1]) {
-        const pick = (r: BattleRound) => {
-          if (r.type === 'order') return worstAnswer(r);
-          const len = (id: string) => locales.en[questKey(b.id, r.options.find((o) => o.id === id)!.text)]!.length * dir;
-          return ids(r).sort((x, y) => len(y) - len(x)).slice(0, pickOf(r));
-        };
-        expect(play(b.id, b.spec, pick).status, `${b.id} ${dir > 0 ? 'longest' : 'shortest'}`).toBe('lost');
+      for (const lang of ['en', 'nl'] as const) {
+        for (const dir of [1, -1]) {
+          const pick = (r: BattleRound) => {
+            if (r.type === 'order') return worstAnswer(r);
+            const len = (id: string) => locales[lang][questKey(b.id, r.options.find((o) => o.id === id)!.text)]!.length * dir;
+            return ids(r).sort((x, y) => len(y) - len(x)).slice(0, pickOf(r));
+          };
+          expect(play(b.id, b.spec, pick).status, `${b.id} ${lang} ${dir > 0 ? 'longest' : 'shortest'}`).toBe('lost');
+        }
+      }
+    }
+  });
+  it('do not give the answer away by length within one battle, in either language', () => {
+    // The checks above run over all battles together; here each battle and each language must
+    // hold on its own, so a new battle cannot hide behind the others.
+    const { locales } = content();
+    for (const b of battles()) {
+      for (const lang of ['en', 'nl'] as const) {
+        const rounds = b.spec.rounds.flatMap((r) => (r.type === 'order' ? [] : [r]));
+        const len = (o: { text: string }) => locales[lang][questKey(b.id, o.text)]!.length;
+        const longestIsBest = rounds.filter((r) => [...r.options].sort((x, y) => len(y) - len(x))[0]!.grade === 'best').length;
+        expect(longestIsBest / rounds.length, `${b.id} ${lang}: the longest card is the best`).toBeLessThanOrEqual(0.5);
+        const shortestIsBest = rounds.filter((r) => [...r.options].sort((x, y) => len(x) - len(y))[0]!.grade === 'best').length;
+        expect(shortestIsBest / rounds.length, `${b.id} ${lang}: the shortest card is the best`).toBeLessThanOrEqual(0.5);
       }
     }
   });

@@ -1,10 +1,11 @@
 # The Career Trail: our own nodes. Towns are career stages, branches are the routes between
-# them. A node lights up when a quest that names it as roadmap_node is done.
+# them. A node lights up when a quest that names it as roadmap_node is done. A town's map that
+# content/maps does not have yet is planned: content may be written for it ahead of the map.
 schema: 1
 towns:
-  - {id: junior, stage: junior, title: town.junior}
-  - {id: medior, stage: medior, title: town.medior}
-  - {id: senior, stage: senior, title: town.senior}
+  - {id: junior, stage: junior, title: town.junior, map: junior-village}
+  - {id: medior, stage: medior, title: town.medior, map: medior-city}
+  - {id: senior, stage: senior, title: town.senior, map: senior-summit}
 branches:
   - {id: linux, title: branch.linux}
   - {id: networking, title: branch.networking}
@@ -31,3 +32,5 @@ nodes:
   - {id: networking-dns, branch: networking, stage: medior, title: node.networking.dns, requires: [linux-files]}
   - {id: iac-first, branch: iac, stage: medior, title: node.iac.first, requires: [git-basics, cicd-pipeline]}
   - {id: design-url-shortener, branch: design, stage: medior, title: node.design.url_shortener, requires: [design-rate-limiter]}
+  - {id: design-ticket-booking, branch: design, stage: senior, title: node.design.ticket_booking, requires: [design-rate-limiter]}
+  - {id: design-collab-editor, branch: design, stage: senior, title: node.design.collab_editor, requires: [design-rate-limiter]}

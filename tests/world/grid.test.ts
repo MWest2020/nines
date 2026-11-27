@@ -70,8 +70,13 @@ describe('the world grid', () => {
   });
 
   it('every content NPC stands on a spawn slot of its map', () => {
-    const npcs = [...content().npcs, ...content().quests.flatMap((q) => (q.npc ? [q.npc] : []))];
+    // NPCs on a planned map (roadmap.yaml names it, content/maps has no file yet) wait for it
+    const built = new Set(content().maps.map((m) => m.id));
+    const all = [...content().npcs, ...content().quests.flatMap((q) => (q.npc ? [q.npc] : []))];
+    const npcs = all.filter((n) => built.has(n.spawn.map));
     expect(npcs.map((n) => n.id).sort()).toEqual(['bas', 'daan', 'femke', 'ingrid', 'ravi']);
+    const planned = new Set(content().roadmap.towns.flatMap((t) => (t.map ? [t.map] : [])));
+    for (const n of all) if (!built.has(n.spawn.map)) expect(planned.has(n.spawn.map), n.id).toBe(true);
     for (const n of npcs) {
       const slot = objectNamed(world(n.spawn.map), n.spawn.slot);
       expect(slot?.type, n.id).toBe('spawn');

@@ -1,0 +1,22 @@
+# A Senior battle quest: a system-design interview on Senior Summit. Talking to Noor starts it.
+# Senior Summit has no map yet; senior-summit is the map roadmap.yaml plans for the town, so
+# the quest validates now and becomes reachable when that map lands (ARCHITECTURE.md, Content).
+schema: 1
+id: ticket-booking-interview
+author: {name: "Nines team"}
+title: title
+summary: summary
+stage: senior
+branch: design
+track: any
+roadmap_node: design-ticket-booking
+# requires: until a gate guards the road to Senior Summit, the Junior gate is the last one;
+# switch this to that gate battle when it exists (issue #14).
+requires: [rate-limiter-interview]
+giver: noor
+start: {map: senior-summit, object: npc-1}
+reward: {money: 600, xp: 80}
+dialogue:
+  offer: [offer.1, offer.2]
+  active: [active.1]
+  done: [done.1]

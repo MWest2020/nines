@@ -1,0 +1,103 @@
+# Senior design interview: ticket booking for a hot on-sale. The invariant: a seat is never sold
+# twice. Facts checked: holds as data with a deadline from one clock; the read-then-write race at
+# READ COMMITTED (PostgreSQL); conditional UPDATE vs SELECT ... FOR UPDATE vs optimistic
+# versions vs a single writer vs a lock in Redis (no fencing token); idempotency keys; authorise,
+# commit, then capture; payment after the hold expired; the on-sale peak. Debatable points say so.
+schema: 1
+kind: design
+attacker: attacker
+intro: [intro.1, intro.2]
+trigger: {kind: npc}
+rounds:
+  - id: clarify
+    type: clarify
+    prompt: [clarify.prompt.1]
+    stakes: 15
+    pick: 2
+    options:
+      - {id: seats, grade: best, text: clarify.seats.text, why: clarify.seats.why}
+      - {id: demand, grade: best, text: clarify.demand.text, why: clarify.demand.why}
+      - {id: checkout, grade: fair, text: clarify.checkout.text, why: clarify.checkout.why}
+      - {id: provider, grade: weak, text: clarify.provider.text, why: clarify.provider.why}
+      - {id: nosql, grade: weak, text: clarify.nosql.text, why: clarify.nosql.why}
+  - id: hold
+    type: tradeoff
+    prompt: [hold.prompt.1, hold.prompt.2]
+    stakes: 15
+    options:
+      - {id: row, grade: best, text: hold.row.text, why: hold.row.why}
+      - {id: cron, grade: fair, text: hold.cron.text, why: hold.cron.why}
+      - {id: redis, grade: fair, text: hold.redis.text, why: hold.redis.why}
+      - {id: timer, grade: weak, text: hold.timer.text, why: hold.timer.why}
+      - {id: cart, grade: weak, text: hold.cart.text, why: hold.cart.why}
+  - id: race
+    type: flaw
+    prompt: [race.prompt.1]
+    stakes: 15
+    proposal: [race.proposal.1, race.proposal.2, race.proposal.3]
+    options:
+      - {id: both, grade: best, text: race.both.text, why: race.both.why}
+      - {id: atomic, grade: weak, text: race.atomic.text, why: race.atomic.why}
+      - {id: expired, grade: fair, text: race.expired.text, why: race.expired.why}
+      - {id: serializable, grade: fair, text: race.serializable.text, why: race.serializable.why}
+  - id: claim
+    type: tradeoff
+    prompt: [claim.prompt.1, claim.prompt.2]
+    stakes: 15
+    options:
+      - {id: conditional, grade: best, text: claim.conditional.text, why: claim.conditional.why}
+      - {id: forupdate, grade: fair, text: claim.forupdate.text, why: claim.forupdate.why}
+      - {id: version, grade: fair, text: claim.version.text, why: claim.version.why}
+      - {id: writer, grade: fair, text: claim.writer.text, why: claim.writer.why}
+      - {id: redlock, grade: weak, text: claim.redlock.text, why: claim.redlock.why}
+  - id: retry
+    type: tradeoff
+    prompt: [retry.prompt.1, retry.prompt.2]
+    stakes: 15
+    options:
+      - {id: key, grade: best, text: retry.key.text, why: retry.key.why}
+      - {id: check, grade: fair, text: retry.check.text, why: retry.check.why}
+      - {id: holdkey, grade: fair, text: retry.holdkey.text, why: retry.holdkey.why}
+      - {id: fresh, grade: weak, text: retry.fresh.text, why: retry.fresh.why}
+      - {id: noretry, grade: weak, text: retry.noretry.text, why: retry.noretry.why}
+  - id: confirm
+    type: order
+    prompt: [confirm.prompt.1]
+    stakes: 15
+    items:
+      - {id: key, text: confirm.key.text, why: confirm.key.why, rank: 1}
+      - {id: extend, text: confirm.extend.text, why: confirm.extend.why, rank: 1}
+      - {id: authorise, text: confirm.authorise.text, why: confirm.authorise.why, rank: 2}
+      - {id: commit, text: confirm.commit.text, why: confirm.commit.why, rank: 3}
+      - {id: capture, text: confirm.capture.text, why: confirm.capture.why, rank: 4}
+      - {id: mail, text: confirm.mail.text, why: confirm.mail.why, rank: 5}
+  - id: late
+    type: tradeoff
+    prompt: [late.prompt.1, late.prompt.2]
+    stakes: 15
+    options:
+      - {id: refund, grade: best, text: late.refund.text, why: late.refund.why}
+      - {id: first, grade: weak, text: late.first.text, why: late.first.why}
+      - {id: longttl, grade: fair, text: late.longttl.text, why: late.longttl.why}
+      - {id: overbook, grade: weak, text: late.overbook.text, why: late.overbook.why}
+  - id: peak
+    type: estimate
+    prompt: [peak.prompt.1, peak.prompt.2]
+    stakes: 15
+    value: 20000
+    working: peak.working
+    options:
+      - {id: under, grade: weak, min: 0, max: 500, text: peak.under.text, why: peak.under.why}
+      - {id: low, grade: weak, min: 500, max: 2000, text: peak.low.text, why: peak.low.why}
+      - {id: mid, grade: fair, min: 2000, max: 8000, text: peak.mid.text, why: peak.mid.why}
+      - {id: right, grade: best, min: 8000, max: 30000, text: peak.right.text, why: peak.right.why}
+      - {id: over, grade: weak, min: 30000, text: peak.over.text, why: peak.over.why}
+hints:
+  - {id: hold, round: hold, when: 'attempts >= 1', text: hint.hold}
+  - {id: claim, round: claim, when: 'attempts >= 1', text: hint.claim}
+  - {id: late, round: late, when: 'attempts >= 1', text: hint.late}
+  - {id: peak, round: peak, when: 'attempts >= 1 || misses >= 3', text: hint.peak}
+  - {id: breathe, when: 'confidence <= 40', text: hint.breathe}
+outro:
+  won: [won.1]
+  lost: [lost.1]

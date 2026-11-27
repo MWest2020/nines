@@ -117,7 +117,8 @@ export type LocaleMap = Record<string, string>;
 
 export interface RoadmapSpec {
   schema: 1;
-  towns: { id: string; stage: Stage; title: string }[];
+  /** `map`: the town's map; a map named here that content/maps does not have yet is planned */
+  towns: { id: string; stage: Stage; title: string; map?: string }[];
   branches: { id: BranchId; title: string }[];
   nodes: { id: string; branch: BranchId; stage: Stage; title: string; requires: string[] }[];
 }
