@@ -38,7 +38,8 @@ src/
     engine.ts       BattleState, rounds, meters, retry, hints
     score.ts        scoring per question type, perfect and worst answers, explanations
     seed.ts         seeded hash, PRNG and shuffle (no Math.random)
-    triggers.ts     pager rolls and town gates
+    triggers.ts     pager rolls and town gates; whether a gate's town has a map yet
+    screen.ts       what the battle screen shows: phases, picks, transcript, whiteboard, debrief
   core/           game rules without rendering (pure)
     i18n.ts         t(key, params), locale choice
     save.ts         save format, versioning, migrations
@@ -64,7 +65,7 @@ src/
     storage.ts      localStorage, or memory when the browser blocks it
     ui/             HudScene + DialogueBox, TrailScene, ShopScene, CreditsScene, the pixel font
     terminal/       TerminalOverlay.ts (DOM + xterm.js), terminal.css, wire.ts (to the GameApi)
-    (MVP) BattleOverlay (DOM)
+    battle/         BattleOverlay.ts (DOM) + battle.css, open.ts (open, record, reward, gate line)
 assets/           tilesets and sheets outside content (Kenney packs, own art), each in ASSETS.md
 tools/
   content/load.ts         load + validate + bundle /content (Node, build time only)
@@ -684,10 +685,33 @@ the one-off event bonuses already paid (`<quest>/<event>`).
     colours (prompt in ice, failed commands in orange). xterm is sized by measuring one cell in
     that font, without the fit addon. Every string is a locale key; the machine's own output
     stays as the real tools print it (i18n, The terminal boundary).
-- **BattleOverlay**: DOM, like the terminal, over the dimmed world: the transcript, the
-  whiteboard, the two meters, the answer cards (DESIGN.md, Battles). Map objects add
-  `gate-<town>` (where a gate battle's giver stands and the road is blocked) and the `start`
-  objects of battle quests.
+- **BattleOverlay** (`src/game/battle/`): DOM, like the terminal, over the dimmed world: the
+  transcript, the whiteboard, the two meters, the answer cards (DESIGN.md, Battles). It renders
+  a `Screen` from `src/battle/screen.ts`, which is pure and holds every rule the screen follows:
+  three phases (answer, review with the explanations, end with the debrief), a pick-one round
+  replaces its pick, a pick-many round refuses more than `pick`, an order round starts with
+  every card and moves them, Send works only for a complete answer, and Try again calls
+  `retryBattle`. Tries are counted per battle while the game runs (`attemptsAfter`, not saved),
+  so a battle closed after a loss or half-way and opened again starts at the next attempt, with
+  its hints and a new card order. Locale keys only, translated when drawn. The first `intro` line is the
+  announcement (`PAGER 03:07 · ...`); the whiteboard of a design interview holds every prompt
+  line before a round's question (the requirements so far) and, during a `flaw` round, only the
+  proposal. The attacker's portrait is the giver's standing frame cropped to the head and drawn
+  into a small canvas. Buttons are native, so mouse, touch and keyboard all work: arrows move
+  between cards, Enter or Space picks; an order step is picked up with Space, moved with the
+  arrows and put down with Space, or moved with its ↑/↓ buttons, or dragged by its handle
+  (pointer events, so a finger works too); Escape leaves (nothing is recorded for a battle left
+  half-way). Key presses inside the overlay are stopped on `window` in the capture phase, so
+  Phaser never sees them.
+- **Battle wiring** (`src/game/bridge.ts` → `src/game/battle/open.ts`): a talk whose
+  conversation names a battle opens it (npc and gate triggers); a battle object (`meeting-room`,
+  `on-call-laptop`) replays its quest's battle once the quest is active or done; `enterMap`
+  returning a pager battle starts that quest and opens it at once. Each finished try calls
+  `recordBattle`: a win pays once and shows the reward on the end screen, a loss keeps the quest
+  active and costs nothing. After the overlay closes, the giver's done lines follow. The Medior
+  gate is Ingrid herself (she stands on `gate-medior` and her quest's start object is that
+  spot); while no map belongs to a gate's town (a map id equal to the town id or starting with
+  it), winning, and talking to her afterwards, says that the town opens later.
 - **TrailScene**, **ShopScene** (one item per page, ‹ › to page), **CreditsScene**: canvas, driven by `roadmap.yaml`,
   `shop.yaml` and the bundle's `credits`. Canvas text uses our own pixel font, drawn from glyph
   rows in `src/game/ui/font.ts` (no font file); a character it lacks shows as `?`, and a test
@@ -771,6 +795,7 @@ Pinned exactly, each version published at least two weeks before it was added (c
 | @types/node | 22.20.5 | dev | types for tools and tests |
 | @xterm/xterm | 6.0.0 | runtime | the terminal's output renderer (MIT); no addons; published 22 Dec 2025, the current release |
 | @capacitor/core, cli, android | 8.x | Android phase | pinned when that phase starts |
+| playwright (Python) | 1.65.1 | e2e only (CI and by hand), never shipped or in package.json | the browser smoke tests in `tests/e2e/`, hash-pinned in `tests/e2e/requirements.txt` |
 
 ## Testing and CI
 
@@ -789,3 +814,8 @@ Pinned exactly, each version published at least two weeks before it was added (c
   database-deleting mistake included. It fails on any request outside the origin and on any page
   error. CI runs it after `check:dist`; locally it runs under the memory cap in AGENTS.md, one
   browser at a time.
+- `tests/e2e/battle_smoke.py` (Python Playwright as well): serves `dist/` itself and plays the
+  rate-limiter interview to a win, the Friday talk to a loss and a winning retry, the pager going
+  off on a map entry, and the Dutch screen left half-way and opened again, by real key presses,
+  clicks and a drag. It fails on any request that leaves the origin and on any page error. CI
+  runs it after the terminal smoke test.

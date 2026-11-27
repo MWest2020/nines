@@ -5,7 +5,7 @@ offer.2: "Vandaag: een URL-verkorter. Een klein product met veel beslissingen er
 active.1: "De stift is van jou. Eerst de getallen, dan de blokjes."
 done.1: "Een degelijke review. Je hebt elke keuze afgewogen tegen wat hij kost; dat is de Medior-gewoonte."
 attacker: "Ingrid · staff engineer"
-intro.1: "Whiteboardgesprek. Onderwerp: een URL-verkorter."
+intro.1: "Whiteboardgesprek · Onderwerp: een URL-verkorter"
 intro.2: "Ingrid schrijft s.example/aB3x9Kq op het bord. \"Er gaat een lange link in, er komt een korte uit, en de korte stuurt door naar de lange. Ontwerp de dienst.\""
 clarify.prompt.1: "\"Twee vragen voordat je blokjes tekent. Welke twee?\""
 clarify.volume.text: "\"Hoeveel links worden er per dag gemaakt, en hoe vaak wordt elke link aangeklikt?\""

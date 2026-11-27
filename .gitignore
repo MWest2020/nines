@@ -10,3 +10,4 @@ coverage/
 keystore.properties
 android/app/release/
 __pycache__/
+test-results/

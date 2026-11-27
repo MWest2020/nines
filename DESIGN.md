@@ -238,8 +238,9 @@ the whiteboard. Our battles take that shape.
 - **Layout.** A chat transcript, not an arena: the attacker's messages on the left with a small
   portrait (the NPC's own sprite, head only, never full figures facing off), the player's
   answers on the right, explanations as indented notes under each answer. Design interviews
-  add a whiteboard panel above the transcript that holds the requirements so far and, in a
-  "spot the flaw" round, the proposal being judged.
+  add a whiteboard panel above the transcript that holds the requirements so far (the context
+  the interviewer gave before each question) and, in a "spot the flaw" round, only the proposal
+  being judged. Another kind shows the whiteboard only for a proposal.
 - **Meters.** Two labelled gauges in the side panel, with words and numbers, never bars over
   sprites. The player's is **Confidence**. The attacker's is **Pressure**, labelled by kind:
   **Doubt** for the interviewer, **Impact** for the incident, **Pressure** for the product

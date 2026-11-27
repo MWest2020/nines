@@ -1,0 +1,626 @@
+/* The battle overlay (DESIGN.md, Battles: the war room). DOM over the dimmed world: an ink
+   window with a chat transcript, a whiteboard for design interviews, the two meters in a side
+   panel and the answer cards. Palette from DESIGN.md; fonts are the device's own. */
+
+.nb-battle {
+  --ink: #101820;
+  --shadow: #283840;
+  --slate: #485860;
+  --grey: #788890;
+  --mist: #b0b8b8;
+  --paper: #f8f0d8;
+  --night: #183048;
+  --sky: #4880c8;
+  --ice: #88b8e8;
+  --grass: #58a058;
+  --leaf: #88c070;
+  --clay: #c86848;
+  --orange: #e89858;
+  --gold: #f8d070;
+  --brick: #882828;
+  --mono: ui-monospace, 'Cascadia Mono', 'DejaVu Sans Mono', monospace;
+  --sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'DejaVu Sans', sans-serif;
+
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(16, 24, 32, 0.72);
+  color: var(--paper);
+  font: 15px/1.45 var(--sans);
+  -webkit-text-size-adjust: 100%;
+}
+
+.nb-battle [hidden] {
+  display: none !important;
+}
+
+.nb-battle *,
+.nb-battle *::before,
+.nb-battle *::after {
+  box-sizing: border-box;
+}
+
+.nb-window {
+  display: flex;
+  flex-direction: column;
+  width: min(1000px, calc(100vw - 24px));
+  height: min(760px, calc(100vh - 24px));
+  height: min(760px, calc(100dvh - 24px));
+  background: var(--ink);
+  border: 1px solid var(--slate);
+}
+
+.nb-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 8px 7px 14px;
+  border-bottom: 1px solid var(--gold);
+  font-family: var(--mono);
+}
+
+.nb-title {
+  flex: 1;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nb-round {
+  color: var(--mist);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.nb-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 232px;
+}
+
+.nb-main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--slate);
+}
+
+.nb-side {
+  padding: 12px 14px;
+  overflow-y: auto;
+  font-family: var(--mono);
+}
+
+/* ---- buttons */
+
+.nb-battle button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.nb-battle :focus {
+  outline: none;
+}
+
+.nb-battle :focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.nb-btn {
+  min-height: 48px;
+  padding: 6px 18px;
+  background: var(--shadow);
+  border: 1px solid var(--grey);
+  font-family: var(--mono) !important;
+  font-weight: 600;
+}
+
+.nb-btn:hover:not(:disabled) {
+  border-color: var(--paper);
+}
+
+.nb-btn.nb-primary {
+  background: var(--night);
+  border-color: var(--ice);
+}
+
+.nb-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.nb-leave {
+  min-width: 48px;
+  min-height: 48px;
+  background: transparent;
+  border: 1px solid transparent;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.nb-leave:hover {
+  border-color: var(--slate);
+}
+
+/* ---- whiteboard */
+
+.nb-board {
+  margin: 10px 12px 0;
+  padding: 6px 12px 8px;
+  max-height: 30%;
+  font-size: 14px;
+  line-height: 1.4;
+  overflow-y: auto;
+  flex: none;
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--mist);
+  border-bottom-width: 4px;
+}
+
+.nb-board h3 {
+  margin: 0 0 4px;
+  font: 600 12px/1.4 var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--slate);
+}
+
+.nb-board ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.nb-board li {
+  margin: 2px 0;
+}
+
+.nb-board .nb-proposal h3 {
+  color: var(--brick);
+}
+
+.nb-board .nb-empty {
+  margin: 0;
+  color: var(--slate);
+  font-style: italic;
+}
+
+/* ---- transcript */
+
+.nb-log {
+  flex: 1;
+  min-height: 120px;
+  overflow-y: auto;
+  padding: 12px 14px 8px;
+}
+
+.nb-announce {
+  margin: 0 0 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--gold);
+  color: var(--gold);
+  font: 600 14px/1.4 var(--mono);
+}
+
+.nb-narr {
+  margin: 0 0 10px;
+  color: var(--mist);
+  font-style: italic;
+}
+
+.nb-msg {
+  display: flex;
+  gap: 10px;
+  margin: 0 0 8px;
+}
+
+.nb-them .nb-face {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  background: var(--night);
+  border: 1px solid var(--slate);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nb-them .nb-face canvas {
+  width: 32px;
+  height: 24px;
+  image-rendering: pixelated;
+}
+
+.nb-them .nb-face.nb-blank {
+  visibility: hidden;
+}
+
+.nb-bubble {
+  max-width: 82%;
+  padding: 6px 10px;
+  background: var(--shadow);
+}
+
+.nb-who {
+  display: block;
+  font: 600 12px/1.3 var(--mono);
+  color: var(--ice);
+  margin-bottom: 2px;
+}
+
+.nb-you {
+  justify-content: flex-end;
+}
+
+.nb-you .nb-bubble {
+  background: var(--night);
+  border: 1px solid var(--sky);
+}
+
+.nb-you .nb-who {
+  color: var(--gold);
+  text-align: right;
+}
+
+.nb-bubble ol,
+.nb-bubble ul {
+  margin: 0;
+  padding-left: 22px;
+}
+
+.nb-note {
+  margin: -2px 0 14px auto;
+  max-width: 78%;
+  padding: 4px 0 4px 12px;
+  border-left: 2px solid var(--slate);
+  color: var(--mist);
+  font-size: 14px;
+}
+
+.nb-note p {
+  margin: 0 0 4px;
+}
+
+.nb-mark {
+  font-family: var(--mono);
+  font-weight: 700;
+}
+
+.nb-g-best { color: var(--leaf); }
+.nb-g-fair { color: var(--gold); }
+.nb-g-weak { color: var(--orange); }
+
+.nb-delta {
+  color: var(--grey);
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+/* ---- answers */
+
+.nb-answer {
+  flex: none;
+  max-height: 66%;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--slate);
+  padding: 8px 12px 10px;
+}
+
+.nb-instr {
+  margin: 0 0 6px;
+  font: 600 13px/1.3 var(--mono);
+  color: var(--mist);
+}
+
+.nb-cards {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.nb-cards-wrap {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* inside a scrolling list the focus ring sits inside the card, so it is never clipped */
+.nb-card:focus-visible,
+.nb-step:focus-visible {
+  outline-offset: -4px;
+}
+
+.nb-card {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  margin: 0 0 6px;
+  padding: 8px 10px;
+  text-align: left;
+  background: var(--ink);
+  border: 1px solid var(--grey);
+  line-height: 1.35;
+}
+
+.nb-card:hover:not([aria-disabled='true']) {
+  border-color: var(--mist);
+}
+
+.nb-card[aria-checked='true'] {
+  background: var(--shadow);
+  border-color: var(--ice);
+}
+
+.nb-card[aria-disabled='true'] {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.nb-tick {
+  flex: none;
+  font-family: var(--mono);
+  color: var(--ice);
+  white-space: pre;
+}
+
+.nb-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  margin: 0 0 6px;
+  padding: 4px 6px 4px 4px;
+  background: var(--ink);
+  border: 1px solid var(--grey);
+  line-height: 1.35;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.nb-step.nb-grabbed {
+  border: 1px solid var(--gold);
+  box-shadow: inset 0 0 0 2px var(--gold);
+  background: var(--shadow);
+}
+
+.nb-moving {
+  flex: none;
+  font: 600 12px/1 var(--mono);
+  color: var(--gold);
+  text-transform: uppercase;
+}
+
+.nb-step.nb-dragging {
+  border-style: dashed;
+  border-color: var(--ice);
+}
+
+.nb-handle {
+  flex: none;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 48px;
+  color: var(--mist);
+  cursor: grab;
+  touch-action: none;
+  font-family: var(--mono);
+}
+
+.nb-pos {
+  flex: none;
+  min-width: 1.6em;
+  font-family: var(--mono);
+  color: var(--mist);
+}
+
+.nb-step-text {
+  flex: 1;
+}
+
+.nb-arrow {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  background: var(--shadow);
+  border: 1px solid var(--slate);
+  font-family: var(--mono) !important;
+}
+
+.nb-arrow:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.nb-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.nb-count {
+  flex: 1;
+  color: var(--mist);
+  font: 13px/1.3 var(--mono);
+}
+
+/* ---- the end */
+
+.nb-end {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 16px;
+}
+
+.nb-verdict {
+  margin: 0 0 8px;
+  font: 700 18px/1.35 var(--mono);
+}
+
+.nb-won .nb-verdict { color: var(--leaf); }
+.nb-lost .nb-verdict { color: var(--orange); }
+
+.nb-end p {
+  margin: 0 0 8px;
+}
+
+.nb-reward {
+  color: var(--gold);
+  font-family: var(--mono);
+}
+
+.nb-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 12px 0 16px;
+}
+
+.nb-end h3 {
+  margin: 0 0 8px;
+  font: 600 14px/1.3 var(--mono);
+  color: var(--mist);
+  border-bottom: 1px solid var(--slate);
+  padding-bottom: 4px;
+}
+
+.nb-debrief {
+  margin: 0;
+  padding-left: 22px;
+}
+
+.nb-debrief > li {
+  margin: 0 0 14px;
+}
+
+.nb-debrief .nb-q {
+  font-weight: 600;
+}
+
+.nb-debrief .nb-yours {
+  color: var(--paper);
+}
+
+.nb-debrief .nb-why {
+  color: var(--mist);
+  font-size: 14px;
+  border-left: 2px solid var(--slate);
+  padding-left: 10px;
+}
+
+/* ---- side panel: meters and hints */
+
+.nb-meter {
+  margin: 0 0 16px;
+}
+
+.nb-meter-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.nb-gauge {
+  height: 10px;
+  background: var(--shadow);
+  border: 1px solid var(--slate);
+}
+
+.nb-fill {
+  height: 100%;
+  transition: width 300ms ease-out;
+}
+
+.nb-fill.nb-ok { background: var(--grass); }
+.nb-fill.nb-low { background: var(--orange); }
+.nb-fill.nb-them { background: var(--clay); }
+
+.nb-hints h3 {
+  margin: 4px 0 6px;
+  font-size: 14px;
+  color: var(--gold);
+}
+
+.nb-hints p {
+  margin: 0 0 8px;
+  font: 14px/1.4 var(--sans);
+  color: var(--paper);
+}
+
+.nb-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ---- narrow screens: the side panel becomes a strip of two gauges under the header
+   (the full phone layout is the touch-controls chunk) */
+
+@media (max-width: 720px) {
+  .nb-battle {
+    font-size: 14px;
+  }
+  .nb-window {
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    border: 0;
+  }
+  .nb-body {
+    display: flex;
+    flex-direction: column-reverse;
+  }
+  .nb-main {
+    flex: 1;
+    border-right: 0;
+  }
+  .nb-side {
+    flex: none;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 14px;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--slate);
+    max-height: 30vh;
+  }
+  .nb-meter {
+    margin: 0 0 4px;
+  }
+  .nb-hints {
+    grid-column: 1 / -1;
+  }
+  .nb-bubble,
+  .nb-note {
+    max-width: 92%;
+  }
+  .nb-answer {
+    max-height: 58%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nb-fill {
+    transition: none;
+  }
+}

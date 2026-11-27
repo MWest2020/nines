@@ -41,6 +41,10 @@ jobs:
           "$RUNNER_TEMP/e2e/bin/pip" install --quiet --no-cache-dir --require-hashes -r tests/e2e/requirements.txt
           "$RUNNER_TEMP/e2e/bin/python" -m playwright install --with-deps --only-shell chromium
           "$RUNNER_TEMP/e2e/bin/python" -u tests/e2e/smoke.py --shots "$RUNNER_TEMP/shots"
+      # The battles, played to a win, a loss and a retry by real keys, clicks and a drag
+      # (tests/e2e/battle_smoke.py); also fails on any request outside the origin.
+      - name: Play the battles in a browser
+        run: '"$RUNNER_TEMP/e2e/bin/python" -u tests/e2e/battle_smoke.py "$RUNNER_TEMP/battle-shots"'
       - name: Upload the site for GitHub Pages
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
