@@ -1,4 +1,5 @@
-"""Browser smoke test: play the three MVP quests on the built game, typing real commands.
+"""Browser smoke test: play the three MVP quests and the sample guest cameo on the built game,
+typing real commands.
 
 It serves dist/ under a sub-path (like GitHub Pages) from a server inside this process, walks
 the player to each machine with the keyboard (paths come from the Tiled maps), plays the quest
@@ -334,6 +335,26 @@ def service_down(page: Page, shots: Path | None) -> None:
     finish(page, "Service down")
 
 
+HOSTS_FIXED = """127.0.0.1   localhost
+127.0.1.1   api-02
+"""
+
+
+def its_always_dns(page: Page, shots: Path | None) -> None:
+    """The sample cameo (content/quests/its-always-dns): one folder, played like any quest."""
+    run(page, "systemctl status invoice-api", "failed")
+    run(page, "journalctl -u invoice-api", "db.internal resolved to 10.0.4.12")
+    run(page, "cat /etc/nsswitch.conf", "files dns")
+    run(page, "grep db.internal /etc/hosts", "10.0.4.12")
+    run(page, "edit /etc/hosts")
+    page.locator(".nt-editor").wait_for(state="visible")
+    if shots:
+        page.screenshot(path=str(shots / "editor-hosts.png"))
+    edit_file(page, HOSTS_FIXED)
+    run(page, "systemctl restart invoice-api")
+    finish(page, "It's always DNS")
+
+
 def play(page: Page, village: Grid, room: Grid, shots: Path | None) -> None:
     _, sx, sy = village.objects["player-start"]
     p = Player(page, "junior-village", (sx, sy), "down")
@@ -358,14 +379,19 @@ def play(page: Page, village: Grid, room: Grid, shots: Path | None) -> None:
     open_terminal(page, p, room, "rack-app-01")
     service_down(page, shots)
 
-    # the save says all three are done and paid
+    # 4. the sample cameo: Yara's machine is the spare rack cameo-rack-1
+    print("quest: its-always-dns (sample cameo)")
+    open_terminal(page, p, room, "cameo-rack-1")
+    its_always_dns(page, shots)
+
+    # the save says all four are done and paid
     save = json.loads(page.evaluate("localStorage.getItem('nines.save')"))
     quests = save["game"]["quests"]
-    for q in ("disk-full", "broken-pipeline", "service-down"):
+    for q in ("disk-full", "broken-pipeline", "service-down", "its-always-dns"):
         assert quests.get(q) == "done", quests
-    # 200 + 150 + 175 in rewards, minus the €150 database mistake (made with €200 in hand)
-    assert save["game"]["money"] == 375, save["game"]["money"]
-    assert save["game"]["xp"] == {"cicd": 25, "linux": 20, "incident": 25}, save["game"]["xp"]
+    # 200 + 150 + 175 + 125 in rewards, minus the €150 database mistake (made with €200 in hand)
+    assert save["game"]["money"] == 500, save["game"]["money"]
+    assert save["game"]["xp"] == {"cicd": 25, "linux": 40, "incident": 25}, save["game"]["xp"]
     print(f"  save: quests {quests}, money {save['game']['money']}, xp {save['game']['xp']}")
     if shots:
         page.screenshot(path=str(shots / "world-after.png"))
