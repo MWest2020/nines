@@ -58,6 +58,57 @@ jobs:
         with:
           path: dist
 
+  # The Android app (ARCHITECTURE.md, Android): a debug APK to sideload and an unsigned release
+  # AAB, built from the same dist/ and kept as workflow artifacts. No secrets: the debug APK is
+  # signed with the runner's throwaway debug key, and the release signing variables are never set
+  # here (a signed AAB is built by hand, PLAY_STORE.md, Release). The runner image carries the
+  # Android SDK and JDK 21.
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Build the web game and copy it into the Android project
+        run: |
+          npm run build
+          npx cap sync android
+      - name: Build the debug APK and the unsigned release AAB
+        working-directory: android
+        env:
+          RUN_NUMBER: ${{ github.run_number }}
+        run: JAVA_HOME="$JAVA_HOME_21_X64" ./gradlew --no-daemon --console=plain -PninesVersionCode="$RUN_NUMBER" assembleDebug bundleRelease
+      # The manifest promise, checked on what was built: no INTERNET (or any other Android)
+      # permission, no backup, the target SDK Play requires.
+      - name: Check the APK's badging
+        run: |
+          aapt2="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)aapt2"
+          apk=android/app/build/outputs/apk/debug/app-debug.apk
+          "$aapt2" dump badging "$apk" | tee badging.txt | grep -E "^package|targetSdkVersion|uses-permission"
+          if grep "^uses-permission" badging.txt | grep -v "DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"; then
+            echo "::error::the app asks for a permission (above); the game needs none"; exit 1
+          fi
+          grep -q "^targetSdkVersion:'36'" badging.txt || { echo "::error::target SDK is not 36"; exit 1; }
+          "$aapt2" dump xmltree --file AndroidManifest.xml "$apk" | grep -q "allowBackup(0x01010280)=false" || { echo "::error::allowBackup is not false"; exit 1; }
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nines-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nines-release-aab-unsigned
+          path: android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 30
+
   # Mark, 26 Nov 2026: "mag openbaar" (repo and the playable web version). Only main deploys;
   # the job gets the Pages permissions, the build job keeps contents: read.
   pages:
