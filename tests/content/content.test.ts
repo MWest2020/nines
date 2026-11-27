@@ -90,12 +90,18 @@ describe('the validator rejects broken content', () => {
     expect(errorsAfter('quests/disk-full/scenario.yaml', (s) => s.replace('!ran("df")', '!flag("nope")'))).toMatch(/no event in this scenario sets that flag/);
     expect(errorsAfter('quests/disk-full/scenario.yaml', (s) => s.replace('service("nginx") == "active"', 'service(pipeline_status) == "active"'))).toMatch(/needs a quoted name/);
   });
+  it('a stone a quest lights never needs a stone that no quest lights', () => {
+    expect(errorsAfter('roadmap.yaml', (s) => s.replace('title: node.linux.services, requires: [linux-disk]', 'title: node.linux.services, requires: [linux-files]'))).toMatch(
+      /node "linux-services" is lit by a quest but needs "linux-files", which no quest lights/,
+    );
+  });
+
   it('requirements may not form a cycle', () => {
     copy();
     edit('quests/disk-full/quest.yaml', (s) => s.replace('requires: []', 'requires: [service-down]'));
     edit('quests/service-down/quest.yaml', (s) => s.replace('requires: []', 'requires: [disk-full]'));
     expect(loadContent(dir, SCHEMA_DIR, { root: ROOT }).errors.join('\n')).toMatch(/quest requirements form a cycle/);
-    expect(errorsAfter('roadmap.yaml', (s) => s.replace('title: node.linux.files, requires: []', 'title: node.linux.files, requires: [linux-services]'))).toMatch(/roadmap node requirements form a cycle/);
+    expect(errorsAfter('roadmap.yaml', (s) => s.replace('title: node.linux.disk, requires: []', 'title: node.linux.disk, requires: [linux-services]'))).toMatch(/roadmap node requirements form a cycle/);
   });
   it('control characters, symlinks, stray images and stray files in maps/ are refused', () => {
     expect(errorsAfter('quests/disk-full/locales/en.yaml', (s) => s.replace('title: "Disk full"', 'title: "Disk \\e]8;;https://x.test\\e\\\\full"'))).toMatch(/control characters/);

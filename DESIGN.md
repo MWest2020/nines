@@ -52,14 +52,14 @@ nothing to download or license.
 
 | Thing | Size |
 | ----- | ---- |
-| Logical view | 240 x 160 px (15 x 10 tiles), scaled by an integer where it fits, `pixelArt: true` |
+| Logical view | 240 x 160 px (15 x 10 tiles) under a 12 px HUD band (canvas 240 x 172), scaled by a whole number from 2 up where that keeps 80% of the room, else by the exact fit; `pixelArt: true` |
 | Tile | 16 x 16 |
 | Character frame | 16 x 16 (cameos may use 32 x 32) |
 | Character sheet | 3 columns (step, stand, step) x 4 rows (down, left, right, up): 48 x 64 px, or 96 x 128 px with 32 px frames. The validator enforces this. |
 | Walk | 4 frames per tile step at 8 fps (step, stand, step, stand); one tile per 250 ms |
 | Map | Junior Village 40 x 30 tiles; server room 15 x 10 (one screen) |
 | Canvas text | 8 px pixel font, 10 px line height |
-| Touch targets | at least 48 x 48 CSS px; D-pad 144 x 144 |
+| Touch targets | at least 48 x 48 CSS px for every DOM control (the touch controls, the terminal and battle overlays); D-pad 144 x 144 (48 px arms), use 64, back 56, menu and Career Trail 48. Buttons drawn on the canvas (the menu, shop and trail) scale with the view and are smaller on a phone: the D-pad moves their focus and the use button presses them |
 | Dialogue box | 232 x 48 px at the bottom of the view, 4 px margin, 3 lines of text |
 
 ## Palette
@@ -297,7 +297,9 @@ Desktop (a design interview, "spot the flaw"):
 ```
 
 Phone, portrait: the side panel becomes two thin gauges under the header; hints collapse into
-a count in the header (`? 1`) that opens them over the transcript.
+a count in the header (`? 1`) that opens them over the transcript. Phone, landscape (short and
+wide): the transcript (with the whiteboard above it) and the answer cards side by side, the
+meters and hints in a narrower column on the right.
 
 ```
 ┌──────────────────────────────┐
@@ -355,5 +357,9 @@ Landscape (controls on both sides of the view):
 └──────────────────────────────────────────────────────────────┘
 ```
 
-On a desktop without touch the controls are hidden. The terminal overlay replaces the controls
+On a desktop without touch the controls are hidden; a window under 600 px wide shows them, and
+the menu's Controls setting (Auto, On, Off) overrides both. The icons are our own pixel shapes
+(arrows, an open hand, a turn-back arrow, three bars, a milestone stone), never letters. The
+money and the current quest stay in the HUD band on the canvas; the controls area carries big
+menu and Career Trail buttons. The terminal overlay replaces the controls
 while it is open, so the D-pad never fights the soft keyboard.

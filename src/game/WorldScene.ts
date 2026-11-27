@@ -1,6 +1,7 @@
 // The world: a Tiled map, the player on a 16 px grid, NPCs, doors and the things you can use.
-// Rules live in src/world/grid.ts (pure, tested); this scene renders and reads the keyboard.
-// Touch controls come in a later chunk.
+// Rules live in src/world/grid.ts (pure, tested); this scene renders and reads the keyboard, the
+// on-screen D-pad and use button (src/game/touch), and taps: a tap on open ground walks there
+// along the shortest path, a tap on an NPC or a thing you can use walks up to it and uses it.
 
 import Phaser from 'phaser';
 import content from 'virtual:nines-content';
@@ -11,7 +12,10 @@ import { own } from '../rules/own';
 import { PROGRESS_FACTS } from '../rules/registries';
 import {
   ahead,
+  approach,
   canEnter,
+  doorTiles,
+  findPath,
   facingOf,
   isFacing,
   isSolid,
@@ -24,6 +28,8 @@ import {
   type WorldMap,
 } from '../world/grid';
 import { type GameApi, getGameApi } from './api';
+import { PAD_EVENTS, padState } from './touch/pad';
+import { BAND, VIEW } from './ui/theme';
 import { freshKeys } from './ui/widgets';
 import { WORLD_EVENTS, type EnterEvent, type TalkEvent, type UseEvent, type WorldStart } from './world/events';
 import { PlaceholderDialogue } from './world/PlaceholderDialogue';
@@ -54,6 +60,11 @@ export class WorldScene extends Phaser.Scene {
   private moving = false;
   private busy = false;
   private turnedAt = 0;
+  /** a walk from a tap: the steps still to take, then what to face and use at the end */
+  private route: Facing[] = [];
+  private routeEnd: { facing: Facing; use: boolean } | null = null;
+  /** the pointer went down while the world was free (so a tap that closed a dialogue is not a walk) */
+  private tapStarted = false;
   private dialogue: PlaceholderDialogue | null = null;
   /** strings, progress and the busy flag come from the one live game (src/game/api.ts) */
   private api!: GameApi;
@@ -74,6 +85,9 @@ export class WorldScene extends Phaser.Scene {
     this.moving = false;
     this.busy = false;
     this.dialogue = null;
+    this.route = [];
+    this.routeEnd = null;
+    this.tapStarted = false;
   }
 
   create(): void {
@@ -85,8 +99,11 @@ export class WorldScene extends Phaser.Scene {
     this.placeNpcs();
     this.placePlayer();
     this.bindKeys();
+    this.bindTouch();
 
     const cam = this.cameras.main;
+    // the view sits under the HUD band, so the bar never hides a row of the map
+    cam.setViewport(0, BAND, VIEW.width, VIEW.height);
     cam.setBounds(0, 0, this.world.width * TILE, this.world.height * TILE);
     cam.startFollow(this.player.sprite, true);
     cam.setRoundPixels(true);
@@ -185,6 +202,76 @@ export class WorldScene extends Phaser.Scene {
     );
   }
 
+  /** The on-screen use and back buttons, and taps on the map. */
+  private bindTouch(): void {
+    const events = this.game.events;
+    const onUse = () => {
+      if (!this.dialogue) this.onUse();
+    };
+    const onBack = () => this.dialogue?.close();
+    events.on(PAD_EVENTS.use, onUse);
+    events.on(PAD_EVENTS.back, onBack);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      events.off(PAD_EVENTS.use, onUse);
+      events.off(PAD_EVENTS.back, onBack);
+    });
+    this.input.on('pointerdown', () => {
+      this.tapStarted = !this.waiting();
+    });
+    this.input.on('pointerup', (p: Phaser.Input.Pointer) => {
+      const started = this.tapStarted;
+      this.tapStarted = false;
+      // a tap (the main button), not a drag, that began and ends while the world is free
+      if (!started || this.waiting() || p.button !== 0 || p.getDistance() > 12) return;
+      const cam = this.cameras.main;
+      if (p.y < cam.y || p.y >= cam.y + cam.height) return; // the HUD band is not the map
+      const at = cam.getWorldPoint(p.x, p.y);
+      this.tapTile(Math.floor(at.x / TILE), Math.floor(at.y / TILE));
+    });
+  }
+
+  /** Walk to a tapped tile; walk up to an NPC or a usable thing and use it. */
+  private tapTile(x: number, y: number): void {
+    const p = this.player;
+    const occupied = this.occupied();
+    const doors = doorTiles(this.world);
+    const usable =
+      this.npcs.some((n) => n.x === x && n.y === y) || objectsAt(this.world, x, y).some((o) => o.type === 'terminal' || o.type === 'battle' || o.type === 'shop');
+    this.route = [];
+    this.routeEnd = null;
+    if (x === p.x && y === p.y) return;
+    if (usable) {
+      // a person or a thing: stand next to it, face it and use it
+      const a = approach(this.world, p, { x, y }, occupied, doors);
+      if (!a) return;
+      this.route = a.path;
+      this.routeEnd = { facing: a.facing, use: true };
+      return;
+    }
+    // open ground: walk there; a wall or a tree: nothing
+    this.route = findPath(this.world, p, { x, y }, occupied, doors) ?? [];
+  }
+
+  /** Take the next step of a tap walk, or finish it. Returns false when there is none. */
+  private followRoute(): boolean {
+    const next = this.route.shift();
+    if (next) {
+      this.player.facing = next;
+      if (!this.step(next)) {
+        // someone stepped in the way: stop here
+        this.route = [];
+        this.routeEnd = null;
+      }
+      return true;
+    }
+    const end = this.routeEnd;
+    if (!end) return false;
+    this.routeEnd = null;
+    this.face(this.player, end.facing);
+    if (end.use) this.onUse();
+    return true;
+  }
+
   /** The world waits while it hands control to someone, or while a dialogue or screen is open. */
   private waiting(): boolean {
     return this.busy || (this.dialogue === null && this.api.isBusy());
@@ -198,7 +285,7 @@ export class WorldScene extends Phaser.Scene {
 
   private heldDirection(): Facing | null {
     for (const f of ['up', 'down', 'left', 'right'] as const) if (this.keys[f].some((k) => k.isDown)) return f;
-    return null;
+    return padState.held;
   }
 
   private face(a: Actor, facing: Facing): void {
@@ -210,6 +297,13 @@ export class WorldScene extends Phaser.Scene {
   override update(time: number): void {
     if (this.moving || this.waiting()) return;
     const dir = this.heldDirection();
+    if (dir) {
+      // a key or the D-pad takes over from a tap walk
+      this.route = [];
+      this.routeEnd = null;
+    } else if (this.followRoute()) {
+      return;
+    }
     if (!dir) {
       if (this.player.sprite.anims.isPlaying) this.face(this.player, this.player.facing);
       return;
@@ -223,12 +317,13 @@ export class WorldScene extends Phaser.Scene {
     this.step(dir);
   }
 
-  private step(dir: Facing): void {
+  /** One tile in a direction; false (and only a turn) when the tile is blocked. */
+  private step(dir: Facing): boolean {
     const p = this.player;
     const to = ahead(p.x, p.y, dir);
     if (!canEnter(this.world, to.x, to.y, this.occupied())) {
       this.face(p, dir);
-      return;
+      return false;
     }
     this.moving = true;
     p.x = to.x;
@@ -245,6 +340,7 @@ export class WorldScene extends Phaser.Scene {
         this.arrive();
       },
     });
+    return true;
   }
 
   /** After a step: a door takes the player to its map. */

@@ -1,6 +1,7 @@
 // The HUD (DESIGN.md, World): money and the current quest along the top, a menu button and a
 // Career Trail button, short toasts for money and rewards, and the dialogue box. It runs over
-// the world the whole time and redraws from the store.
+// the world the whole time and redraws from the store. The bar has its own band above the view
+// (theme.ts BAND), so it never covers a row of the map; this scene draws on the whole canvas.
 
 import Phaser from 'phaser';
 import { questKey } from '../../content/types';
@@ -10,10 +11,13 @@ import { ellipsize, measure } from './font';
 import type { GameUi } from './install';
 import { getGameApi } from '../api';
 import { pixelText } from './pixelfont';
-import { C, dimmer, hex, panel, VIEW } from './theme';
+import { PAD_EVENTS } from '../touch/pad';
+import { controlsSetting, cycleControlsSetting } from '../touch/settings';
+import { BAND, C, CANVAS, dimmer, hex, panel, VIEW } from './theme';
 import { type Button, button, freshKeys, keyboardNav, navigate } from './widgets';
 
-const BAR_H = 12;
+/** the bar fills the band; its last row is a slate rule */
+const BAR_H = BAND - 1;
 const ICON = { w: 14, h: 12 } as const;
 
 export class HudScene extends Phaser.Scene {
@@ -55,6 +59,12 @@ export class HudScene extends Phaser.Scene {
         }
       }),
     );
+    // the on-screen use button advances the dialogue like Enter
+    const onPadUse = () => {
+      if (this.dialogue.open) this.dialogue.advance();
+    };
+    this.game.events.on(PAD_EVENTS.use, onPadUse);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.game.events.off(PAD_EVENTS.use, onPadUse));
     const off = this.ui.store.subscribe((_g, change) => this.onChange(change));
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, off);
     this.refresh();
@@ -124,7 +134,8 @@ export class HudScene extends Phaser.Scene {
 
   // ---- the menu: Career Trail, language, credits
 
-  private toggleMenu(): void {
+  /** The menu button, in the bar or among the touch controls. */
+  toggleMenu(): void {
     if (this.menu) this.closeMenu();
     else if (!this.ui.isBusy()) this.openMenu(0);
   }
@@ -137,13 +148,14 @@ export class HudScene extends Phaser.Scene {
     const items: [string, () => void][] = [
       [t('ui.roadmap.title'), () => this.fromMenu(() => this.ui.openTrail())],
       [t('ui.menu.option', { label: t('ui.language'), value: t(`ui.locale.${store.game.locale}`) }), () => this.ui.setLocale(store.game.locale === 'nl' ? 'en' : 'nl')],
+      [t('ui.menu.option', { label: t('ui.controls'), value: t(`ui.controls.${controlsSetting()}`) }), () => this.refreshMenu(cycleControlsSetting)],
       [t('ui.credits.title'), () => this.fromMenu(() => this.ui.openCredits())],
       [t('ui.close'), () => this.closeMenu()],
     ];
     const note = store.slot.writable ? null : t('ui.save_off');
     const h = 20 + items.length * 16 + (note ? 12 : 0);
-    const y = Math.round((VIEW.height - h) / 2);
-    const objects: Phaser.GameObjects.GameObject[] = [dimmer(this, 0.5), panel(this, x, y, w, h, 13), pixelText(this, x + 6, y + 2, t('ui.menu.title'), C.paper)];
+    const y = Math.round((CANVAS.height - h) / 2);
+    const objects: Phaser.GameObjects.GameObject[] = [dimmer(this, 0.5, CANVAS.height), panel(this, x, y, w, h, 13), pixelText(this, x + 6, y + 2, t('ui.menu.title'), C.paper)];
     const buttons = items.map(([label, fn], i) => {
       const b = button(this, x + 8, y + 18 + i * 16, label, fn, { w: w - 16 });
       objects.push(...b.objects);
@@ -180,6 +192,15 @@ export class HudScene extends Phaser.Scene {
     this.menu = null;
     m.layer.destroy(true);
     m.release();
+  }
+
+  /** Change a setting shown in the menu, then draw the menu again with the new value. */
+  private refreshMenu(change: () => unknown): void {
+    change();
+    if (!this.menu) return;
+    const focus = this.menu.focus;
+    this.closeMenu();
+    this.openMenu(focus);
   }
 
   private fromMenu(open: () => Promise<void>): void {

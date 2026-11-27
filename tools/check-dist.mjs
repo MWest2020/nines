@@ -20,6 +20,12 @@ const ALLOWED_SNIPPETS = ['new Function("return this")'];
 // Matched by shape, because the minifier renames the variables.
 const ALLOWED_PATTERNS = [/confirm\(`Do you want to navigate to \$\{\w+\}\?[^`]*`\)\)\{let \w+=window\.open\(\);/g];
 
+// The service worker (src/offline/sw.js) answers from its cache and asks its own origin for a
+// file it does not have, after returning early for every request to another origin. That one
+// call is allowed in sw.js only, exactly once, and only with the origin check in place;
+// tests/guards.test.ts checks the source the same way.
+const SW = { file: 'sw.js', call: 'return await fetch(request);', guard: "new URL(request.url).origin !== self.location.origin) return;" };
+
 // tools/content/load.ts (DIST_REFUSES) checks locale strings against the same patterns.
 const BANNED = [/\bfetch\s*\(/, /\bWebSocket\b/, /\bEventSource\b/, /\bsendBeacon\b/, /\bRTCPeerConnection\b/, /window\.open\s*\(/, /\beval\s*\(/, /\bFunction\s*\(/];
 
@@ -37,6 +43,12 @@ for (const file of files) {
     text = text.replace(re, '');
   }
   const name = relative(DIST, file);
+  if (name === SW.file) {
+    const calls = text.split(SW.call).length - 1;
+    const guardAt = text.indexOf(SW.guard);
+    if (calls !== 1 || guardAt < 0 || guardAt > text.indexOf(SW.call)) problems.push(`${name}: expected one same-origin fetch after the origin check, found ${calls}`);
+    text = text.split(SW.call).join('');
+  }
   for (const m of text.matchAll(/https?:\/\/[A-Za-z0-9.\-_~:/?#@!$&'()*+,;=%]*/g)) {
     const url = m[0].replace(/[)'",;]+$/, '');
     if (!ALLOWED_URLS.has(url)) problems.push(`${name}: URL ${url}`);
@@ -46,6 +58,8 @@ for (const file of files) {
 
 // exactly one copy of the allowed xterm handler: a second one (a new addon, say) is reviewed
 if (files.length > 0 && allowedHits !== 1) problems.push(`expected xterm's OSC 8 handler exactly once, found ${allowedHits}`);
+// the offline promise needs the service worker
+if (files.length > 0 && !files.some((f) => relative(DIST, f) === SW.file)) problems.push(`${SW.file} is missing: the game would not run offline`);
 
 if (problems.length > 0) {
   console.error(`dist/ check failed:\n  ${problems.join('\n  ')}`);

@@ -16,6 +16,7 @@ import { createSession, type FiredEvent, prompt, run, type RunResult, saveFile, 
 import { complete } from '../../terminal/complete';
 import { gutter, INDENT, insertIndent, isDirty, lineCol, lineCount, normalizeText, tabLines } from '../../terminal/editor';
 import { down, type History, newHistory, record, up } from '../../terminal/history';
+import { followVisualViewport } from '../touch/viewport';
 
 export interface TerminalHost {
   t: Translate;
@@ -81,6 +82,8 @@ export class TerminalOverlay {
     path: string;
   };
   private readonly resize: ResizeObserver | null;
+  /** stops fitting the overlay to the visual viewport (the soft keyboard) */
+  private readonly unfollow: () => void;
   private history: History = newHistory();
   private dialogs: Dialog[] = [];
   private hints: string[] = [];
@@ -251,6 +254,8 @@ export class TerminalOverlay {
     win.append(head, body, quick, box);
     this.root.append(win);
     parent.append(this.root);
+    // the input line and quick strip stay above a soft keyboard
+    this.unfollow = followVisualViewport(this.root);
 
     // ---- xterm, output only
     this.term = new Terminal({
@@ -565,6 +570,7 @@ export class TerminalOverlay {
     if (this.closedAlready) return;
     this.closedAlready = true;
     this.resize?.disconnect();
+    this.unfollow();
     this.term.dispose();
     this.root.remove();
     this.host.closed(this.won);

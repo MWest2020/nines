@@ -771,6 +771,24 @@ export function loadContent(contentDir: string, schemaDir: string, options: Load
   if (roadmap) cycleCheck('roadmap node', Object.fromEntries(roadmap.nodes.map((n) => [n.id, n.requires])));
   if (shop) cycleCheck('shop item', Object.fromEntries(shop.items.map((i) => [i.id, i.requires])));
 
+  // ---- a stone that a quest lights can open: every stone it requires, all the way down, is lit
+  // by a quest too. Otherwise the Career Trail shows it locked forever while its quest is played.
+  if (roadmap) {
+    const lit = new Set(quests.map((q) => q.quest.roadmap_node));
+    const byId = new Map(roadmap.nodes.map((n) => [n.id, n]));
+    for (const id of [...lit].sort()) {
+      const seen = new Set<string>();
+      const stack = [...(byId.get(id)?.requires ?? [])];
+      while (stack.length > 0) {
+        const r = stack.pop()!;
+        if (seen.has(r)) continue;
+        seen.add(r);
+        if (!lit.has(r)) errors.push(`content/roadmap.yaml: node "${id}" is lit by a quest but needs "${r}", which no quest lights, so it could never open`);
+        stack.push(...(byId.get(r)?.requires ?? []));
+      }
+    }
+  }
+
   // ---- cross-folder checks
   const npcIds = npcs.map((n) => n.npc.id);
   for (const id of new Set(npcIds)) if (npcIds.filter((x) => x === id).length > 1) errors.push(`content: npc id "${id}" is used twice`);

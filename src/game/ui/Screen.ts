@@ -6,7 +6,7 @@ import Phaser from 'phaser';
 import type { GameApi } from '../api';
 import { getGameApi } from '../api';
 import { type Button, type Dir, type Focusable, keyboardNav, navigate } from './widgets';
-import { dimmer } from './theme';
+import { BAND, dimmer, VIEW } from './theme';
 
 export interface ScreenData {
   done?: () => void;
@@ -26,6 +26,8 @@ export abstract class Screen extends Phaser.Scene {
   create(): void {
     this.api = getGameApi(this);
     this.focus = 0;
+    // screens are drawn for the 240 x 160 view, under the HUD band (money stays in sight)
+    this.cameras.main.setViewport(0, BAND, VIEW.width, VIEW.height);
     dimmer(this);
     const offKeys = keyboardNav(this, {
       move: (d) => this.move(d),

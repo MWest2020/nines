@@ -74,7 +74,8 @@ export function setGameApi(game: Phaser.Game, api: GameApi): void {
   game.registry.set(KEY, api);
 }
 
-export function getGameApi(scene: Phaser.Scene): GameApi {
+/** From a scene, or from the game itself (both share the registry). */
+export function getGameApi(scene: Pick<Phaser.Scene, 'registry'>): GameApi {
   const api = scene.registry.get(KEY) as GameApi | undefined;
   if (!api) throw new Error('the game API is not installed (see src/main.ts)');
   return api;

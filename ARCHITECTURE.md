@@ -66,16 +66,23 @@ src/
     ui/             HudScene + DialogueBox, TrailScene, ShopScene, CreditsScene, the pixel font
     terminal/       TerminalOverlay.ts (DOM + xterm.js), terminal.css, wire.ts (to the GameApi)
     battle/         BattleOverlay.ts (DOM) + battle.css, open.ts (open, record, reward, gate line)
+    touch/          layout.ts (pure: where the view and controls go), controls.ts (the D-pad and
+                    buttons, DOM), pad.ts (their events), settings.ts, viewport.ts (soft keyboard)
+    offline.ts      registers the service worker
+  offline/sw.js     the service worker (hand-written; the build adds the file list and version)
 assets/           tilesets and sheets outside content (Kenney packs, own art), each in ASSETS.md
 tools/
   content/load.ts         load + validate + bundle /content (Node, build time only)
   vite-plugin-content.ts  exposes the bundle as `virtual:nines-content`
+  vite-plugin-sw.ts       writes dist/sw.js: src/offline/sw.js plus the built files and their hash
   art/draw-art.mjs        draws our own sprites and tiles (reproducible; --check in npm test)
   maps/build-maps.mjs     wrote the first versions of the Tiled maps from text layouts
 schemas/          JSON Schemas for every content file
 content/          the game's data
 tests/            Vitest: rules, sim, terminal input, quests played end to end, content, guards
-  e2e/smoke.py      the browser smoke test: the three quests typed into the real overlay
+  e2e/smoke.py      the browser smoke test: the three quests, the shop and the trail, offline;
+                    then touch on emulated phones and a tablet
+  e2e/battle_smoke.py  the battles in a browser (PHONE=portrait|landscape: on a phone)
 ```
 
 Dependencies point one way: `game → battle, core, sim, rules, terminal, world, content/types`;
@@ -452,7 +459,8 @@ file and then what a schema cannot express:
   and every PNG is declared by an `npc.yaml` with its source and licence;
 - ids match folder names; ids and NPC spawn slots are unique across all folders;
 - references resolve: `giver`, `requires`, `roadmap_node` (and its branch), maps; quest,
-  roadmap and shop `requires` have no cycles;
+  roadmap and shop `requires` have no cycles; a roadmap node that a quest lights never requires
+  (directly or further down) a node that no quest lights, so it can always open;
 - every condition parses and type-checks against the right registry; name arguments must be
   quoted literals and must exist: `service`, `pods_running` and `restarted` in that scenario,
   `flag` among that scenario's `set_flag`s, `ran` among the terminal's commands, `quest`,
@@ -545,8 +553,24 @@ Guards:
 - Terminal output that comes from the player (a file they wrote with the editor, the line they
   typed) has control characters stripped before it reaches xterm.js; content cannot contain
   them at all. The only escape sequences xterm sees are the overlay's own colour codes.
-- The MVP's acceptance check is a devtools Network panel with zero requests outside the origin,
-  documented with a screenshot in the MVP pull request (a browser task, see AGENTS.md).
+- The acceptance check is zero requests outside the origin: `tests/e2e/smoke.py` fails on any
+  (it listens to every request of the browser context, the service worker's included, and to
+  failed requests), and `docs/how-to/verify-offline.md` is the same check by hand in devtools.
+
+**The service worker** (`src/offline/sw.js`, hand-written, no dependency). The build
+(`tools/vite-plugin-sw.ts`) prepends `VERSION`, a hash of every built file, and `FILES`, the
+list of them, and emits `dist/sw.js`. `src/game/offline.ts` registers it (built site only, a
+secure context, not inside the Capacitor app). Install: every file into the cache
+`nines:<scope>:<VERSION>` (bypassing the HTTP cache), then take over at once. Activate: delete
+the older caches of the same scope only (a GitHub Pages user site shares its origin with other
+projects, forks and previews). Fetch: only GET requests for the same origin and the worker's
+scope; files come from the cache first, the page itself (a navigation) from the network first
+and from the cache when that fails, so a new deploy's index.html is never shadowed by an old one;
+a file missing from the cache is asked of the same origin. That is the one `fetch` in the code
+base, allowed by name, once, after the origin check, in `check:dist` and `tests/guards.test.ts`
+(which also scans `src/**/*.js`); requests for other origins are not touched. A new deploy is a
+new `VERSION`: the open page keeps running the files it already loaded, the next online load
+runs the new build, and the new worker replaces the cache in the background.
 
 **"Runs offline"** means: `dist/` served over HTTP(S) by any static host (GitHub Pages, a
 sub-path included) keeps working with the network off once loaded, and the Capacitor app
@@ -647,8 +671,26 @@ the one-off event bonuses already paid (`<quest>/<event>`).
   `api.isBusy()`, and reads Enter, Space and Escape through `freshKeys`. `WorldScene` takes a
   `WorldStart` (`map`, `x`, `y`, `facing`, or a spawn `point`); a saved spot that is no longer
   open ground falls back to `player-start`.
-- **HudScene**: money, menu, roadmap button, the dialogue box, the on-screen controls on touch
-  devices.
+- **HudScene**: money, menu, roadmap button, the dialogue box. The bar has its own 12 px band
+  above the view: the canvas is 240 x 172, and the world and the screens draw in the 240 x 160
+  under it (their cameras' viewports start at y 12), so the bar never covers a row of the map.
+  The menu also holds the touch-controls setting (Auto, On, Off; a device setting, kept under
+  its own localStorage key `nines.controls`, not in the save).
+- **Touch controls and layout** (`src/game/touch/`): DOM around the canvas, not in it, so the
+  targets are real CSS pixels. `layout.ts` (pure, tested for phone and tablet shapes) places the
+  canvas, scaled by a whole number from 2 up where that keeps 80% of the room and by the exact
+  fit otherwise, and the controls: below the view in portrait, beside it in landscape, inside the
+  safe-area insets. They show on touch screens and windows under 600 px wide, or as the setting
+  says. The D-pad (144 px, a cross of 48 px arms; sliding a finger changes direction), the use
+  button (64 px), back (56 px) and big menu and Career Trail buttons (48 px) put out the held
+  direction (`padState`, read by the world each frame like the arrow keys) and events on
+  `game.events` (`pad:move`, `pad:use`, `pad:back`), which `keyboardNav` (every screen and the
+  menu) and the HUD's dialogue box handle like their keys; for screen readers and switch access a
+  click with no pointer before it does the same. A tap on the map walks the shortest
+  grid path there (`findPath` in `src/world/grid.ts`; doors only as the goal); a tap on an NPC,
+  a terminal, a battle object or the shop counter walks up to it (`approach`), faces it and uses
+  it; a tap on a wall does nothing. A key or the D-pad takes over from a tap walk. No zoom or scroll: `touch-action: none` on
+  the canvas and the controls, `manipulation` on the page and the overlays, no overscroll.
 - **TerminalOverlay**: DOM, not canvas, so text is crisp and the Android soft keyboard works.
   xterm.js renders the output (ANSI colours for prompts and errors). Input is our own
   `<input>` under it (`autocapitalize=off`, `autocorrect=off`, `spellcheck=false`,
@@ -774,10 +816,13 @@ to a listener added meanwhile; UI listeners are wrapped in `freshKeys` (`ui/widg
   still loads without it.
 - No Capacitor plugins in the MVP. Back button: the WebView's default (back, then exit) until
   a reason appears to add `@capacitor/app`.
-- Orientation: both. The Phaser canvas is a fixed 240x160 view scaled by an integer where
-  possible; the controls take the remaining space: below the view in portrait, on both sides in
-  landscape. The terminal overlay is a flex layout that shrinks when the soft keyboard opens
-  (`interactive-widget=resizes-content` in the viewport meta for Chrome on Android).
+- Orientation: both. The Phaser canvas (the 240x160 view and the HUD band) is scaled by an
+  integer where possible (above); the controls take the remaining space: below the view in
+  portrait, on both sides in landscape. The terminal overlay is a flex layout that shrinks when
+  the soft keyboard opens: `interactive-widget=resizes-content` in the viewport meta shrinks the
+  page in Chrome on Android, and where a browser only shrinks the visual viewport,
+  `src/game/touch/viewport.ts` fits the overlay to it, so the input line and the quick strip stay
+  above the keyboard.
 - Target SDK: the level Google Play requires for new apps at build time. The Android chunk
   confirms it in the Play Console documentation before building (API 36 is the expected value
   in late 2026) and records it in PLAY_STORE.md.
@@ -808,17 +853,29 @@ Pinned exactly, each version published at least two weeks before it was added (c
   (every question type, meters in bounds, retry, hints, seeded cards, triggers) and every
   battle in content played perfectly, all wrong and at random.
 - `.github/workflows/ci.yml` on every pull request and every push to `main`: `npm ci`, content
-  validation, `npm test`, `npm run build`, `npm run check:dist`, the browser smoke test.
+  validation, `npm test`, `npm run build`, `npm run check:dist`, the browser smoke tests.
   Actions pinned to commit SHAs,
   read-only token.
-- `tests/e2e/smoke.py` (Python Playwright, no npm dependency): serves `dist/` under a sub-path,
-  walks the player to Ravi's laptop and the two server-room racks with the keyboard (paths from
-  the Tiled maps), and plays all three MVP quests by typing real commands, the editor and a
-  database-deleting mistake included. It fails on any request outside the origin and on any page
-  error. CI runs it after `check:dist`; locally it runs under the memory cap in AGENTS.md, one
-  browser at a time.
+- `tests/e2e/smoke.py` (Python Playwright, no npm dependency): serves `dist/` under a sub-path.
+  Desktop: loads the game once, waits for the service worker, goes offline and reloads, then
+  (all offline) walks the player to Ravi's laptop and the two server-room racks with the
+  keyboard (paths from the Tiled maps) and plays all three MVP quests by typing real commands,
+  the editor and a database-deleting mistake included; buys the Raspberry Pi at the shop counter
+  with the quest money between the second and third quest, sees its €10 on the third reward,
+  checks from the canvas pixels that exactly the three quests' own stones are lit on the Career
+  Trail (right row, right place), then plays the sample cameo. Touch: on an emulated
+  Pixel 7 in portrait it taps to walk to Ravi's laptop (the terminal opens), checks the input
+  line and quick strip above a soft keyboard (both kinds, above), walks with the D-pad, uses a
+  rack with the use button, and cycles the controls setting with the menu, D-pad, use and back
+  buttons; in landscape it taps its way into the server room; on a 360x640 phone and a tablet it
+  checks the layout. Every layout check: the controls show, every target is at least 48 CSS px,
+  nothing covers the view, the page does not scroll. It fails on any request outside the origin,
+  any failed request and any page error. CI runs it after `check:dist`; locally it runs under the
+  memory cap in AGENTS.md, one browser at a time (`--only desktop|touch` runs one half).
 - `tests/e2e/battle_smoke.py` (Python Playwright as well): serves `dist/` itself and plays the
   rate-limiter interview to a win, the Friday talk to a loss and a winning retry, the pager going
   off on a map entry, and the Dutch screen left half-way and opened again, by real key presses,
   clicks and a drag. It fails on any request that leaves the origin and on any page error. CI
-  runs it after the terminal smoke test.
+  runs it after the terminal smoke test, then again with `PHONE=portrait` and `PHONE=landscape`
+  on an emulated Pixel 7: the war room fits the screen, transcript, cards and both meters are on
+  it, every button is at least 48 CSS px, and in portrait the hints open from the header count.
