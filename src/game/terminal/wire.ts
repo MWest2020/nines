@@ -39,6 +39,7 @@ function open(api: GameApi, quest: QuestEntry, done: () => void): void {
     current = openTerminal(quest, {
       t: api.t,
       hintBoost: api.hintBoost(),
+      hints: { offer: (key) => api.hintOffer(quest.id, key), ask: (key) => api.askHint(quest.id, key) },
       ...(giver ? { speaker: giver.key(giver.spec.name) } : {}),
       applyEvents: (events) => {
         const before = api.store.game.money;
@@ -47,7 +48,7 @@ function open(api: GameApi, quest: QuestEntry, done: () => void): void {
       },
       complete: () => {
         reward = api.completeQuest(quest.id);
-        return reward ? { money: reward.money + reward.income, xp: reward.xp } : null;
+        return reward ? { money: reward.money + reward.income, xp: reward.xp, percent: reward.percent, hints: reward.hints } : null;
       },
       closed: () => {
         current = null;

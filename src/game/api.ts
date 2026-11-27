@@ -12,6 +12,7 @@ import type { LocaleId } from '../content/types';
 import type { QuestRefusal, Reward } from '../core/game';
 import type { Params, Translate } from '../core/i18n';
 import type { GameState } from '../core/save';
+import type { HintOffer } from '../core/tokens';
 import type { Conversation } from '../core/talk';
 import type { FiredEvent } from '../sim/session';
 import type { GameStore } from './store';
@@ -61,6 +62,10 @@ export interface GameApi {
   applyTerminalEvents(questId: string, events: readonly FiredEvent[]): void;
   /** hintBoost to pass to createSession and startBattle. */
   hintBoost(): number;
+  /** What asking the AI for a quest's hint (its locale key) would cost now. */
+  hintOffer(questId: string, key: string): HintOffer;
+  /** Ask the AI: pay a token (saved at once) unless it was paid before. False when refused. */
+  askHint(questId: string, key: string): boolean;
 
   // ---- world
   /** Entered a map: saves the position, counts a pager tick; returns a pager battle to open, or null. */

@@ -17,10 +17,11 @@ import { button, buttonWidth } from './widgets';
 const P = { x: 4, y: 4, w: 232, h: 152 } as const;
 const ROAD_Y = P.y + 24;
 const ROWS_Y = P.y + 48;
-const ROW_H = 13;
+/** row spacing: 13 px for up to five branches, 11 px for six (the most the panel holds) */
+const rowHeight = (rows: number): number => (rows <= 5 ? 13 : 11);
 const LABEL_W = 100;
 const STONE_X = P.x + 116;
-/** at most; stones close up when a branch has more. The screen fits five branch rows of five
+/** at most; stones close up when a branch has more. The screen fits six branch rows of five
  *  stones per town, and tests/game/ui.test.ts holds the roadmap to that. */
 const STONE_DX = 20;
 const FOOT_Y = P.y + P.h - 43;
@@ -95,8 +96,9 @@ export class TrailScene extends Screen {
     const nodes = view.nodes.filter((nd) => nd.stage === town.stage);
     const branches = store.content.roadmap.branches.filter((b) => nodes.some((nd) => nd.branch === b.id));
     if (branches.length === 0) out.push(pixelText(this, P.x + 6, ROWS_Y, t('ui.roadmap.empty'), C.grey));
+    const rowH = rowHeight(branches.length);
     branches.forEach((b, row) => {
-      const y = ROWS_Y + row * ROW_H;
+      const y = ROWS_Y + row * rowH;
       const mine = nodes.filter((nd) => nd.branch === b.id);
       out.push(pixelText(this, P.x + 6, y - 4, ellipsize(t(b.title), LABEL_W), C.paper));
       const xp = t('ui.roadmap.xp', { xp: view.xp[b.id] ?? 0 });

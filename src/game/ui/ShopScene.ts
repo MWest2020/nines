@@ -1,6 +1,7 @@
 // The Homelab Store (DESIGN.md, Homelab Store): the items in shop.yaml with their price, what
 // they do and a Buy button; one silhouette for the gear the next town will sell. Buying goes
 // through the pure rules (core/game.ts buy), so it can never spend money the player lacks.
+// AI credits are a consumable: never owned, bought again and again, each time adding tokens.
 
 import type Phaser from 'phaser';
 import { ellipsize, measure, wrap } from './font';
@@ -31,13 +32,15 @@ export class ShopScene extends Screen {
     out.push(pixelText(this, P.x + 6, P.y + 2, t('ui.shop.title'), C.paper));
     const money = t('ui.money', { amount: game.money });
     out.push(pixelText(this, P.x + P.w - 6 - measure(money), P.y + 2, money, C.gold));
+    const tokens = t('ui.shop.tokens', { n: game.tokens });
+    out.push(pixelText(this, P.x + P.w - 6 - measure(money) - 8 - measure(tokens), P.y + 2, tokens, C.lilac));
 
     // One item per page: a card and a silhouette fill the panel. More items page with ‹ ›.
     const items = store.content.shop.items;
     this.page = Math.max(0, Math.min(this.page, items.length - 1));
     let y = P.y + 18;
     for (const item of items.slice(this.page, this.page + 1)) {
-      const owned = game.items.includes(item.id);
+      const owned = !item.consumable && game.items.includes(item.id);
       out.push(art(this, P.x + 6, y, item.id));
       const tx = P.x + 42;
       const price = t('ui.shop.price', { price: item.price });
@@ -107,6 +110,13 @@ function art(scene: Phaser.Scene, x: number, y: number, id: string | null): Phas
     g.fillStyle(hex(C.ink), 1).fillRect(x + 9, y + 12, 6, 5); // the chip
     g.fillStyle(hex(C.mist), 1).fillRect(x + 20, y + 11, 6, 4).fillRect(x + 20, y + 16, 6, 4); // USB ports
     g.fillStyle(hex(C.grass), 1).fillRect(x + 5, y + 19, 1, 1); // the power LED
+    return g;
+  }
+  if (id === 'ai-credits') {
+    // a chat bubble with three dots: the AI is typing
+    g.fillStyle(hex(C.lilac), 1).fillRect(x + 5, y + 6, 20, 11).fillRect(x + 8, y + 17, 3, 3);
+    g.fillStyle(hex(C.ink), 1);
+    for (let i = 0; i < 3; i++) g.fillRect(x + 9 + i * 5, y + 11, 2, 2);
     return g;
   }
   g.fillStyle(hex(C.grey), 1).fillRect(x + 7, y + 8, 16, 10);

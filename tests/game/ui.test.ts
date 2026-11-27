@@ -63,16 +63,30 @@ describe('the pixel font', () => {
 });
 
 describe('the screens fit the content', () => {
-  // The Career Trail screen (src/game/ui/TrailScene.ts) draws five branch rows of up to five
+  // The Career Trail screen (src/game/ui/TrailScene.ts) draws six branch rows of up to five
   // stones per town; content beyond that would run off the panel.
-  const LIMITS = { branchesPerStage: 5, nodesPerBranch: 5 };
-  it('every town has at most five branches, each with at most five stones', () => {
+  const LIMITS = { branchesPerStage: 6, nodesPerBranch: 5 };
+  it('every town has at most six branches, each with at most five stones', () => {
     const { roadmap } = content();
     for (const town of roadmap.towns) {
       const nodes = roadmap.nodes.filter((n) => n.stage === town.stage);
       const branches = new Set(nodes.map((n) => n.branch));
       expect(branches.size, `${town.id} has too many branches for the Career Trail screen`).toBeLessThanOrEqual(LIMITS.branchesPerStage);
       for (const b of branches) expect(nodes.filter((n) => n.branch === b).length, `${town.id}/${b}`).toBeLessThanOrEqual(LIMITS.nodesPerBranch);
+    }
+  });
+});
+
+describe('the shop fits its text', () => {
+  // ShopScene: an item card's description wraps into four lines of 174 px (the card's width
+  // beside the art); more would be cut off.
+  it('every item description fits in four lines, in both languages', () => {
+    const b = content();
+    for (const lang of LOCALES) {
+      for (const item of b.shop.items) {
+        const lines = wrap(b.locales[lang][item.description]!, 174);
+        expect(lines.length, `${lang} ${item.id}: ${lines.join(' / ')}`).toBeLessThanOrEqual(4);
+      }
     }
   });
 });
@@ -139,6 +153,28 @@ describe('the game store', () => {
     expect(store.buy('raspberry-pi')).toMatchObject({ ok: true });
     expect(store.hintBoost()).toBe(1);
     expect(store.game.money).toBe(0);
+  });
+
+  it('asking the AI pays a token and saves at once; the reward then pays 80%', () => {
+    const { st, store, changes } = make();
+    expect(store.hintOffer('service-down', 'hint.status')).toMatchObject({ kind: 'ask', cost: 1, percent: 100, after: 80 });
+    expect(store.takeHint('service-down', 'hint.status')).toBe(true);
+    expect(changes.at(-1)).toEqual({ kind: 'hint', quest: 'service-down', charged: 1 });
+    expect(JSON.parse(st.data.get(SAVE_KEY)!).game).toMatchObject({ tokens: 2, hints: { 'service-down': ['hint.status'] } });
+    // asking again is free and changes nothing
+    const n = changes.length;
+    expect(store.takeHint('service-down', 'hint.status')).toBe(true);
+    expect(changes.length).toBe(n);
+    const r = store.completeQuest('service-down');
+    expect(r.ok && r.reward).toMatchObject({ money: 140, xp: 20, percent: 80, hints: 1 });
+  });
+
+  it('AI credits: bought again and again, never owned', () => {
+    const { store } = make();
+    store.completeQuest('broken-pipeline'); // €200
+    expect(store.buy('ai-credits')).toMatchObject({ ok: true, price: 40 });
+    expect(store.buy('ai-credits')).toMatchObject({ ok: true });
+    expect(store.game).toMatchObject({ money: 120, tokens: 9, items: [] });
   });
 
   it('switches language: strings follow and the choice is saved', () => {
