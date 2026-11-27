@@ -211,13 +211,30 @@ describe('the battles in content', () => {
   it('are lost by a player who always picks the longest or the shortest cards', () => {
     const { locales } = content();
     for (const b of battles()) {
-      for (const dir of [1, -1]) {
-        const pick = (r: BattleRound) => {
-          if (r.type === 'order') return worstAnswer(r);
-          const len = (id: string) => locales.en[questKey(b.id, r.options.find((o) => o.id === id)!.text)]!.length * dir;
-          return ids(r).sort((x, y) => len(y) - len(x)).slice(0, pickOf(r));
-        };
-        expect(play(b.id, b.spec, pick).status, `${b.id} ${dir > 0 ? 'longest' : 'shortest'}`).toBe('lost');
+      for (const lang of ['en', 'nl'] as const) {
+        for (const dir of [1, -1]) {
+          const pick = (r: BattleRound) => {
+            if (r.type === 'order') return worstAnswer(r);
+            const len = (id: string) => locales[lang][questKey(b.id, r.options.find((o) => o.id === id)!.text)]!.length * dir;
+            return ids(r).sort((x, y) => len(y) - len(x)).slice(0, pickOf(r));
+          };
+          expect(play(b.id, b.spec, pick).status, `${b.id} ${lang} ${dir > 0 ? 'longest' : 'shortest'}`).toBe('lost');
+        }
+      }
+    }
+  });
+  it('do not give the answer away by length within one battle, in either language', () => {
+    // The checks above run over all battles together; here each battle and each language must
+    // hold on its own, so a new battle cannot hide behind the others.
+    const { locales } = content();
+    for (const b of battles()) {
+      for (const lang of ['en', 'nl'] as const) {
+        const rounds = b.spec.rounds.flatMap((r) => (r.type === 'order' ? [] : [r]));
+        const len = (o: { text: string }) => locales[lang][questKey(b.id, o.text)]!.length;
+        const longestIsBest = rounds.filter((r) => [...r.options].sort((x, y) => len(y) - len(x))[0]!.grade === 'best').length;
+        expect(longestIsBest / rounds.length, `${b.id} ${lang}: the longest card is the best`).toBeLessThanOrEqual(0.5);
+        const shortestIsBest = rounds.filter((r) => [...r.options].sort((x, y) => len(x) - len(y))[0]!.grade === 'best').length;
+        expect(shortestIsBest / rounds.length, `${b.id} ${lang}: the shortest card is the best`).toBeLessThanOrEqual(0.5);
       }
     }
   });

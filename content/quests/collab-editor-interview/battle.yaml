@@ -1,10 +1,10 @@
-# Senior design interview: a real-time collaborative document editor. Facts checked: last-writer-
-# wins on a whole document loses work; OT (central ordering, transform functions) vs sequence
-# CRDTs (unique ordered ids, commutative merge, per-character metadata, tombstones), which is
-# debatable and scored on the reasoning: both well-argued answers are graded best; intent
-# preservation for an insert inside a concurrently deleted range; reconnect after offline work
-# with state vectors; one owning server per document; snapshots plus an operation log; presence is
-# ephemeral; fan-out arithmetic.
+# Senior design interview: a real-time collaborative document editor. Facts checked: a version
+# check on the whole document is safe but unusable (every concurrent edit conflicts); OT (central
+# ordering, transform functions) vs sequence CRDTs (unique ordered ids, commutative merge,
+# per-character metadata, tombstones), which is debatable and scored on the reasoning: both
+# well-argued answers are graded best; intent preservation for an insert inside a concurrently
+# deleted range; reconnect after offline work with state vectors; one owning server per document;
+# snapshots plus an operation log; presence is ephemeral; fan-out arithmetic.
 schema: 1
 kind: design
 attacker: attacker
@@ -21,7 +21,7 @@ rounds:
       - {id: offline, grade: best, text: clarify.offline.text, why: clarify.offline.why}
       - {id: rich, grade: fair, text: clarify.rich.text, why: clarify.rich.why}
       - {id: history, grade: fair, text: clarify.history.text, why: clarify.history.why}
-      - {id: database, grade: weak, text: clarify.database.text, why: clarify.database.why}
+      - {id: library, grade: weak, text: clarify.library.text, why: clarify.library.why}
       - {id: transport, grade: weak, text: clarify.transport.text, why: clarify.transport.why}
   - id: overwrite
     type: flaw
@@ -31,7 +31,7 @@ rounds:
     options:
       - {id: lost, grade: best, text: overwrite.lost.text, why: overwrite.lost.why}
       - {id: bandwidth, grade: fair, text: overwrite.bandwidth.text, why: overwrite.bandwidth.why}
-      - {id: cursor, grade: weak, text: overwrite.cursor.text, why: overwrite.cursor.why}
+      - {id: race, grade: weak, text: overwrite.race.text, why: overwrite.race.why}
       - {id: locks, grade: weak, text: overwrite.locks.text, why: overwrite.locks.why}
   - id: model
     type: tradeoff

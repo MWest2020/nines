@@ -87,11 +87,11 @@ rounds:
     value: 20000
     working: peak.working
     options:
-      - {id: lt1k, grade: weak, min: 0, max: 1000, text: peak.lt1k.text, why: peak.lt1k.why}
-      - {id: thousands, grade: fair, min: 1000, max: 10000, text: peak.thousands.text, why: peak.thousands.why}
-      - {id: tens, grade: best, min: 10000, max: 100000, text: peak.tens.text, why: peak.tens.why}
-      - {id: hundreds, grade: weak, min: 100000, max: 1000000, text: peak.hundreds.text, why: peak.hundreds.why}
-      - {id: millions, grade: weak, min: 1000000, text: peak.millions.text, why: peak.millions.why}
+      - {id: under, grade: weak, min: 0, max: 500, text: peak.under.text, why: peak.under.why}
+      - {id: low, grade: weak, min: 500, max: 2000, text: peak.low.text, why: peak.low.why}
+      - {id: mid, grade: fair, min: 2000, max: 8000, text: peak.mid.text, why: peak.mid.why}
+      - {id: right, grade: best, min: 8000, max: 30000, text: peak.right.text, why: peak.right.why}
+      - {id: over, grade: weak, min: 30000, text: peak.over.text, why: peak.over.why}
 hints:
   - {id: hold, round: hold, when: 'attempts >= 1', text: hint.hold}
   - {id: claim, round: claim, when: 'attempts >= 1', text: hint.claim}

@@ -182,6 +182,13 @@ export const DENYLIST = {
   },
 };
 
+/**
+ * Locale strings ship inside the JavaScript bundle, and tools/check-dist.mjs refuses a bundle that
+ * names a network API or a remote URL. The same patterns, checked here so `npm test` catches them
+ * in content before the build does. Keep in step with BANNED and the URL scan in check-dist.mjs.
+ */
+const DIST_REFUSES = [/\bfetch\s*\(/, /\bWebSocket\b/, /\bEventSource\b/, /\bsendBeacon\b/, /\bRTCPeerConnection\b/, /window\.open\s*\(/, /\beval\s*\(/, /\bFunction\s*\(/, /https?:\/\//];
+
 const dirnameOf = (p: string): string => (p.lastIndexOf('/') <= 0 ? '/' : p.slice(0, p.lastIndexOf('/')));
 
 const PLACEHOLDER = /\{([a-z0-9_]+)\}/g;
@@ -278,6 +285,8 @@ export function loadContent(contentDir: string, schemaDir: string, options: Load
     for (const l of LOCALES) {
       for (const [k, v] of Object.entries(maps[l])) {
         if (DENYLIST.test(v)) err(join(dir, `${l}.yaml`), `"${k}" uses a name or phrase we must not use (IP rule, AGENTS.md)`);
+        const shipped = DIST_REFUSES.find((re) => re.test(v));
+        if (shipped) err(join(dir, `${l}.yaml`), `"${k}" contains ${shipped}, which the scan of dist/ refuses (tools/check-dist.mjs); reword it`);
       }
     }
     return maps;

@@ -58,6 +58,10 @@ describe('the validator rejects broken content', () => {
     expect(errorsAfter('locales/nl.yaml', (s) => s.replace('€{amount}', '€{bedrag}'))).toMatch(/placeholders/);
     expect(errorsAfter('quests/disk-full/locales/en.yaml', (s) => s + 'spare: "x"\n')).toMatch(/unused key "spare"/);
   });
+  it('locale strings may not name what the scan of dist/ refuses', () => {
+    expect(errorsAfter('quests/disk-full/locales/en.yaml', (s) => s.replace(/^title: .*$/m, 'title: "A WebSocket walks into a bar"'))).toMatch(/"title" contains .*WebSocket.*check-dist/);
+    expect(errorsAfter('quests/disk-full/locales/nl.yaml', (s) => s.replace(/^title: .*$/m, 'title: "Zie https://example.org"'))).toMatch(/"title" contains .*https/);
+  });
   it('references must resolve', () => {
     expect(errorsAfter('quests/disk-full/quest.yaml', (s) => s.replace('roadmap_node: linux-disk', 'roadmap_node: linux-nope'))).toMatch(/unknown roadmap_node/);
     expect(errorsAfter('quests/disk-full/quest.yaml', (s) => s.replace('requires: []', 'requires: [nope]'))).toMatch(/requires unknown quest/);

@@ -470,6 +470,8 @@ file and then what a schema cannot express:
   NFKC-normalised, invisible characters are removed and Cyrillic or Greek look-alike letters
   are read as Latin before the check. The phrases are broad on purpose ("wild" near "appear"
   is refused even in ordinary prose); rephrase when it trips.
+- no locale string names what the scan of `dist/` refuses (a network API such as `WebSocket`,
+  `fetch(`, or a URL): strings ship inside the bundle, so `tools/check-dist.mjs` would fail the build.
 
 Maps (`content/maps/<id>.json`, schema `map`) are checked too:
 

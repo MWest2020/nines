@@ -20,6 +20,7 @@ const ALLOWED_SNIPPETS = ['new Function("return this")'];
 // Matched by shape, because the minifier renames the variables.
 const ALLOWED_PATTERNS = [/confirm\(`Do you want to navigate to \$\{\w+\}\?[^`]*`\)\)\{let \w+=window\.open\(\);/g];
 
+// tools/content/load.ts (DIST_REFUSES) checks locale strings against the same patterns.
 const BANNED = [/\bfetch\s*\(/, /\bWebSocket\b/, /\bEventSource\b/, /\bsendBeacon\b/, /\bRTCPeerConnection\b/, /window\.open\s*\(/, /\beval\s*\(/, /\bFunction\s*\(/];
 
 const walk = (dir) => readdirSync(dir).flatMap((n) => (statSync(join(dir, n)).isDirectory() ? walk(join(dir, n)) : [join(dir, n)]));
