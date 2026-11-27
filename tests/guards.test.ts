@@ -43,6 +43,16 @@ describe('no network at runtime', () => {
     const pure = srcFiles.filter((f) => /[/\\]src[/\\](rules|sim|core|battle|world|terminal)[/\\]/.test(f));
     expect(pure.filter((f) => banned.test(readFileSync(f, 'utf8'))).map((f) => relative(ROOT, f))).toEqual([]);
   });
+  it('the service worker answers from its cache and only ever asks its own origin', () => {
+    const sw = readFileSync(join(ROOT, 'src', 'offline', 'sw.js'), 'utf8');
+    // one network call, a cache miss for the same origin, after returning for any other origin
+    expect(sw.match(/\bfetch\s*\(/g)).toHaveLength(1);
+    expect(sw).toContain('return hit ?? fetch(request);');
+    const guard = sw.indexOf("if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin) return;");
+    expect(guard).toBeGreaterThan(0);
+    expect(guard).toBeLessThan(sw.indexOf('fetch(request)'));
+    expect(sw).not.toMatch(/XMLHttpRequest|WebSocket|EventSource|sendBeacon|importScripts|https?:\/\/|\beval\s*\(|\bFunction\s*\(/);
+  });
   it('index.html has a CSP that keeps requests on the origin', () => {
     const html = readFileSync(join(ROOT, 'index.html'), 'utf8');
     expect(html).toMatch(/default-src 'self'/);
