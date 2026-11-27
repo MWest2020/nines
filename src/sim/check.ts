@@ -30,7 +30,8 @@ export interface CheckResult {
 }
 
 /** What still means "not filled in". */
-const PLACEHOLDER = /^(\?+|\.{2,}|…|todo|tbd|tbc|xxx|<[^>]*>|_+)$/i;
+/** ("n/a" is an answer: "Rollback used: n/a".) */
+const PLACEHOLDER = /^(\?+|-+|\.{2,}|…|todo|tbd|tbc|xxx|<[^>]*>|_+)$/i;
 
 /** Words on a severity-like scale, Dutch and short forms included. */
 const SYNONYMS: Record<string, string> = {
@@ -77,7 +78,9 @@ const filled = (v: string): boolean => v !== '' && !PLACEHOLDER.test(v.trim());
 
 /** A price or amount as the player may write it: 1.25, 1,25, €1.25, € 1,25, 1.25 EUR. */
 export function readNumber(v: string): number | null {
-  const m = /(-?\d+(?:[.,]\d+)?)/.exec(v.replace(/\s+/g, ''));
+  // "0.95 -> 1.25": the new value is the one after the arrow
+  const after = v.split(/->|→|=>/).at(-1) ?? v;
+  const m = /(-?\d+(?:[.,]\d+)?)/.exec(after.replace(/\s+/g, ''));
   if (!m) return null;
   const n = Number(m[1]!.replace(',', '.'));
   return Number.isFinite(n) ? n : null;
@@ -117,7 +120,8 @@ export function grade(spec: CheckSpec, text: string | undefined): CheckResult {
     const hits = fieldValues(text, c.field);
     const scale = c.scale.join(', ');
     if (hits.length === 0) return note('ui.check.no_field', { file, field: c.field });
-    const named = scaleWords(hits.map((h) => h.value).join(' '), c.scale);
+    // the value may sit on the next line, as with fields
+    const named = scaleWords(hits.map((h) => (filled(h.value) ? h.value : h.next.join(' '))).join(' '), c.scale);
     if (named.length === 0) {
       const value = hits.map((h) => h.value).find(filled);
       if (value === undefined) return note('ui.check.choice_empty', { file, field: c.field, scale });

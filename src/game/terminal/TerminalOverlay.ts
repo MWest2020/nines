@@ -15,6 +15,7 @@ import type { Translate } from '../../core/i18n';
 import { ARREST_AFTER, clampRisk, DAMAGE_MULTIPLIER } from '../../core/karma';
 import { cancelEdit, createSession, type FiredEvent, prompt, run, type RunResult, saveFile, type Session, stripControl } from '../../sim/session';
 import { complete } from '../../terminal/complete';
+import { noteUnknown } from '../../sim/unknown';
 import { gutter, INDENT, insertIndent, isDirty, lineCol, lineCount, normalizeText, tabLines } from '../../terminal/editor';
 import { down, type History, newHistory, record, up } from '../../terminal/history';
 import { pushBack } from '../back';
@@ -362,6 +363,8 @@ export class TerminalOverlay {
     this.risk = undefined;
     this.practicing = true;
     this.practiceTag.hidden = false;
+    this.closeAfterDialogs = false;
+    this.escArmed = false;
     this.term.reset();
     this.greet();
     this.focus();
@@ -464,6 +467,8 @@ export class TerminalOverlay {
     this.echo(line);
     this.history = record(this.history, line);
     const r = run(this.session, line);
+    // commands no machine has, for the page's dev-only list (src/sim/unknown.ts)
+    for (const name of this.session.state.unknown) noteUnknown(name);
     // a failed command in orange, except systemctl status of a failed unit (exit 3), which is
     // the block the player came to read
     if (r.out.length > 0) this.print(r.out, r.exit !== 0 && r.exit !== 3 ? SGR.error : undefined);
@@ -744,6 +749,7 @@ export class TerminalOverlay {
       // kubectl edit answers like kubectl: "configmap/x edited"
       if (r.out.length > 0) this.print(r.out, r.exit !== 0 ? SGR.error : undefined);
       this.handle(r);
+      if (r.ui?.editor) this.openEditor(r.ui.editor.path, r.ui.editor.content);
     } else {
       this.print([this.t('ui.terminal.discarded', { path: e.path })], SGR.dim);
       const out = cancelEdit(this.session, e.path);

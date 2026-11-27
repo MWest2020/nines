@@ -58,7 +58,7 @@ sessions:
   - {id: card, user: guest, tty: pts/0, from: "library card 4417", login: "08:58", self: true, relogin: "kiosk (anonymous)", cover: {flag: borrowed-card, from: "library card 2291"}}
   - {id: before, user: guest, tty: pts/0, from: "library card 2291", login: "07:40", logout: "08:12"}
 carry:
-  - {flag: borrowed-card, caught_fine: 150}
+  - {flag: borrowed-card, caught_fine: 150, taken_flag: card-taken}
 quick:
   - "cat ~/job.txt"
   - who

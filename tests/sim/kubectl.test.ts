@@ -104,7 +104,10 @@ describe('kubectl rollout, scale, edit, delete and top', () => {
     const again = run(s, 'kubectl edit configmap shop-api-config -n shop').ui!.editor!;
     expect(saveFile(s, again.path, again.content).out).toEqual(['configmap/shop-api-config skipped: no changes']);
     const renamed = run(s, 'kubectl edit cm shop-api-config -n shop').ui!.editor!;
-    expect(saveFile(s, renamed.path, renamed.content.replace('name: shop-api-config', 'name: other')).out).toEqual(['error: At least one of apiVersion, kind and name was changed']);
+    const bad = saveFile(s, renamed.path, renamed.content.replace('name: shop-api-config', 'name: other'));
+    expect(bad.out[0]).toBe('error: At least one of apiVersion, kind and name was changed');
+    // like kubectl, the editor opens again on the same text
+    expect(bad.ui?.editor?.content).toMatch(/name: other/);
     expect(sh(s, 'kubectl edit cm nope -n shop')).toMatch(/not found/);
   });
   it('the crashloop quest warns about editing the cluster by hand', () => {

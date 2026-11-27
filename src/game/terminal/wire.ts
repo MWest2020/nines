@@ -58,13 +58,17 @@ function open(api: GameApi, quest: QuestEntry, done: () => void): void {
           const r = api.finishHustle(quest.id, risk ?? RISK_CAP, {
             caughtFine: carried.reduce((sum, c) => sum + (c.caught_fine ?? 0), 0),
             confiscate: carried.filter((c) => c.caught_fine !== undefined).map((c) => c.flag),
+            taken: carried.flatMap((c) => (c.taken_flag ? [c.taken_flag] : [])),
           });
           if (!r.ok) return null;
           if (r.outcome === 'caught') return { kind: 'caught', fine: r.fine, karma: r.karma, strikes: r.strikes, arrested: r.arrested, agency: r.agency, lesson: r.lesson };
           reward = r.reward;
           lesson = r.lesson;
         } else {
-          reward = api.completeQuest(quest.id);
+          // a practice run's win pays nothing: keep the first win's reward for the done lines
+          const r = api.completeQuest(quest.id);
+          if (!r) return null;
+          reward = r;
         }
         if (!reward) return null;
         const { money, income, xp, percent, hints, karma, contract, agency } = reward;

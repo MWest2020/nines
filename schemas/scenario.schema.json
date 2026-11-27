@@ -657,6 +657,10 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 1000
+          },
+          "taken_flag": {
+            "$ref": "common.schema.json#/$defs/id",
+            "description": "set when the player is caught carrying the flag (which is taken away): content can tell, and the thing stays gone"
           }
         }
       }

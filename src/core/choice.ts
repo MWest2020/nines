@@ -18,8 +18,17 @@ export interface ChoiceResult {
   agency: { fine: number } | null;
 }
 
-export function applyChoice(game: GameState, rules: Pick<Rules, 'quests'>, choice: Pick<TalkChoice, 'karma' | 'setFlag'>): ChoiceResult {
-  const k = changeKarma(game, rules, choice.karma);
-  const next = choice.setFlag ? setFlag(k.game, choice.setFlag, true) : k.game;
+/**
+ * A choice's karma and flag. A karma gain is paid once per choice (`claimed` key
+ * `choice/<text key>`), like an event's bonus, so talking again cannot farm it; a loss costs
+ * every time.
+ */
+export function applyChoice(game: GameState, rules: Pick<Rules, 'quests'>, choice: Pick<TalkChoice, 'text' | 'karma' | 'setFlag'>): ChoiceResult {
+  const key = `choice/${choice.text}`;
+  const gain = choice.karma > 0;
+  const paid = gain && game.claimed.includes(key);
+  const k = changeKarma(game, rules, paid ? 0 : choice.karma);
+  let next = gain && !paid ? { ...k.game, claimed: [...k.game.claimed, key] } : k.game;
+  if (choice.setFlag) next = setFlag(next, choice.setFlag, true);
   return { game: next, karma: k.karma, agency: k.agency };
 }

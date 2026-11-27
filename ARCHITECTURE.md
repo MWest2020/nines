@@ -184,7 +184,7 @@ may change the working copy of the state.
 | the base shell | `whoami`, `id`, `hostname`, `uname [-a]`, `env`/`printenv`, `echo`, `date`, `uptime`, `head`, `wc`, `sort [-r -n -h -u -f]`, `uniq [-c -d -u]`, `find [-name -iname -type -maxdepth -size]`, `which`, `man`, `history`; `who`, `w`, `last`, `ps [aux \| -ef]`, `kill`, `pkill`/`killall [-u -t]`, `logout` |
 | `clear`, `exit` | UI actions |
 
-**Unknown commands** answer honestly: "foo: command not found. This machine's shell has no 'foo' (yet); help lists what it does have." Each name goes once into `SimState.unknown` and into a page-wide list (`src/sim/unknown.ts`, at most 200, never shown to the player and never sent anywhere). The browser exposes it as `ninesUnknownCommands()` in `vite dev` or with `localStorage nines.debug = 1`; the smoke test sets that and prints the list, so the gaps players hit show up in test runs.
+**Unknown commands** answer honestly: "foo: command not found. This machine's shell has no 'foo' (yet); help lists what it does have." Each name goes once into `SimState.unknown`; the terminal overlay copies it into a page-wide list (`src/sim/unknown.ts`, at most 200, never shown to the player and never sent anywhere), so the simulator itself stays free of side effects. A command other machines have (`nginx` where nginx is not installed) is not counted as a gap. The browser exposes it as `ninesUnknownCommands()` in `vite dev` or with `localStorage nines.debug = 1`; the smoke test sets that and prints the list, so the gaps players hit show up in test runs.
 
 Output imitates the real tools closely enough that what the player learns transfers.
 
@@ -376,8 +376,8 @@ with the state they read:
 | `pods_running(deployment)` | boolean, all pods Running |
 | `ran(command)` | boolean, `"df"` or `"git commit"` |
 | `flag(name)` | boolean, set by events |
-| `touched(path)` | boolean: a command named `path` or something inside it as an operand (cd, cat, ls, less, edit, any pipe stage; not flag values or grep's pattern), or a recursive command (grep -r, du, rm -r; the working directory without an operand) walked a folder above it |
-| `opened(path)` | boolean: a reading command (cat, less, tail, grep, edit, mv) opened that file or one inside that folder, or grep -r read through a folder above it; `ls` and `du` only touch |
+| `touched(path)` | boolean: a command named `path` or something inside it as an operand (cd, cat, ls, less, edit, any pipe stage; not flag values or grep's pattern), or a recursive command (grep -r, du, find, rm -r; the working directory without an operand) walked a folder above it |
+| `opened(path)` | boolean: a reading command (cat, less, tail, head, grep, sort, uniq, wc, edit, mv) opened that file or one inside that folder, or grep -r read through a folder above it; `ls` and `du` only touch |
 | `pipeline_valid` | boolean, the pipeline file in the working tree validates |
 | `pipeline_status` | `none` \| `passed` \| `failed`, the last CI run |
 | `nginx_config_ok` | boolean: `nginx -t` passes (false without an nginx config) |
@@ -481,7 +481,7 @@ objectives: [{id, text, done_when?, check?, procedure?}]   # all true = quest co
 #   words in any case. While it fails, once the player has written the file, the objectives
 #   panel shows a note saying what is wrong ("Severity line has two values: high, critical. Pick one.").
 sessions?: [{id, user?, tty, from, login?, self?, logout?, relogin?, cover?: {flag, from}}]   # logins (who, w, last)
-carry?: [{flag, caught_fine?}]                # progress flags from the save the machine starts with (flag() reads them)
+carry?: [{flag, caught_fine?, taken_flag?}]   # progress flags from the save the machine starts with (flag() reads them)
 hints: [{id, when, text}]
 events: [{id, when, say, money?, karma?, reset?, set_flag?}]
 risk?: {base, factors: [{id, when, add, text}]}   # a hustle's chance of getting caught (only a hustle)
@@ -528,7 +528,8 @@ file and then what a schema cannot express:
   and the same `{placeholders}`, and a folder has no unused keys;
 - paths are absolute and normalised, a `/` mount exists, a pipeline file has content, nothing
   lies below a file, `home` and `cwd` are directories;
-- a `check` names locale keys that exist (`missing`, `wrong`) and accepts only values on its scale;
+- a `check` names locale keys that exist (`missing`, `wrong`), accepts only values on its scale,
+  and fails on the file the scenario ships (an untouched template never counts as done);
   session ids are unique, at most one is `self`, a cover names a carried flag; a carried flag is
   set by something (an event's `set_flag` or a dialogue choice's), and `caught_fine` is a hustle's;
   `session_active` names a session of that scenario; `flag()` may name a carried flag;
@@ -891,11 +892,13 @@ City); `karma` (-100..100), `strikes` (times caught since the last community ser
   own path differently from a side-quester (DESIGN.md, Medior City).
 - **Dialogue choices** (`core/talk.ts`, `core/choice.ts`): an NPC dialogue entry may end in two
   or three choices, shown as a panel like the menu (`HudScene.choose`); a choice's `karma` goes
-  through `changeKarma`, its `set_flag` into the save, then the NPC replies. Ans's desk
+  through `changeKarma` (a gain is paid once per choice, `claimed` `choice/<key>`, so talking
+  again cannot farm it), its `set_flag` into the save, then the NPC replies. Ans's desk
   (content/npcs/ans) is the social-engineering one: pocketing a library card sets
   `borrowed-card` (karma -10). The vending job `carry`s that flag: its kiosk login shows that
-  card, its risk drops, and being caught with it adds `caught_fine` to the fine and takes the card
-  (`finishHustle(..., {caughtFine, confiscate})`). Game mechanics only: a choice, never a method.
+  card, its risk drops, and being caught with it adds `caught_fine` to the fine, takes the card and
+  sets `taken_flag` (`card-taken`), so it never lies on Ans's desk again
+  (`finishHustle(..., {caughtFine, confiscate, taken})`). Game mechanics only: a choice, never a method.
 - **Karma** (`core/karma.ts`, pure; DESIGN.md, Karma): `reward.karma` and event `karma` go through
   `changeKarma` (bounds; a drop below zero reopens community service; a drop to -60 or below off
   probation brings the agency: a fine and probation). A hustle's terminal win calls

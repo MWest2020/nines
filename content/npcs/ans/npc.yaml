@@ -11,6 +11,9 @@ name: npc.name
 tint: "#7898c8"
 spawn: {map: junior-village, slot: cameo-2, facing: down}
 dialogue:
+  # caught with it: the card went back to Joris by way of the police, and is never on the desk again
+  - when: 'flag("card-taken")'
+    lines: [taken.1, legal.1]
   - when: 'flag("borrowed-card")'
     lines: [missing.1, missing.2]
   - when: 'flag("returned-card")'

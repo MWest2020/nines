@@ -124,7 +124,7 @@ export class GameStore {
   }
 
   /** A dialogue choice was made: its karma and flag (core/choice.ts), saved at once. */
-  choose(choice: Pick<TalkChoice, 'karma' | 'setFlag'>): ChoiceResult {
+  choose(choice: Pick<TalkChoice, 'text' | 'karma' | 'setFlag'>): ChoiceResult {
     const r = applyChoice(this.state, this.content, choice);
     this.commit(r.game, { kind: 'other' }, true);
     return r;

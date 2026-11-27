@@ -225,6 +225,8 @@ export type HustleResult =
 export interface HustleCover {
   caughtFine?: number;
   confiscate?: string[];
+  /** flags set when caught (scenario carry taken_flag): what was taken stays gone */
+  taken?: string[];
 }
 
 /**
@@ -254,6 +256,7 @@ export function finishHustle(game: GameState, rules: Rules, id: string, risk: nu
   // carried in that was not theirs (a borrowed card) is taken, and raises the fine
   const flags = { ...game.flags };
   for (const f of opts.confiscate ?? []) delete flags[f];
+  for (const f of opts.taken ?? []) flags[f] = true;
   let g: GameState = { ...game, flags, quests: { ...game.quests, [id]: 'active' }, strikes, caught: game.caught + 1, ...(arrest ? { probation: true } : {}) };
   const f1 = fine(g, CAUGHT_FINE + Math.max(0, Math.floor(opts.caughtFine ?? 0)));
   g = f1.game;

@@ -40,9 +40,9 @@ export const SCENARIO_FACTS: Registry = {
     /** the login with this id (scenario `sessions`) is still logged in */
     session_active: { args: ['string'], returns: 'boolean' },
     /** a command named this path, or something inside it, as an operand (cd, cat, ls, edit...),
-     *  or swept over it recursively (grep -r, du, rm -r on a folder above it) */
+     *  or swept over it recursively (grep -r, du, find, rm -r on a folder above it) */
     touched: { args: ['string'], returns: 'boolean', pathArgs: [0] },
-    /** a reading command (cat, less, tail, grep, edit, mv) opened this file or one inside this
+    /** a reading command (cat, less, tail, head, grep, sort, uniq, wc, edit, mv) opened this file or one inside this
      *  folder, or grep -r read through a folder above it; ls and du only touch */
     opened: { args: ['string'], returns: 'boolean', pathArgs: [0] },
   },

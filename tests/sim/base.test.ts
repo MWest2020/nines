@@ -5,7 +5,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { ScenarioSpec } from '../../src/content/types';
 import { createSession, run } from '../../src/sim/session';
-import { clearUnknown, unknownCommands } from '../../src/sim/unknown';
+import { clearUnknown, noteUnknown, unknownCommands } from '../../src/sim/unknown';
 import { content, FIXTURE, session, sh, t } from '../helpers';
 
 describe('the base machine', () => {
@@ -139,11 +139,16 @@ describe('unknown commands', () => {
     run(s, 'telnet');
     expect(s.state.unknown).toEqual(['nmap', 'telnet']);
     expect(s.state.counters.fails).toBe(3);
+    // the page-wide list is fed by the terminal overlay from state.unknown; the sim stays pure
+    expect(unknownCommands()).toEqual([]);
+    for (const n of s.state.unknown) noteUnknown(n);
+    noteUnknown('nmap');
     expect(unknownCommands()).toEqual(['nmap', 'telnet']);
   });
   it('nginx is a command only where nginx is installed', () => {
     const s = session(FIXTURE);
     expect(sh(s, 'nginx -t')).toMatch(/^nginx: command not found/);
+    expect(s.state.unknown).toEqual([]); // other machines have it: not a gap
     expect(sh(s, 'help nginx')).toMatch(/No help for 'nginx'/);
     expect(sh(s, 'help')).not.toMatch(/\n {2}nginx /);
   });

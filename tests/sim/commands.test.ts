@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { scenarioEnv } from '../../src/sim/facts';
 import { createSession, prompt, riskOf, run, saveFile } from '../../src/sim/session';
-import { FIXTURE, session, sh, steps } from '../helpers';
+import { COMMANDS, USAGE } from '../../src/sim/shell/commands';
+import { FIXTURE, session, sh, steps, t } from '../helpers';
 
 const fresh = () => session(FIXTURE);
 
@@ -679,5 +680,20 @@ describe('kubectl for Medior City: readiness, rollouts from apply, rollout statu
     saveFile(t, '/home/dev/d.yaml', dep('/ready').replace('  namespace: shop\n', ''));
     expect(sh(t, 'kubectl apply -f d.yaml')).toBe('deployment.apps/api created');
     expect(run(t, 'kubectl get pods -n shop').out[1]).toMatch(/0\/1/);
+  });
+});
+
+// The base shell, nginx and kubectl have their own files (tests/sim/base.test.ts, nginx.test.ts,
+// kubectl.test.ts); this keeps AGENTS.md's rule that every command is covered here too.
+describe('every command', () => {
+  it('has usage and a help line in both languages, and runs on a fresh machine without throwing', () => {
+    for (const name of Object.keys(COMMANDS)) {
+      if (['nano', 'vi', 'vim', 'printenv', 'killall'].includes(name)) continue; // aliases
+      expect(USAGE[name], name).toBeTruthy();
+      expect(t(`help.${name}`), name).not.toBe(`help.${name}`);
+      const s = session(FIXTURE);
+      expect(() => run(s, name), name).not.toThrow();
+      expect(() => run(s, `${name} --help-me`), name).not.toThrow();
+    }
   });
 });

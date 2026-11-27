@@ -157,8 +157,9 @@ export interface ScenarioSpec {
   /** logins on the machine (who, w, last); without a `self` one the player gets a default shell */
   sessions?: SessionSpec[];
   /** progress flags from the save that this machine starts with: flag() reads them. A hustle's
-   *  `caught_fine` is added to the fine when the player is caught while carrying it. */
-  carry?: { flag: string; caught_fine?: number }[];
+   *  `caught_fine` is added to the fine when the player is caught while carrying it; the flag is
+   *  then taken away and `taken_flag` set, so content can say so (and the card stays gone). */
+  carry?: { flag: string; caught_fine?: number; taken_flag?: string }[];
   hints?: { id: string; when: string; text: string }[];
   events?: ScenarioEventSpec[];
   /** only a hustle has one */

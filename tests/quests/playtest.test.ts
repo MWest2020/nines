@@ -140,3 +140,57 @@ describe('Practice again: the replay rules', () => {
     expect(run(s, 'systemctl restart nginx').justWon).toBe(true);
   });
 });
+
+describe('review fixes: the rules stay tight', () => {
+  const SHOP = (body: string) => `server {\n${body}  server_name shop.example.test;\n  root /var/www/shop;\n}\n`;
+  it('service-down: a config that passes nginx -t but does not serve the shop on port 80 does not win', () => {
+    for (const text of ['', 'server {}\n', SHOP('  listen 8080;\n')]) {
+      const s = open('service-down');
+      saveFile(s, '/etc/nginx/conf.d/shop.conf', text);
+      expect(sh(s, 'nginx -t'), text).toMatch(/test is successful/);
+      const r = run(s, 'systemctl restart nginx');
+      expect(r.justWon, text).toBe(false);
+    }
+  });
+  it('caught with the borrowed card: it is taken for good, and Ans never offers it again', () => {
+    const base: GameState = { ...startQuest(newGame('en', 7), rules(), 'vending-prices').game, money: 1000, flags: { 'borrowed-card': true } };
+    let caught: GameState | null = null;
+    for (let seed = 0; seed < 50 && !caught; seed++) {
+      const r = finishHustle({ ...base, seed }, rules(), 'vending-prices', 95, { caughtFine: 150, confiscate: ['borrowed-card'], taken: ['card-taken'] });
+      if (r.ok && r.outcome === 'caught') caught = r.game;
+    }
+    expect(caught!.flags['card-taken']).toBe(true);
+    const c = conversation(caught!, content(), 'ans')!;
+    expect(c.choices).toBeUndefined();
+    expect(c.lines).toEqual(['npc.ans.taken.1', 'npc.ans.legal.1']);
+  });
+  it('a karma gain from a choice is paid once, a loss every time', () => {
+    const g = newGame('en', 7);
+    const give = { text: 'npc.ans.choice.hand_in', karma: 5 };
+    const once = applyChoice(g, rules(), give);
+    expect(once.karma).toBe(5);
+    expect(applyChoice(once.game, rules(), give).karma).toBe(0);
+    const take = { text: 'npc.ans.choice.pocket', karma: -10 };
+    expect(applyChoice(applyChoice(g, rules(), take).game, rules(), take).karma).toBe(-10);
+  });
+  it('find walks what it searches: out-of-scope and snooping count, as with grep -r', () => {
+    const pen = open('bank-pentest');
+    run(pen, 'cat ~/engagement/scope.txt');
+    expect(run(pen, 'find /srv -size +100M').events.map((e) => e.id)).toEqual(['out-of-scope']);
+    const kiosk = open('vending-prices');
+    expect(run(kiosk, 'find /mnt/munchr-public -name "*.csv"').risk!.factors.map((f) => f.id)).toContain('snooped');
+  });
+  it('head, sort, uniq and wc read the files they name (opened())', () => {
+    const raid = createSession(content().quests.find((q) => q.id === 'degraded-raid')!.scenario!, { t });
+    const r = run(raid, 'head /var/log/backup.log');
+    expect(r.objectives.find((o) => o.id === 'backup')!.done).toBe(true);
+  });
+  it('a severity on the line under "Severity:" counts; an arrow takes the new number', () => {
+    const s = open('bank-pentest');
+    run(s, 'cat ~/engagement/scope.txt');
+    const r = saveFile(s, '/home/pentest/engagement/finding-01.txt', 'Where: autoindex on /exports/\nSeverity:\n  high\n');
+    expect(r.objectives.every((o) => o.done)).toBe(true);
+    const k = open('vending-prices');
+    expect(saveFile(k, '/home/guest/drop/for-vince.txt', 'choco_bar: 1.10 -> 1.25\ncola: 1.30 → 1,45\n').justWon).toBe(true);
+  });
+});

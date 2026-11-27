@@ -38,6 +38,7 @@ import { COMMANDS } from '../../src/sim/shell/commands';
 import { BATTLE_FACTS, PROGRESS_FACTS, SCENARIO_FACTS } from '../../src/rules/registries';
 import { normalize } from '../../src/sim/path';
 import { manifestId } from '../../src/sim/manifest';
+import { grade } from '../../src/sim/check';
 import { createSession } from '../../src/sim/session';
 import { parseLine } from '../../src/sim/shell/parse';
 import { answerRound, compileBattle, startBattle } from '../../src/battle/engine';
@@ -717,6 +718,14 @@ export function loadContent(contentDir: string, schemaDir: string, options: Load
       const carried = (scenario.carry ?? []).map((c) => c.flag);
       for (const x of scenario.sessions ?? []) if (x.cover && !carried.includes(x.cover.flag)) err(sFile, `session ${x.id}: cover.flag "${x.cover.flag}" must be listed under carry`);
       for (const c of carried) carriedFlags.push({ file: sFile, flag: c });
+      for (const c of scenario.carry ?? []) if (c.taken_flag) progressFlags.add(c.taken_flag);
+      // a check must not pass on the file the scenario ships: an untouched template is not work
+      scenario.objectives.forEach((o, i) => {
+        if (!o.check) return;
+        const f = scenario.files?.[o.check.file];
+        const text = typeof f === 'string' ? f : f?.content;
+        if (text !== undefined && grade(o.check, text).ok) err(sFile, `objectives[${i}].check passes on the file as shipped (${o.check.file}): the template must not count as done`);
+      });
       if (scenario.carry?.some((c) => c.caught_fine !== undefined) && (quest.kind ?? 'job') !== 'hustle') err(sFile, 'caught_fine only means something on a hustle');
       (scenario.hints ?? []).forEach((h, i) => {
         need(sFile, h.text);

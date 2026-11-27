@@ -9,8 +9,7 @@ import { own } from '../rules/own';
 import { SCENARIO_FACTS } from '../rules/registries';
 import { type CheckNote, grade } from './check';
 import { scenarioEnv } from './facts';
-import { applyManifest } from './shell/kubectl';
-import { noteUnknown } from './unknown';
+import { applyManifest, rollout } from './shell/kubectl';
 import { normalize, resolve } from './path';
 import { COMMANDS, type Ctx, hasNginx, SUBCOMMANDS, type Ui } from './shell/commands';
 import { parseLine } from './shell/parse';
@@ -244,10 +243,12 @@ function riskIn(session: Session, work: SimState): Risk | null {
 export const riskOf = (session: Session): Risk | null => riskIn(session, session.state);
 
 /** Commands that read what is inside a file (the opened() fact); listing and sizing do not. */
-const READERS = new Set(['cat', 'less', 'tail', 'grep', 'edit', 'nano', 'vi', 'vim', 'mv']);
+const READERS = new Set(['cat', 'less', 'tail', 'head', 'grep', 'sort', 'uniq', 'wc', 'edit', 'nano', 'vi', 'vim', 'mv']);
 /** Flags whose next word is a value, never a path. */
 const VALUE_FLAGS: Record<string, string[]> = {
   tail: ['-n'],
+  head: ['-n'],
+  find: ['-name', '-iname', '-type', '-maxdepth', '-size'],
   grep: ['-e', '-m', '-A', '-B', '-C'],
   journalctl: ['-u', '-n'],
   kubectl: ['-n', '--namespace', '-o', '--output', '--tail'],
@@ -255,7 +256,8 @@ const VALUE_FLAGS: Record<string, string[]> = {
 
 /** Does a command line's words name a recursive walk (grep -r, du, rm -r)? */
 function recursive(name: string, args: readonly string[]): boolean {
-  if (name === 'du') return true;
+  // du and find always walk the folders they are given (the working directory without one)
+  if (name === 'du' || name === 'find') return true;
   if (name !== 'grep' && name !== 'rm') return false;
   return args.some((a) => a === '--recursive' || (/^-[A-Za-z]+$/.test(a) && /[rR]/.test(a)));
 }
@@ -347,8 +349,9 @@ export function run(session: Session, rawLine: string): RunResult {
       if (!cmd || !available(work, name)) {
         out.length = 0;
         out.push(t('sh.not_found', { cmd: name }));
-        if (!work.unknown.includes(name) && work.unknown.length < 100) work.unknown.push(name);
-        noteUnknown(name);
+        // the gaps players hit (src/sim/unknown.ts collects them in the page); a command this
+        // machine lacks but others have (nginx) is not a gap
+        if (!cmd && !work.unknown.includes(name) && work.unknown.length < 100) work.unknown.push(name);
         exit = 127;
         failed = true;
         break;
@@ -400,22 +403,32 @@ export function saveFile(session: Session, path: string, content: string): RunRe
   writeFile(work.fs, p, stripControl(content.replace(/\r\n?/g, '\n')));
   const out: string[] = [];
   let exit = 0;
+  let ui: Ui | undefined;
   const edit = work.kubeEdit;
   if (edit && edit.path === p) {
     // kubectl edit: saving the temporary file applies it to the object it came from
     const env = scenarioEnv({ state: () => work, initial: session.initial, spec: session.spec, hintBoost: 0 });
     const ctx: Ctx = { s: work, spec: session.spec, env, t: session.t, serviceRules: session.compiled.serviceRules, deploymentRules: session.compiled.deploymentRules };
     const r = applyManifest(ctx, p, p, edit.key.split('/')[1] ?? 'default', edit.key);
-    out.push(r.bad ? r.line : `${r.line.replace(/ (configured|unchanged|created)$/, (_m, how: string) => (how === 'unchanged' ? ' skipped: no changes' : ' edited'))}`);
-    exit = r.bad ? 1 : 0;
-    work.kubeEdit = null;
-    delete work.fs[p];
+    if (r.bad) {
+      // like kubectl, the editor opens again on the same text, so nothing typed is lost
+      out.push(r.line, session.t('sh.kubectl_edit_again'));
+      exit = 1;
+      const n = work.fs[p];
+      ui = { editor: { path: p, content: n?.type === 'file' ? (n.content ?? '') : '' } };
+    } else {
+      out.push(r.line.replace(/ (configured|unchanged|created)$/, (_m, how: string) => (how === 'unchanged' ? ' skipped: no changes' : ' edited')));
+      // an edited Deployment rolls out new pods, as apply does
+      if (r.rollout) rollout(ctx, r.rollout);
+      work.kubeEdit = null;
+      delete work.fs[p];
+    }
   } else {
     if (!work.ran.includes('edit')) work.ran.push('edit');
     if (!work.touched.includes(p)) work.touched.push(p);
     if (!work.opened.includes(p)) work.opened.push(p);
   }
-  return settle(session, work, out, exit, undefined, []);
+  return settle(session, work, out, exit, ui, []);
 }
 
 /** The editor closed without saving: a kubectl edit is cancelled ("Edit cancelled, no changes made."). */

@@ -16,6 +16,7 @@ import { manifestId, manifestValue, objectKey, resourceName, significant } from 
 import { join } from '../path';
 import { makePods, podSuffix, type Pod, type SimState } from '../state';
 import { listDir } from '../vfs';
+import { utf8Length } from '../size';
 import { pidOf } from '../base';
 import { abs, type CmdResult, type Command, type Ctx, fail, flags, isResult, ok, USAGE } from './util';
 
@@ -636,7 +637,7 @@ function edit(ctx: Ctx, rest: string[], ns: string): CmdResult {
   if (!ck || text === null) return fail([`Error from server (NotFound): ${tgt.kind} "${tgt.name}" not found`]);
   const path = `/tmp/kubectl-edit-${podSuffix(`${ck}/${ns}/${tgt.name}#${ctx.s.counters.commands}`, 6)}.yaml`;
   const content = `# Please edit the object below. Saving applies it to the cluster;\n# cancel to leave it as it is.\n#\n${text}\n`;
-  ctx.s.fs[path] = { type: 'file', size: content.length, content };
+  ctx.s.fs[path] = { type: 'file', size: utf8Length(content), content };
   ctx.s.kubeEdit = { path, key: `${ck}/${ns}/${tgt.name}`, kind: ck, name: tgt.name };
   return ok([], { editor: { path, content } });
 }
