@@ -521,6 +521,17 @@ in the drop file. What raises the heat: going through the HR folder (a recursive
 share walks through it too, and that costs 5 karma), three failed commands (the kiosk beeps),
 twenty commands (the barista stares), taking the file instead of reading it, and still being
 signed in with your own library card when you drop. Careful play is 20%; sloppy play hits the cap.
+The kiosk login is a real login on the simulated machine (Mark's playtest, 27 Nov 2026: "how do I
+log the guest out?"): `who`, `w` and `last` show it, and `logout`, `kill <pid>` or `pkill -u
+guest` sign the card out, after which the kiosk logs straight back in as an anonymous guest.
+
+*Ans's desk* (`content/npcs/ans`, the social-engineering way): while the job is on offer or
+under way, the librarian steps away and someone's card lies on her desk. Three choices: pocket
+it (karma -10), give it to Ans (karma +5, once, and she points to security.txt), or leave it.
+A pocketed card goes into the job (the scenario `carry`s the flag): the kiosk shows that card,
+the heat drops by 10 points (5 come back while still signed in), and being caught with it adds
+€150 to the fine and the card is taken. It is a dialogue choice, never a method: no script, no
+pretext, nothing that works outside the game.
 
 *Safety.* The hack is abstract: no real technique, tool, exploit or payload, nothing that
 teaches an intrusion. Reading a folder that someone left in a public place is the whole trick,
