@@ -6,7 +6,7 @@
 import { own } from '../../rules/own';
 import { KERNEL, clockTime, uidOf } from '../base';
 import { basename, isUnder, join, relativeTo } from '../path';
-import { parseSize } from '../size';
+import { formatHuman, parseSize } from '../size';
 import { subtree } from '../vfs';
 import { abs, type Command, fail, fileLines, flags, isResult, ok, USAGE } from './util';
 
@@ -125,6 +125,14 @@ const wc: Command = (ctx, args, stdin) => {
   const f = r.f;
   const pick = { l: f['l'] || f['lines'], w: f['w'] || f['words'], c: f['c'] || f['m'] || f['bytes'] };
   const any = pick.l || pick.w || pick.c;
+  // a file known only by its size (a 2.1G backup): wc -c reports that size; lines and words are unknown
+  for (const a of r.rest) {
+    const n = ctx.s.fs[abs(ctx, a)];
+    if (n?.type === 'file' && n.content === undefined) {
+      if (any && pick.c && !pick.l && !pick.w && r.rest.length === 1) return ok([`${n.size} ${a}`]);
+      return fail([ctx.t('sh.size_only', { path: a, size: formatHuman(n.size) })]);
+    }
+  }
   const src = inputs(ctx, 'wc', r.rest, stdin);
   if ('error' in src) return fail(src.error);
   const count = (ls: string[]) => ({

@@ -242,8 +242,8 @@ function riskIn(session: Session, work: SimState): Risk | null {
 /** A hustle's risk of getting caught as the machine stands now; null for a scenario without one. */
 export const riskOf = (session: Session): Risk | null => riskIn(session, session.state);
 
-/** Commands that read what is inside a file (the opened() fact); listing and sizing do not. */
-const READERS = new Set(['cat', 'less', 'tail', 'head', 'grep', 'sort', 'uniq', 'wc', 'edit', 'nano', 'vi', 'vim', 'mv']);
+/** Commands that read what is inside a file (the opened() fact); listing and sizing (ls, du, wc) do not. */
+const READERS = new Set(['cat', 'less', 'tail', 'head', 'grep', 'sort', 'uniq', 'edit', 'nano', 'vi', 'vim', 'mv']);
 /** Flags whose next word is a value, never a path. */
 const VALUE_FLAGS: Record<string, string[]> = {
   tail: ['-n'],

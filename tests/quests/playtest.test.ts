@@ -194,3 +194,14 @@ describe('review fixes: the rules stay tight', () => {
     expect(saveFile(k, '/home/guest/drop/for-vince.txt', 'choco_bar: 1.10 -> 1.25\ncola: 1.30 → 1,45\n').justWon).toBe(true);
   });
 });
+
+describe('review fixes, second pass', () => {
+  it('wc -c sizes the backup without opening it: no event, the declared size', () => {
+    const s = open('bank-pentest');
+    run(s, 'cat ~/engagement/scope.txt');
+    const r = run(s, 'wc -c /srv/www/staging/exports/db-backup-2026-11-20.sql.gz');
+    expect(r.events).toEqual([]);
+    expect(r.out).toEqual([`${Math.round(2.1 * 1024 ** 3)} /srv/www/staging/exports/db-backup-2026-11-20.sql.gz`]);
+    expect(sh(s, 'wc -l /srv/www/staging/exports/db-backup-2026-11-20.sql.gz')).toMatch(/only its size is known/);
+  });
+});

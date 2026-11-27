@@ -57,7 +57,7 @@ function open(api: GameApi, quest: QuestEntry, done: () => void): void {
           // no risk reported (never, for a valid hustle) fails closed: the cap
           const r = api.finishHustle(quest.id, risk ?? RISK_CAP, {
             caughtFine: carried.reduce((sum, c) => sum + (c.caught_fine ?? 0), 0),
-            confiscate: carried.filter((c) => c.caught_fine !== undefined).map((c) => c.flag),
+            confiscate: carried.filter((c) => c.caught_fine !== undefined || c.taken_flag !== undefined).map((c) => c.flag),
             taken: carried.flatMap((c) => (c.taken_flag ? [c.taken_flag] : [])),
           });
           if (!r.ok) return null;

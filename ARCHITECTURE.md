@@ -377,7 +377,7 @@ with the state they read:
 | `ran(command)` | boolean, `"df"` or `"git commit"` |
 | `flag(name)` | boolean, set by events |
 | `touched(path)` | boolean: a command named `path` or something inside it as an operand (cd, cat, ls, less, edit, any pipe stage; not flag values or grep's pattern), or a recursive command (grep -r, du, find, rm -r; the working directory without an operand) walked a folder above it |
-| `opened(path)` | boolean: a reading command (cat, less, tail, head, grep, sort, uniq, wc, edit, mv) opened that file or one inside that folder, or grep -r read through a folder above it; `ls` and `du` only touch |
+| `opened(path)` | boolean: a reading command (cat, less, tail, head, grep, sort, uniq, edit, mv) opened that file or one inside that folder, or grep -r read through a folder above it; `ls`, `du` and `wc` only touch |
 | `pipeline_valid` | boolean, the pipeline file in the working tree validates |
 | `pipeline_status` | `none` \| `passed` \| `failed`, the last CI run |
 | `nginx_config_ok` | boolean: `nginx -t` passes (false without an nginx config) |
