@@ -57,7 +57,7 @@ describe('tab completion', () => {
     expect(tab('c').options).toEqual(['cat', 'cd', 'clear']);
     expect(tab('c').line).toBe('c');
     expect(tab('vi').options).toEqual(['vi', 'vim']);
-    expect(tab('he').line).toBe('help ');
+    expect(tab('hel').line).toBe('help ');
   });
   it('completes subcommands, units and deployments', () => {
     expect(tab('systemctl res').line).toBe('systemctl restart ');

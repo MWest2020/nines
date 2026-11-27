@@ -9,7 +9,7 @@
 
 import type Phaser from 'phaser';
 import type { LocaleId } from '../content/types';
-import type { HustleResult, QuestRefusal, Reward } from '../core/game';
+import type { HustleCover, HustleResult, QuestRefusal, Reward } from '../core/game';
 import type { Params, Translate } from '../core/i18n';
 import type { GameState } from '../core/save';
 import type { HintOffer } from '../core/tokens';
@@ -64,7 +64,7 @@ export interface GameApi {
    *  actually changed, and the agency's fine when a karma drop brought it. */
   applyTerminalEvents(questId: string, events: readonly FiredEvent[]): { money: number; karma: number; agency: { fine: number } | null };
   /** A hustle's last objective was met: roll its risk, then pay (clean) or fine (caught). */
-  finishHustle(questId: string, risk: number): HustleResult;
+  finishHustle(questId: string, risk: number, cover?: HustleCover): HustleResult;
   /** Work as an independent contractor (true) or an employee (false); saved. */
   setContractor(on: boolean): void;
   /** hintBoost to pass to createSession and startBattle. */

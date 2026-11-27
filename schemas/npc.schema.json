@@ -53,7 +53,24 @@
         "properties": {
           "when": { "$ref": "common.schema.json#/$defs/expr", "description": "a progress condition, e.g. quest(\"disk-full\") == \"done\"" },
           "lines": { "$ref": "common.schema.json#/$defs/lines" },
-          "intro": { "type": "boolean", "description": "also said before a quest's offer when its condition holds (a mentor greeting their own mentee, say)" }
+          "intro": { "type": "boolean", "description": "also said before a quest's offer when its condition holds (a mentor greeting their own mentee, say)" },
+          "choices": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 3,
+            "description": "the player answers after the lines: each choice may cost or give karma, set a progress flag, and has the NPC's reply (src/core/talk.ts)",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["text"],
+              "properties": {
+                "text": { "$ref": "common.schema.json#/$defs/localeKey" },
+                "lines": { "$ref": "common.schema.json#/$defs/lines" },
+                "karma": { "type": "integer", "minimum": -30, "maximum": 30 },
+                "set_flag": { "$ref": "common.schema.json#/$defs/id" }
+              }
+            }
+          }
         }
       }
     }

@@ -106,7 +106,7 @@ const isCameoObject = (name: string): boolean => /^cameo-[a-z0-9]+(-[a-z0-9]+)*$
 const CONTROL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/;
 
 /** Functions whose first argument names something; it must be a literal so it can be checked. */
-const NAME_ARGS = new Set(['service', 'pods_running', 'restarted', 'flag', 'ran', 'quest', 'has_item', 'xp', 'career_path']);
+const NAME_ARGS = new Set(['service', 'pods_running', 'restarted', 'flag', 'ran', 'quest', 'has_item', 'xp', 'career_path', 'session_active']);
 
 function callsIn(node: Node, out: { name: string; first: Node | undefined }[] = []) {
   switch (node.kind) {
@@ -516,9 +516,13 @@ export function loadContent(contentDir: string, schemaDir: string, options: Load
   const npcs: { npc: NpcSpec; dir: string; questId?: string }[] = [];
   const progressExprs: { file: string; src: string }[] = [];
   const progressFlags = new Set<string>();
+  /** flags scenarios carry in from the save: something (an event or a dialogue choice) must set each */
+  const carriedFlags: { file: string; flag: string }[] = [];
   const checkNpc = (dir: string, npc: NpcSpec, local: LocaleMap | null, questId?: string) => {
     const file = join(dir, 'npc.yaml');
-    const keys = [npc.name, ...npc.dialogue.flatMap((d) => d.lines)];
+    const keys = [npc.name, ...npc.dialogue.flatMap((d) => [...d.lines, ...(d.choices ?? []).flatMap((c) => [c.text, ...(c.lines ?? [])])])];
+    // a dialogue choice may set a progress flag: conditions and carried flags may ask about it
+    for (const d of npc.dialogue) for (const c of d.choices ?? []) if (c.set_flag) progressFlags.add(c.set_flag);
     for (const k of keys) if (local && !has(local, k)) err(file, `unknown locale key "${k}"`);
     npc.dialogue.forEach((d, i) => {
       if (d.when === undefined) return;
@@ -696,8 +700,24 @@ export function loadContent(contentDir: string, schemaDir: string, options: Load
       need(sFile, scenario.motd);
       scenario.objectives.forEach((o, i) => {
         need(sFile, o.text);
-        checkExpr(sFile, `objectives[${i}].done_when`, o.done_when, SCENARIO_FACTS);
+        if (o.done_when !== undefined) checkExpr(sFile, `objectives[${i}].done_when`, o.done_when, SCENARIO_FACTS);
+        if (o.check) {
+          for (const m of o.check.mentions ?? []) need(sFile, m.missing);
+          const c = o.check.choice;
+          if (c?.wrong) need(sFile, c.wrong);
+          if (c && !c.accept.every((a) => c.scale.includes(a))) err(sFile, `objectives[${i}].check.choice: every accepted value must be on the scale`);
+          if (normalize(o.check.file) !== o.check.file) err(sFile, `objectives[${i}].check.file is not normalised`);
+        }
       });
+      // sessions and carried flags: ids unique, one self, covers name carried flags
+      const sessionIds = (scenario.sessions ?? []).map((x) => x.id);
+      if (new Set(sessionIds).size !== sessionIds.length) err(sFile, 'session ids must be unique');
+      if ((scenario.sessions ?? []).filter((x) => x.self).length > 1) err(sFile, 'at most one session is the player\'s own (self)');
+      if ((scenario.sessions ?? []).some((x) => x.self && x.logout !== undefined)) err(sFile, 'the player\'s own session cannot have ended (logout)');
+      const carried = (scenario.carry ?? []).map((c) => c.flag);
+      for (const x of scenario.sessions ?? []) if (x.cover && !carried.includes(x.cover.flag)) err(sFile, `session ${x.id}: cover.flag "${x.cover.flag}" must be listed under carry`);
+      for (const c of carried) carriedFlags.push({ file: sFile, flag: c });
+      if (scenario.carry?.some((c) => c.caught_fine !== undefined) && (quest.kind ?? 'job') !== 'hustle') err(sFile, 'caught_fine only means something on a hustle');
       (scenario.hints ?? []).forEach((h, i) => {
         need(sFile, h.text);
         checkExpr(sFile, `hints[${i}].when`, h.when, SCENARIO_FACTS);
@@ -739,7 +759,7 @@ export function loadContent(contentDir: string, schemaDir: string, options: Load
       }
       // names used in conditions must exist in this scenario
       const allExprs = [
-        ...scenario.objectives.map((o) => o.done_when),
+        ...scenario.objectives.flatMap((o) => (o.done_when !== undefined ? [o.done_when] : [])),
         ...(scenario.hints ?? []).map((h) => h.when),
         ...(scenario.events ?? []).map((e) => e.when),
         ...(scenario.risk?.factors ?? []).map((f) => f.when),
@@ -748,14 +768,17 @@ export function loadContent(contentDir: string, schemaDir: string, options: Load
       ];
       const services = Object.keys(scenario.services ?? {});
       const deployments = Object.keys(scenario.deployments ?? {});
-      const flags = (scenario.events ?? []).flatMap((e) => (e.set_flag ? [e.set_flag] : []));
-      flags.forEach((f) => progressFlags.add(f));
+      const eventFlags = (scenario.events ?? []).flatMap((e) => (e.set_flag ? [e.set_flag] : []));
+      eventFlags.forEach((f) => progressFlags.add(f));
+      const flags = [...eventFlags, ...carried];
+      const logins = sessionIds.length > 0 && (scenario.sessions ?? []).some((x) => x.self) ? sessionIds : [...sessionIds, 'you'];
       for (const src of allExprs) {
         checkNames(sFile, src, SCENARIO_FACTS, (name, arg) => {
           if (name === 'service' && !services.includes(arg)) return `no such service in this scenario`;
           if (name === 'pods_running' && !deployments.includes(arg)) return `no such deployment in this scenario`;
           if (name === 'restarted' && !services.includes(arg) && !deployments.includes(arg)) return `no such service or deployment`;
-          if (name === 'flag' && !flags.includes(arg)) return `no event in this scenario sets that flag`;
+          if (name === 'flag' && !flags.includes(arg)) return `no event in this scenario sets that flag, and the scenario does not carry it`;
+          if (name === 'session_active' && !logins.includes(arg)) return `no such session in this scenario`;
           if (name === 'ran' && !has(COMMANDS, arg.split(' ')[0] ?? '')) return `not a command of this terminal`;
           if ((name === 'applied_value' || name === 'applied_contains') && !/^[a-z]+\/[a-z0-9-]+\/[a-z0-9][a-z0-9.-]*$/.test(arg)) return `name an object as kind/namespace/name, e.g. configmap/shop/shop-api-config`;
           return null;
@@ -807,6 +830,8 @@ export function loadContent(contentDir: string, schemaDir: string, options: Load
       return null;
     });
   }
+
+  for (const { file, flag } of carriedFlags) if (!progressFlags.has(flag)) err(file, `carry: nothing sets the progress flag "${flag}" (an event's set_flag or a dialogue choice's)`);
 
   // ---- no "requires" cycles: a cycle would lock its members forever
   const cycleCheck = (what: string, edges: Record<string, readonly string[]>) => {

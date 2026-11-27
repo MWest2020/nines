@@ -238,8 +238,7 @@
         "additionalProperties": false,
         "required": [
           "id",
-          "text",
-          "done_when"
+          "text"
         ],
         "properties": {
           "id": {
@@ -254,8 +253,169 @@
           "procedure": {
             "type": "boolean",
             "description": "a procedure (a change ticket, a review): an independent contractor may skip it (DESIGN.md, Independent contractor)"
+          },
+          "check": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "file"
+            ],
+            "description": "a free-text file graded fairly; while it fails, the objectives panel says what is still wrong (src/sim/check.ts)",
+            "anyOf": [
+              {
+                "properties": {
+                  "fields": true
+                },
+                "required": [
+                  "fields"
+                ]
+              },
+              {
+                "properties": {
+                  "choice": true
+                },
+                "required": [
+                  "choice"
+                ]
+              },
+              {
+                "properties": {
+                  "mentions": true
+                },
+                "required": [
+                  "mentions"
+                ]
+              }
+            ],
+            "properties": {
+              "file": {
+                "$ref": "common.schema.json#/$defs/absPath"
+              },
+              "fields": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 8,
+                "description": "`Name: value` lines that must be filled in; number: the value must equal it (1.25, 1,25, €1.25)",
+                "items": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 40,
+                      "pattern": "^[^\\n]+$"
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "name"
+                      ],
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 40,
+                          "pattern": "^[^\\n]+$"
+                        },
+                        "number": {
+                          "type": "number"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              "choice": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "field",
+                  "scale",
+                  "accept"
+                ],
+                "description": "exactly one value from scale on the field's line, and one of accept",
+                "properties": {
+                  "field": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40,
+                    "pattern": "^[^\\n]+$"
+                  },
+                  "scale": {
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 8,
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[a-z]+$"
+                    }
+                  },
+                  "accept": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 8,
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[a-z]+$"
+                    }
+                  },
+                  "wrong": {
+                    "$ref": "common.schema.json#/$defs/localeKey"
+                  }
+                }
+              },
+              "mentions": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 8,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "any",
+                    "missing"
+                  ],
+                  "properties": {
+                    "any": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 12,
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 40,
+                        "pattern": "^[^\\n]+$"
+                      }
+                    },
+                    "missing": {
+                      "$ref": "common.schema.json#/$defs/localeKey",
+                      "description": "what the note says while none of the words appears"
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "anyOf": [
+          {
+            "properties": {
+              "done_when": true
+            },
+            "required": [
+              "done_when"
+            ]
+          },
+          {
+            "properties": {
+              "check": true
+            },
+            "required": [
+              "check"
+            ]
+          }
+        ],
+        "description": "done when done_when holds and the check (if any) passes; at least one of the two"
       }
     },
     "hints": {
@@ -403,6 +563,101 @@
           "type": "integer",
           "minimum": -1000,
           "maximum": 0
+        }
+      }
+    },
+    "sessions": {
+      "type": "array",
+      "maxItems": 8,
+      "description": "logins on the machine (who, w, last). Without a self session the player gets a default shell (src/sim/base.ts)",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "tty",
+          "from"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "common.schema.json#/$defs/id"
+          },
+          "user": {
+            "type": "string",
+            "pattern": "^[a-z_][a-z0-9_-]{0,31}$"
+          },
+          "tty": {
+            "type": "string",
+            "pattern": "^(pts/[0-9]+|tty[0-9]+)$"
+          },
+          "from": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "pattern": "^[^\\n]+$"
+          },
+          "login": {
+            "type": "string",
+            "pattern": "^[0-2][0-9]:[0-5][0-9]$"
+          },
+          "self": {
+            "type": "boolean",
+            "description": "the player's own shell"
+          },
+          "logout": {
+            "type": "string",
+            "pattern": "^[0-2][0-9]:[0-5][0-9]$",
+            "description": "when it ended: last shows it, who does not"
+          },
+          "relogin": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "pattern": "^[^\\n]+$",
+            "description": "a kiosk: logging out of this session logs straight back in as this; the shell stays"
+          },
+          "cover": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "flag",
+              "from"
+            ],
+            "description": "while the carried progress flag holds, the session shows this from instead",
+            "properties": {
+              "flag": {
+                "$ref": "common.schema.json#/$defs/id"
+              },
+              "from": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40,
+                "pattern": "^[^\\n]+$"
+              }
+            }
+          }
+        }
+      }
+    },
+    "carry": {
+      "type": "array",
+      "maxItems": 4,
+      "description": "progress flags from the save this machine starts with: flag() reads them. A hustle's caught_fine is added to the fine when the player is caught carrying it",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "flag"
+        ],
+        "properties": {
+          "flag": {
+            "$ref": "common.schema.json#/$defs/id"
+          },
+          "caught_fine": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000
+          }
         }
       }
     }

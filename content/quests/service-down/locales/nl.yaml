@@ -11,5 +11,5 @@ motd: "app-01. De webshop ligt plat: nginx kon om 03:12 niet starten. Zoek uit w
 obj.web: "nginx draait"
 hint.status: "systemctl status nginx toont de service en zijn laatste logregels."
 hint.journal: "Nog eens herstarten helpt niet. Lees waarom het misging: journalctl -u nginx"
-hint.typo: "Het log noemt een bestand en een regel: /etc/nginx/conf.d/shop.conf:2. Open het met edit en kijk goed naar die regel."
+hint.typo: "Het log noemt een bestand en een regel: /etc/nginx/conf.d/shop.conf:2. Open het met edit en kijk goed naar die regel. nginx -t vertelt je of de config klopt voordat je herstart."
 event.config_gone: "Je hebt de config van de webshop verwijderd. Als nginx nu start, toont hij vrolijk 'Welcome to nginx!' in plaats van de webshop. Schrijf een nieuwe shop.conf met edit, of denk nog eens na."

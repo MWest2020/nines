@@ -52,10 +52,12 @@ quick:
   - systemctl status bakery-shop
   - "cat ~/rules.txt"
   - "edit /srv/bakery/prices.yaml"
+  - "git -C /srv/bakery status"
   - help
 objectives:
   - {id: shop, text: obj.shop, done_when: 'service("bakery-shop") == "active"'}
-  - {id: ticket, text: obj.ticket, procedure: true, done_when: 'exists("/home/dev/changes/CHG-1042.txt") && !file_contains("/home/dev/changes/CHG-1042.txt", ": ?")'}
+  # graded fairly (src/sim/check.ts): each line filled in, however it is written; the panel says which is still empty
+  - {id: ticket, text: obj.ticket, procedure: true, check: {file: /home/dev/changes/CHG-1042.txt, fields: [What, Why, Rollback]}}
   - {id: review, text: obj.review, procedure: true, done_when: 'commits >= 1 && git_clean'}
 hints:
   - {id: status, when: 'commands >= 3 && !ran("systemctl status") && !ran("journalctl")', text: hint.status}

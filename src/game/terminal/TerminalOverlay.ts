@@ -13,7 +13,7 @@ import './terminal.css';
 import { questKey, type QuestEntry } from '../../content/types';
 import type { Translate } from '../../core/i18n';
 import { ARREST_AFTER, clampRisk, DAMAGE_MULTIPLIER } from '../../core/karma';
-import { createSession, type FiredEvent, prompt, run, type RunResult, saveFile, type Session, stripControl } from '../../sim/session';
+import { cancelEdit, createSession, type FiredEvent, prompt, run, type RunResult, saveFile, type Session, stripControl } from '../../sim/session';
 import { complete } from '../../terminal/complete';
 import { gutter, INDENT, insertIndent, isDirty, lineCol, lineCount, normalizeText, tabLines } from '../../terminal/editor';
 import { down, type History, newHistory, record, up } from '../../terminal/history';
@@ -32,6 +32,10 @@ export interface TerminalHost {
   speaker?: string;
   /** an independent contractor on a job: procedure objectives do not count (DESIGN.md) */
   skipProcedures?: boolean;
+  /** progress flags the scenario carries in from the save (createSession `flags`) */
+  flags?: Record<string, boolean>;
+  /** the quest is done already: this machine is a practice run (it says so; nothing is paid) */
+  practice?: boolean;
   /** apply money, karma and flags from fired events; returns what actually changed */
   applyEvents(events: readonly FiredEvent[]): EventsApplied;
   /** the last objective was met: pay the reward (a hustle rolls its `risk` first). Null when it
@@ -62,6 +66,8 @@ const SGR = {
 } as const;
 
 const FONT = 'ui-monospace, monospace';
+/** xterm's line height: a cell is this many times the font's own line tall. */
+const LINE_HEIGHT = 1.2;
 
 /** Keys for phones, which hide them (DESIGN.md, Terminal on a phone): they insert at the cursor. */
 const INSERT_KEYS = ['|', '/', '-', '~', '*'];
@@ -72,6 +78,8 @@ interface Dialog {
   extra?: string;
   button: string;
   then?: () => void;
+  /** the done banner: Close and Practice again instead of the one button */
+  done?: true;
 }
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] => {
@@ -82,7 +90,7 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
 };
 
 export class TerminalOverlay {
-  private readonly session: Session;
+  private session: Session;
   private readonly t: Translate;
   private readonly root: HTMLDivElement;
   private readonly term: Terminal;
@@ -124,6 +132,9 @@ export class TerminalOverlay {
   /** unregisters the Android back button's handler (src/game/back.ts) */
   private readonly unback: () => void;
   private readonly quickBar: HTMLDivElement;
+  /** "practice" in the header: the quest is done, this run pays nothing */
+  private readonly practiceTag: HTMLSpanElement;
+  private practicing = false;
 
   constructor(
     private readonly quest: QuestEntry,
@@ -134,7 +145,7 @@ export class TerminalOverlay {
     if (!scenario) throw new Error(`quest ${quest.id} has no scenario`);
     this.t = host.t;
     const t = this.t;
-    this.session = createSession(scenario, { t, hintBoost: host.hintBoost, skipProcedures: host.skipProcedures ?? false });
+    this.session = this.newSession();
 
     // ---- the frame
     this.root = el('div', 'nt-overlay');
@@ -184,6 +195,9 @@ export class TerminalOverlay {
     const head = el('div', 'nt-head');
     head.append(el('span', 'nt-host', scenario.host));
     if (host.skipProcedures) head.append(el('span', 'nt-tag', t('ui.terminal.contractor')));
+    this.practiceTag = el('span', 'nt-tag nt-practice', t('ui.terminal.practice_tag'));
+    this.practiceTag.hidden = !host.practice;
+    head.append(this.practiceTag);
     this.objToggle = el('button', 'nt-objtoggle');
     this.objToggle.type = 'button';
     this.objCount = el('span', 'nt-count');
@@ -297,6 +311,10 @@ export class TerminalOverlay {
       cursorInactiveStyle: 'none',
       fontFamily: FONT,
       fontSize: 14,
+      // Room under the baseline: with the device's monospace font at line height 1 the underscore
+      // sits on the cell's last pixel row or below it, and "[U_]" rendered as "[U ]" (Mark's
+      // screenshots, 27 Nov 2026). fit() counts rows with the same factor.
+      lineHeight: LINE_HEIGHT,
       scrollback: 2000,
       // an accessibility tree of the output, for screen readers
       screenReaderMode: true,
@@ -314,10 +332,38 @@ export class TerminalOverlay {
     this.resize?.observe(this.screen);
     this.fit();
 
-    this.print([t(questKey(quest.id, scenario.motd)), ''], SGR.dim);
-    this.handle(run(this.session, ''));
+    this.practicing = host.practice === true;
+    this.greet();
     // The Android back button: Esc in the editor (a changed buffer asks twice), else ✕.
     this.unback = pushBack(() => (this.editor.box.hidden ? this.close() : this.editorEscape()));
+    this.focus();
+  }
+
+  private newSession(): Session {
+    const host = this.host;
+    return createSession(this.quest.scenario!, { t: this.t, hintBoost: host.hintBoost, skipProcedures: host.skipProcedures ?? false, flags: host.flags ?? {} });
+  }
+
+  /** The machine's motd, and on a practice run the line that says so; then the first objectives. */
+  private greet(): void {
+    this.print([this.t(questKey(this.quest.id, this.quest.scenario!.motd)), ''], SGR.dim);
+    if (this.practicing) this.print([this.t('ui.terminal.practice'), ''], SGR.prompt);
+    this.handle(run(this.session, ''));
+  }
+
+  /** Practice again: the same machine from a fresh start, no reward (the quest is done). */
+  private practiceAgain(): void {
+    this.dialogs = [];
+    this.dialog.hidden = true;
+    this.input.disabled = false;
+    this.setQuickEnabled(true);
+    this.session = this.newSession();
+    this.hints = [];
+    this.risk = undefined;
+    this.practicing = true;
+    this.practiceTag.hidden = false;
+    this.term.reset();
+    this.greet();
     this.focus();
   }
 
@@ -345,7 +391,7 @@ export class TerminalOverlay {
     const cell = probe.getBoundingClientRect();
     probe.remove();
     const cw = cell.width / 20;
-    const ch = cell.height;
+    const ch = cell.height * LINE_HEIGHT;
     if (cw <= 0 || ch <= 0) return;
     // 6 px left padding, and xterm 6 draws its 14 px scrollbar over the content
     const cols = Math.max(20, Math.floor((box.width - 6 - 14) / cw));
@@ -473,14 +519,15 @@ export class TerminalOverlay {
       if (end?.agency) after.push(this.agencyDialog(end.agency.fine));
       if (hustle && end.lesson) after.push({ text: this.t('ui.hustle.lesson'), button: this.t('ui.terminal.continue') });
       else if (end?.agency) after.push({ text: this.t('ui.karma.agency_after'), button: this.t('ui.terminal.continue') });
+      // the last dialogue is the done banner: Close, or Practice again from a fresh machine
       const close = () => this.close();
       this.queue({
         text: this.t(hustle ? 'ui.hustle.clean' : 'ui.terminal.won'),
         extra: end ? this.rewardText(end) : this.t('ui.terminal.won_again'),
         button: this.t('ui.terminal.continue'),
-        ...(after.length === 0 ? { then: close } : {}),
+        ...(after.length === 0 ? { then: close, done: true as const } : {}),
       });
-      after.forEach((d, i) => this.queue(i === after.length - 1 ? { ...d, then: close } : d));
+      after.forEach((d, i) => this.queue(i === after.length - 1 ? { ...d, then: close, done: true as const } : d));
     }
   }
 
@@ -513,6 +560,11 @@ export class TerminalOverlay {
         if (o.skipped && !o.done) li.className = 'nt-skipped';
         li.append(el('span', 'nt-mark', o.done ? '●' : o.skipped ? '–' : '○'), el('span', '', this.t(questKey(this.quest.id, o.text))));
         if (o.skipped && !o.done) li.append(el('span', 'nt-skipnote', this.t('ui.terminal.skipped')));
+        // a free-text check says exactly what is still wrong (src/sim/check.ts)
+        if (o.note && !o.skipped) {
+          const key = o.note.scope === 'quest' ? questKey(this.quest.id, o.note.key) : o.note.key;
+          li.append(el('span', 'nt-note', this.t(key, o.note.params)));
+        }
         return li;
       }),
     );
@@ -581,10 +633,13 @@ export class TerminalOverlay {
     this.input.disabled = true;
     this.setQuickEnabled(false);
     const parts: HTMLElement[] = [];
+    this.dialog.classList.toggle('nt-donebox', d.done === true);
+    if (d.done) parts.push(el('div', 'nt-banner', `✓ ${this.t('ui.terminal.done_banner')}`));
     if (d.speaker) parts.push(el('div', 'nt-speaker', d.speaker));
     parts.push(el('p', 'nt-say', d.text));
     if (d.extra) parts.push(el('p', 'nt-extra', d.extra));
-    const b = el('button', 'nt-btn nt-primary', d.button);
+    if (d.done) parts.push(el('p', 'nt-practicenote', this.t('ui.terminal.practice_offer')));
+    const b = el('button', 'nt-btn nt-primary', d.done ? this.t('ui.close') : d.button);
     b.type = 'button';
     b.addEventListener('click', () => {
       if (d.then) {
@@ -594,7 +649,15 @@ export class TerminalOverlay {
       }
       this.nextDialog();
     });
-    parts.push(b);
+    const row = el('div', 'nt-buttons');
+    row.append(b);
+    if (d.done) {
+      const again = el('button', 'nt-btn nt-again', this.t('ui.terminal.practice_again'));
+      again.type = 'button';
+      again.addEventListener('click', () => this.practiceAgain());
+      row.append(again);
+    }
+    parts.push(row);
     this.dialog.replaceChildren(...parts);
     this.dialog.hidden = false;
     b.focus();
@@ -676,9 +739,14 @@ export class TerminalOverlay {
       const text = normalizeText(e.area.value);
       const lines = lineCount(text.replace(/\n$/, ''));
       this.print([this.t(lines === 1 ? 'ui.terminal.written_one' : 'ui.terminal.written', { path: e.path, lines })], SGR.dim);
-      this.handle(saveFile(this.session, e.path, text));
+      const r = saveFile(this.session, e.path, text);
+      // kubectl edit answers like kubectl: "configmap/x edited"
+      if (r.out.length > 0) this.print(r.out, r.exit !== 0 ? SGR.error : undefined);
+      this.handle(r);
     } else {
       this.print([this.t('ui.terminal.discarded', { path: e.path })], SGR.dim);
+      const out = cancelEdit(this.session, e.path);
+      if (out.length > 0) this.print(out);
     }
     this.focus();
   }

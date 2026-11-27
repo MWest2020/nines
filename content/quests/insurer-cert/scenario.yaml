@@ -181,7 +181,7 @@ objectives:
   - id: chain
     text: obj.chain
     done_when: 'restarted("nginx") && service("nginx") == "active" && file_contains("/etc/nginx/sites-enabled/portal", "2026/privkey.pem;") && file_contains("/etc/nginx/sites-enabled/portal", "2026/fullchain.pem;")'
-  - {id: change, text: obj.change, procedure: true, done_when: 'exists("/home/ops/changes/CHG-2291.txt") && !file_contains("/home/ops/changes/CHG-2291.txt", ": ?")'}
+  - {id: change, text: obj.change, procedure: true, check: {file: /home/ops/changes/CHG-2291.txt, fields: [Implemented by, Result, Rollback used]}}
   - id: inventory
     text: obj.inventory
     procedure: true

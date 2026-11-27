@@ -81,6 +81,48 @@ export class HudScene extends Phaser.Scene {
     return this.dialogue.show(pages);
   }
 
+  /**
+   * A dialogue choice (src/core/talk.ts): a panel like the menu with one button per answer, for
+   * keys, the D-pad, a tap or a click. Resolves with the index picked; back picks the last one
+   * (content puts the walk-away answer last).
+   */
+  choose(labels: readonly string[]): Promise<number> {
+    return new Promise((resolve) => {
+      const t = this.ui.t;
+      const w = 200;
+      const x = (VIEW.width - w) / 2;
+      const h = 20 + labels.length * 16;
+      const y = Math.round((CANVAS.height - h) / 2);
+      const objects: Phaser.GameObjects.GameObject[] = [dimmer(this, 0.5, CANVAS.height), panel(this, x, y, w, h, 13), pixelText(this, x + 6, y + 2, t('ui.choice.title'), C.paper)];
+      let focus = 0;
+      let done = false;
+      const pick = (i: number) => {
+        if (done) return;
+        done = true;
+        offKeys();
+        layer.destroy(true);
+        resolve(i);
+      };
+      const buttons = labels.map((label, i) => {
+        const b = button(this, x + 8, y + 18 + i * 16, ellipsize(label, w - 28), () => pick(i), { w: w - 16 });
+        objects.push(...b.objects);
+        return b;
+      });
+      const layer = this.add.container(0, 0, objects).setDepth(40);
+      const show = (i: number) => {
+        if (i < 0) return;
+        focus = i;
+        buttons.forEach((b, j) => b.setFocus(j === i));
+      };
+      const offKeys = keyboardNav(this, {
+        move: (d) => show(navigate(buttons, focus, d)),
+        press: () => buttons[focus]?.activate(),
+        back: () => pick(labels.length - 1),
+      });
+      show(0);
+    });
+  }
+
   private icon(x: number, paint: (g: Phaser.GameObjects.Graphics, x: number) => void, onPress: () => void): void {
     const g = this.add.graphics();
     g.fillStyle(hex(C.paper), 1);
