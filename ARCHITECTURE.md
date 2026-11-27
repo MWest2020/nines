@@ -819,25 +819,32 @@ to a listener added meanwhile; UI listeners are wrapped in `freshKeys` (`ui/widg
   the release signing config reads only `NINES_KEYSTORE`, `NINES_KEYSTORE_PASSWORD`,
   `NINES_KEY_ALIAS` and `NINES_KEY_PASSWORD` from the environment. With none set the release is
   unsigned (CI) and Gradle says so; with some set the build stops. `versionName` is
-  `package.json`'s version; `versionCode` is `-PninesVersionCode=N` (default 1). PLAY_STORE.md,
-  Release, has the steps.
+  `package.json`'s version; `versionCode` is `-PninesVersionCode=N` (default 1; a signed build
+  requires it and refuses a `NINES_APP_ID` override). PLAY_STORE.md, Release, has the steps.
 - Capacitor serves `dist/` from inside the APK through its local server
   (`https://localhost/`, answered by `WebViewLocalServer` in `shouldInterceptRequest`); no server,
   no network. The manifest removes `android.permission.INTERNET` (`tools:node="remove"`, so no
   library can merge it back), which makes the no-network promise enforceable by the OS: requests
-  the WebView answers itself need no permission, and anything else fails. The app declares no
-  permissions at all; CI fails if the built APK asks for one.
+  the WebView answers itself are expected to need no permission (WebView blocks network loads
+  without it, and intercepted requests never reach the network), and anything else fails. That
+  the game loads this way is to be confirmed on a real phone
+  (https://github.com/MWest2020/nines/issues/20). The app declares no permissions at all; CI fails
+  if the built APK or the release manifest asks for one.
 - No backup: `android:allowBackup="false"` and data extraction rules that exclude everything from
   cloud backup and device-to-device transfer (Android 12+). The save stays on the device, so Data
   safety stays "no data collected".
 - The service worker is not registered in the app (`src/game/offline.ts` returns when
-  `window.Capacitor`, which Capacitor's native bridge injects, exists): the files are in the APK.
+  `window.Capacitor` exists): the files are in the APK. Capacitor injects its bridge as a
+  document-start script on any WebView that supports it (every Play-updated WebView); on an old
+  one it falls back to an inline script, which our CSP blocks, and then the worker would
+  register. Harmless (it only caches the app's own files, versioned per build), so accepted.
 - No Capacitor plugins. Back button: `MainActivity.java` registers an `OnBackPressedCallback`
   that calls `window.ninesBack()` (`src/game/back.ts`): it closes the newest DOM overlay (the
   terminal, with the editor's Esc rule, or a battle, like Escape), else sends the on-screen back
   button's event while a screen, the menu or a dialogue is open. With nothing open it returns
-  false and the app moves to the background (the game saves on `visibilitychange`). This works
-  with predictive back, which target SDK 36 turns on.
+  false and the app moves to the background (the game saves on `visibilitychange`). The callback
+  is always enabled, so with predictive back (on at target SDK 36) the system shows no
+  back-to-home preview animation; the press itself still arrives. Untested on a device yet.
 - Orientation: both (no `screenOrientation`). The Phaser canvas (the 240x160 view and the HUD
   band) is scaled by an integer where possible (above); the controls take the remaining space:
   below the view in portrait, on both sides in landscape. The terminal overlay is a flex layout

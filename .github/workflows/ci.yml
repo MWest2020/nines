@@ -85,17 +85,27 @@ jobs:
           RUN_NUMBER: ${{ github.run_number }}
         run: JAVA_HOME="$JAVA_HOME_21_X64" ./gradlew --no-daemon --console=plain -PninesVersionCode="$RUN_NUMBER" assembleDebug bundleRelease
       # The manifest promise, checked on what was built: no INTERNET (or any other Android)
-      # permission, no backup, the target SDK Play requires.
-      - name: Check the APK's badging
+      # permission, no backup, the target SDK Play requires. The APK's badging, and the release
+      # build's merged manifest (the AAB's manifest is a protobuf that aapt2 cannot read).
+      - name: Check the permissions, backup and target SDK
         run: |
           aapt2="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)aapt2"
           apk=android/app/build/outputs/apk/debug/app-debug.apk
           "$aapt2" dump badging "$apk" | tee badging.txt | grep -E "^package|targetSdkVersion|uses-permission"
-          if grep "^uses-permission" badging.txt | grep -v "DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"; then
+          # AndroidX's app-internal, signature-level permission is the only one allowed
+          if grep "^uses-permission" badging.txt | grep -v "^uses-permission: name='work\.westerweel\.nines\.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'$"; then
             echo "::error::the app asks for a permission (above); the game needs none"; exit 1
           fi
           grep -q "^targetSdkVersion:'36'" badging.txt || { echo "::error::target SDK is not 36"; exit 1; }
-          "$aapt2" dump xmltree --file AndroidManifest.xml "$apk" | grep -q "allowBackup(0x01010280)=false" || { echo "::error::allowBackup is not false"; exit 1; }
+          "$aapt2" dump xmltree --file AndroidManifest.xml "$apk" > manifest.txt
+          grep -q "allowBackup(0x01010280)=false" manifest.txt || { echo "::error::allowBackup is not false"; exit 1; }
+          grep -q "dataExtractionRules(0x0101063e)" manifest.txt || { echo "::error::no data extraction rules"; exit 1; }
+          release=$(find android/app/build/intermediates/merged_manifest/release -name AndroidManifest.xml | head -1)
+          test -n "$release" || { echo "::error::no merged release manifest"; exit 1; }
+          if tr '\n' ' ' < "$release" | grep -o '<uses-permission[^>]*>' | grep -v 'work\.westerweel\.nines\.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'; then
+            echo "::error::the release manifest asks for a permission (above)"; exit 1
+          fi
+          grep -q 'android:allowBackup="false"' "$release" || { echo "::error::release allowBackup is not false"; exit 1; }
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: nines-debug-apk

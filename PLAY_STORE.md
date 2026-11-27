@@ -145,7 +145,8 @@ a lost upload key can be reset through Play Console support.
 
 Gradle reads the signing config only from the environment: `NINES_KEYSTORE`,
 `NINES_KEYSTORE_PASSWORD`, `NINES_KEY_ALIAS`, `NINES_KEY_PASSWORD`. With none set, the release
-build is unsigned and says so; with only some set, it stops.
+build is unsigned and says so; with only some set, it stops. A signed build also stops without
+`-PninesVersionCode`, or with `NINES_APP_ID` set to anything but `work.westerweel.nines`.
 
 1. Set the version: `version` in `package.json` is the `versionName`; pick a `versionCode`
    higher than the last upload.
@@ -161,8 +162,10 @@ build is unsigned and says so; with only some set, it stops.
    ./gradlew --stop
    ```
 
-4. Check it: `jarsigner -verify -verbose:summary -certs app/build/outputs/bundle/release/app-release.aab`
-   says "jar verified" and "CN=Nines upload key".
+4. Check it: `jarsigner -verify app/build/outputs/bundle/release/app-release.aab` says "jar
+   verified", and `keytool -printcert -jarfile app/build/outputs/bundle/release/app-release.aab`
+   shows the upload key's SHA-256 above (the name in the certificate proves nothing; the
+   fingerprint does).
 5. **Only with Mark's OK:** Mark uploads the AAB in Play Console, first to Internal testing.
    The first upload enrols the app in Play App Signing and registers this upload key.
 

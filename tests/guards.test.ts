@@ -7,13 +7,20 @@ import { describe, expect, it } from 'vitest';
 import { HELP_ORDER } from '../src/sim/shell/commands';
 import { content, ROOT } from './helpers';
 
-// Skipped: installed and built output, never committed (Gradle's build dirs, and the copy of
-// dist/ that `npx cap sync` puts in the Android project).
-const SKIP_PATHS = [join(ROOT, 'android', 'app', 'src', 'main', 'assets', 'public')];
+// Skipped: the Android project's generated output, never committed (Gradle's build dirs, the copy
+// of dist/ that `npx cap sync` puts in, the generated Cordova plugin module). Listed by path, so
+// nothing else in the tree escapes the guards.
+const SKIP_PATHS = [
+  ['android', 'app', 'src', 'main', 'assets', 'public'],
+  ['android', 'build'],
+  ['android', 'app', 'build'],
+  ['android', '.gradle'],
+  ['android', 'capacitor-cordova-android-plugins'],
+].map((p) => join(ROOT, ...p));
 
 const walk = (dir: string): string[] =>
   readdirSync(dir).flatMap((name) => {
-    if (['node_modules', 'dist', '.git', 'coverage', 'build', '.gradle'].includes(name)) return [];
+    if (['node_modules', 'dist', '.git', 'coverage'].includes(name)) return [];
     const p = join(dir, name);
     if (SKIP_PATHS.includes(p)) return [];
     return statSync(p).isDirectory() ? walk(p) : [p];

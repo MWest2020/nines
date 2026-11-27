@@ -21,13 +21,21 @@ def keystore = signed ? new File(signingEnv['NINES_KEYSTORE']) : null
 if (signed && !keystore.isFile()) {
     throw new GradleException("NINES_KEYSTORE points to a file that does not exist: ${keystore}")
 }
+// A signed build is for Play: it needs its own version code, and the real package name.
+def appId = System.getenv('NINES_APP_ID') ?: "work.westerweel.nines"
+if (signed && !project.hasProperty('ninesVersionCode')) {
+    throw new GradleException("A signed build needs -PninesVersionCode=N, higher than the last Play upload (PLAY_STORE.md, Release)")
+}
+if (signed && appId != "work.westerweel.nines") {
+    throw new GradleException("A signed build must use the app id work.westerweel.nines; unset NINES_APP_ID (it is ${appId})")
+}
 
 android {
     namespace = "work.westerweel.nines"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
         // work.westerweel.nines (Mark, 26 Nov 2026); NINES_APP_ID overrides it, as in capacitor.config.ts
-        applicationId System.getenv('NINES_APP_ID') ?: "work.westerweel.nines"
+        applicationId appId
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode((project.findProperty('ninesVersionCode') ?: '1') as Integer)
