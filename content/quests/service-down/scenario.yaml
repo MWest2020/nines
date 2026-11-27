@@ -49,6 +49,13 @@ services:
     state: active
     logs:
       - "Nov 26 06:00:03 app-01 systemd[1]: Started shop-api.service - Shop API."
+# Suggestions for the terminal's quick-command strip: a tap fills the input line.
+quick:
+  - systemctl status nginx
+  - journalctl -u nginx
+  - "cat ~/handover.txt"
+  - systemctl restart nginx
+  - help
 objectives:
   - {id: web, text: obj.web, done_when: 'service("nginx") == "active"'}
 hints:

@@ -95,6 +95,8 @@ export interface ScenarioSpec {
   objectives: { id: string; text: string; done_when: string }[];
   hints?: { id: string; when: string; text: string }[];
   events?: ScenarioEventSpec[];
+  /** suggested command lines for the terminal's quick-command strip */
+  quick?: string[];
   outage?: { say?: string; money?: number };
 }
 

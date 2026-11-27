@@ -26,6 +26,14 @@ git:
   root: /home/dev/shop
   branch: main
   pipeline: {file: .nines-ci.yml, validator: nines-ci}
+# Suggestions for the terminal's quick-command strip: a tap fills the input line.
+quick:
+  - cat ci-last-run.log
+  - ls -a
+  - edit .nines-ci.yml
+  - git status
+  - git add .nines-ci.yml
+  - "git commit -m \"fix pipeline\""
 objectives:
   - {id: valid, text: obj.valid, done_when: 'pipeline_valid'}
   - {id: green, text: obj.green, done_when: 'pipeline_status == "passed"'}

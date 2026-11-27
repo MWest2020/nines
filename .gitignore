@@ -9,3 +9,4 @@ coverage/
 *.keystore
 keystore.properties
 android/app/release/
+__pycache__/

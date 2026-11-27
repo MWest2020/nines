@@ -35,3 +35,19 @@ font (`src/game/ui/font.ts`, glyphs as text rows), the UI panels, Career Trail s
 (`src/game/ui/`), and the shop's Raspberry Pi icon (`src/game/ui/ShopScene.ts`). The real
 dialogue box (`src/game/ui/DialogueBox.ts`) replaces the world's placeholder once the game API
 answers the world's events.
+
+## Code that ships
+
+Third-party code bundled into `dist/` (and so into the Android app), with its licence. Versions
+are pinned exactly in `package.json`; ARCHITECTURE.md (Dependencies) says why each one is there.
+
+| Package | Version | Licence | What ships |
+| ------- | ------- | ------- | ---------- |
+| phaser | 3.90.0 | MIT | the game engine (`dist/assets/phaser-*.js`) |
+| yaml | 2.9.1 | ISC | parses the player's pipeline file in the broken-pipeline quest |
+| @xterm/xterm | 6.0.0 | MIT | the terminal's output renderer and its stylesheet `css/xterm.css`, bundled into `dist/assets/index-*.js` and `index-*.css` |
+
+The minified bundles drop licence comments, so the build writes every runtime dependency's
+licence text to `dist/THIRD-PARTY-LICENSES.txt` (`tools/vite-plugin-licenses.ts`), which ships
+with the site and the app. The terminal uses the device's own monospace font: no font file
+ships.

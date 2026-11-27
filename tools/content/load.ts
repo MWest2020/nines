@@ -38,6 +38,7 @@ import { COMMANDS } from '../../src/sim/shell/commands';
 import { BATTLE_FACTS, PROGRESS_FACTS, SCENARIO_FACTS } from '../../src/rules/registries';
 import { normalize } from '../../src/sim/path';
 import { createSession } from '../../src/sim/session';
+import { parseLine } from '../../src/sim/shell/parse';
 import { answerRound, compileBattle, startBattle } from '../../src/battle/engine';
 import { perfectAnswer, worstAnswer } from '../../src/battle/score';
 
@@ -662,6 +663,12 @@ export function loadContent(contentDir: string, schemaDir: string, options: Load
       }
       const ids = [...scenario.objectives, ...(scenario.hints ?? []), ...(scenario.events ?? [])].map((x) => x.id);
       if (new Set(ids).size !== ids.length) err(sFile, 'objective, hint and event ids must be unique');
+      // quick commands: lines this terminal can parse, starting with one of its commands
+      (scenario.quick ?? []).forEach((line, i) => {
+        const parsed = parseLine(line);
+        const ok = parsed.ok && parsed.pipeline.every((stage) => stage[0] !== undefined && has(COMMANDS, stage[0].text));
+        if (!ok) err(sFile, `quick[${i}]: "${line}" must parse, and every stage must start with a command of this terminal`);
+      });
       if (scenario.git?.pipeline) {
         const pf = normalize(`${scenario.git.root}/${scenario.git.pipeline.file}`);
         const f = scenario.files?.[pf];

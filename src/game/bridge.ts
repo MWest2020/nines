@@ -2,13 +2,15 @@
 // placeholder dialogue is no longer used: talking runs the real conversation, the shop counter
 // opens the shop, and entering a map saves the position and counts a pager tick.
 //
-// Until the terminal and battle overlays exist, using a terminal or a battle object shows the
-// quest's title and summary in the dialogue box. Those chunks replace that branch: open the
-// overlay with api.hold(), then completeQuest / recordBattle and showQuestDone.
+// Using a terminal opens the quest's terminal overlay (src/game/terminal). Until the battle
+// overlay exists, using a battle object shows the quest's title and summary in the dialogue
+// box; that chunk replaces the branch: open the overlay with api.hold(), then recordBattle and
+// showQuestDone.
 
 import Phaser from 'phaser';
 import { questKey } from '../content/types';
 import type { GameApi } from './api';
+import { openQuestTerminal } from './terminal/wire';
 import { type EnterEvent, type TalkEvent, type UseEvent, WORLD_EVENTS } from './world/events';
 
 export function bridgeWorld(game: Phaser.Game, api: GameApi): void {
@@ -26,6 +28,7 @@ export function bridgeWorld(game: Phaser.Game, api: GameApi): void {
   game.events.on(WORLD_EVENTS.use, (e: UseEvent) => {
     const run = async (): Promise<void> => {
       if (e.kind === 'shop') return api.openShop();
+      if (e.kind === 'terminal' && e.quest?.scenario) return openQuestTerminal(api, e.quest);
       if (e.quest) {
         const q = e.quest;
         return api.showDialogue([{ speaker: questKey(q.id, q.quest.title), text: questKey(q.id, q.quest.summary) }]);

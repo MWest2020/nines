@@ -299,6 +299,16 @@
         }
       }
     },
+    "quick": {
+      "type": "array",
+      "description": "suggested command lines for the terminal's quick-command strip; a tap fills the input line (the player still presses Enter)",
+      "maxItems": 10,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[!-~]([ -~]{0,46}[!-~ ])?$"
+      }
+    },
     "outage": {
       "type": "object",
       "additionalProperties": false,
