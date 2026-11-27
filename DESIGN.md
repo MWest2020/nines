@@ -11,7 +11,7 @@ creature collecting or battling, no "trainer" or "gym" framing, no badges handed
 leaders, no pocket-monster-style encyclopedia, no white rounded dialogue box with a coloured
 double border, no right-hand pop-up menu with a black triangle cursor, no A/B button labels, no
 sound effects that imitate theirs. Progress is a career: XP per skill branch, money, homelab
-gear, a Career Trail. The trail is our own idea of a skill map; roadmap.sh inspired the concept
+gear, a Career Trail, and one of five career paths. The trail is our own idea of a skill map; roadmap.sh inspired the concept
 of nodes lighting up, and we copy none of its content, layout or branding.
 
 Battles (below) are conversations with colleagues about engineering, not creature fights; this
@@ -203,11 +203,12 @@ that lights it. The MVP shows Junior Village's paths with its three done nodes.
 
 ### Homelab Store
 
-A counter in the village. One item in the MVP; later items show as silhouettes with the town
-that unlocks them.
+A counter in the village. One item per page: the Raspberry Pi and AI credits (AI tokens,
+below); later items show as silhouettes with the town that unlocks them. The header shows the
+token balance next to the money; the HUD band does too (`€350 AI 3`, tokens in lilac).
 
 ```
-┌─ Homelab Store ─────────────────────────────────── €350 ─┐
+┌─ Homelab Store ─────────────────────── 3 AI tokens  €350 ─┐
 │ ┌────────┐  Raspberry Pi                          €200   │
 │ │  ▣▣▣   │  A tiny homelab. Pays €10 after every         │
 │ │  ▣▣▣   │  quest; hints come one try sooner.            │
@@ -218,6 +219,189 @@ that unlocks them.
 ├──────────────────────────────────────────────── [Close] ─┤
 └──────────────────────────────────────────────────────────┘
 ```
+
+### AI tokens: hints cost something
+
+Mark, 27 Nov 2026: "a hint is AI usage. It gives less XP or less money, or you buy tokens." So
+hints come from an AI, and the AI costs tokens and takes a cut of the reward. The engine is in
+ARCHITECTURE.md (AI tokens); `src/core/tokens.ts` holds the numbers.
+
+**Rules, as built.**
+
+| Rule | Value |
+| ---- | ----- |
+| Tokens in a new game (and for a save from before tokens) | 3 |
+| A hint costs | 1 token |
+| Reward after n hints on a quest | `max(40%, 100% − 20% × n)`: 100, 80, 60, then 40 |
+| Scaled | the quest's money and XP, rounded down; never negative |
+| Not scaled | homelab income (the Pi's €10) and tech debt |
+| A hint paid before | free from then on, also in a terminal opened again |
+| Hints on a done quest | free: nothing is at stake any more |
+| No tokens | no hint; the card says where to buy some |
+| AI credits (shop) | €40 for 3 tokens; bought as often as you like, never "owned" |
+| Raspberry Pi | hints unlock one try sooner (its little local model notices sooner that you are stuck); reading one still costs a token |
+
+Why these numbers: a Junior quest pays €125 to €300 and 20 to 40 XP, so one hint costs about a
+€13 token plus €25 to €60 and some XP. Noticeable, never ruinous; three hints still pay 40%, so a
+stuck player always finishes with something. The starting 3 tokens let a new player try the
+AI before learning what it costs. Battles work the same way: a battle is a quest, its hints are
+paid in the war room, and the win pays the scaled reward.
+
+**Never before the price.** A hint that has unlocked shows as a card, not as text:
+
+```
+│ Hint                             │
+│ ┃ The AI thinks it knows what    │
+│ ┃ is wrong.                      │
+│ ┃ Ask the AI? -1 token, -20% XP  │
+│ ┃ and money on this quest        │
+│ ┃ (3 left).                      │
+│ ┃ [ Ask the AI ]                 │
+```
+
+At the floor the line says the quest already pays its minimum; without tokens: "Out of AI
+tokens. The Homelab Store sells credits. Or, radical idea: read the logs." The card has a lilac
+rule (the palette's AI colour) and a button at least 48 px tall. The win says what the AI cost:
+"Reward: €150 and 20 XP 1 AI hint: 80% of the full reward."
+
+**Tone.** Fun, not preachy: the AI is "usually right, always confident, and it keeps a cut of
+your reward". We never tell the player that asking is wrong; the price does the talking.
+
+### Career paths
+
+Mark, 27 Nov 2026: "the player needs money, picks a path to learn, grows. Paths are swe, sre,
+devops, platform engineer and systems engineer." Five paths replace the two tracks (SRE,
+Platform) of the first brief. They live in `content/roadmap.yaml` (`paths`, each with a title
+and a one-line pitch in both languages), and every quest lists the paths it counts towards
+(`paths` in quest.yaml; the validator checks they exist).
+
+| Path | Pitch (EN) | Home branches |
+| ---- | ---------- | ------------- |
+| Software Engineer (`swe`) | You build the product: clean code, sound designs, and features that survive real users. | design, git, cicd |
+| Site Reliability Engineer (`sre`) | You keep it up: SLOs, error budgets, on-call, and a quieter pager every month. | incident, observability, linux, kubernetes |
+| DevOps Engineer (`devops`) | You get changes to production safely and often: pipelines, releases, and teams that ship together. | cicd, iac, containers, incident |
+| Platform Engineer (`platform`) | You build the road other teams drive on: Kubernetes, golden paths, and self-service that just works. | kubernetes, containers, iac, observability |
+| Systems Engineer (`systems`) | You know the machine: Linux, networks, storage and hardware, all the way down to the cables. | linux, networking, incident |
+
+The Dutch pitches are in `content/locales/nl.yaml`.
+
+**The choice at Medior City.** Junior Village is the same for everyone: every quest there is
+open, whatever its tags. On arriving in Medior City (after the gate interview) a career coach
+asks which path you want, showing the five pitches; the choice is stored in the save (`path`,
+`core/game.ts choosePath`, refused before the road to Medior City is open and once made).
+What a path unlocks:
+
+- the path's own quest line in Medior City (a mentor NPC and three to five quests tagged with it),
+- its own gate interview on the road to Senior Summit (the boss for that path),
+- a path item in the Homelab Store (ideas in docs/content-backlog.md, Career paths),
+- its name on the Career Trail and the credits.
+
+Quests of other paths stay playable as side quests: nothing locks a player out for good. Until
+Medior City has a map the choice exists only in the rules and the save.
+
+**Existing content, tagged.**
+
+| Quest | Kind | Paths |
+| ----- | ---- | ----- |
+| disk-full, service-down | terminal | sre, systems, devops |
+| broken-pipeline | terminal | devops, platform, swe |
+| its-always-dns | terminal (cameo) | systems, sre |
+| crashloop-config | terminal (Kubernetes) | platform, sre, devops |
+| rate-limiter-interview | battle, the Medior gate | swe, sre, platform |
+| night-pager | battle (incident) | sre, devops |
+| friday-scope | battle (stakeholder) | swe, devops |
+| nearby-places, ticket-booking-interview, collab-editor-interview | battle (design) | swe |
+| url-shortener | battle (design) | swe, sre |
+
+### Kubernetes learning path
+
+Mark, 27 Nov 2026: "a k8s learning path: junior is associate, medior CKAD and senior CKA/S." A
+`kubernetes` branch on the Career Trail follows the Linux Foundation's certifications, one node
+per exam domain. Our own questions only: we follow the published domains and never copy exam
+questions, dumps or official question text.
+
+**Sources** (read 27 Nov 2026; the Linux Foundation and CNCF pages agree unless noted):
+
+- KCNA: https://training.linuxfoundation.org/certification/kubernetes-cloud-native-associate/ and https://www.cncf.io/training/certification/kcna/ (online, multiple choice, 90 minutes, no prerequisite)
+- CKAD: https://training.linuxfoundation.org/certification/certified-kubernetes-application-developer-ckad/ and https://www.cncf.io/training/certification/ckad/ (performance-based, command line, 2 hours, Kubernetes v1.37)
+- CKA: https://training.linuxfoundation.org/certification/certified-kubernetes-administrator-cka/ and https://www.cncf.io/training/certification/cka/ (performance-based, 2 hours, Kubernetes v1.37)
+- CKS: https://training.linuxfoundation.org/certification/certified-kubernetes-security-specialist/ and https://www.cncf.io/training/certification/cks/ (performance-based, 2 hours, Kubernetes v1.37; a passed CKA is required)
+- Curricula: https://github.com/cncf/curriculum (the PDFs answered HTTP 503 that day; recheck them before writing CKS content)
+
+**Nodes per stage.**
+
+| Stage (exam) | Node | Exam domain and weight |
+| ------------ | ---- | ---------------------- |
+| Junior (KCNA) | `k8s-fundamentals` | Kubernetes Fundamentals, 44% (core concepts, administration, scheduling, containerization) |
+| | `k8s-orchestration` | Container Orchestration, 28% (networking, security, troubleshooting, storage) |
+| | `k8s-delivery` | Cloud Native Application Delivery, 16% (application delivery, debugging) |
+| | `k8s-architecture` | Cloud Native Architecture, 12% (observability, the cloud native ecosystem and principles, community) |
+| Medior (CKAD) | `ckad-design-build` | Application Design and Build, 20% |
+| | `ckad-deployment` | Application Deployment, 20% |
+| | `ckad-observability` | Application Observability and Maintenance, 15% |
+| | `ckad-config-security` | Application Environment, Configuration and Security, 25% |
+| | `ckad-networking` | Services and Networking, 20% |
+| Senior (CKA) | `cka-storage` | Storage, 10% |
+| | `cka-troubleshooting` | Troubleshooting, 30% |
+| | `cka-workloads` | Workloads & Scheduling, 15% |
+| | `cka-cluster` | Cluster Architecture, Installation & Configuration, 25% |
+| | `cka-networking` | Services & Networking, 20% |
+| Senior (CKS, its own row: `kubernetes-security`) | `cks-cluster-setup` | Cluster Setup, 15% on the LF page, 10% on the CNCF page |
+| | `cks-cluster-hardening` | Cluster Hardening, 15% |
+| | `cks-system-hardening` | System Hardening, 10% (LF) or 15% (CNCF) |
+| | `cks-microservices` | Minimize Microservice Vulnerabilities, 20% |
+| | `cks-supply-chain` | Supply Chain Security, 20% |
+| | `cks-runtime` | Monitoring, Logging and Runtime Security, 20% |
+
+The Junior nodes are in `content/roadmap.yaml` now (the Junior trail has six rows since then:
+TrailScene packs six branch rows 11 px apart). The CKAD, CKA and CKS nodes arrive with their
+first quests; CKS needs six stones on one row, which the trail fits once the stone spacing drops
+to 14 px for that row. Each node's quest is listed in docs/content-backlog.md.
+
+**Which form suits which exam.** KCNA is multiple choice about concepts, so its domains suit
+battles (an interviewer on pods vs Deployments, Services, namespaces, the control plane) as
+well as short terminal quests. CKAD, CKA and CKS are hands-on, so they suit terminal quests;
+the simulator's kubectl grows with them (the backlog lists the commands each needs).
+
+**Written so far: CrashLoopBackOff** (`content/quests/crashloop-config`, Junior, lights
+`k8s-fundamentals`). Mila from the platform team stands on the square; the jump host is the
+rack at the back right of the server room. shop-api's two pods crash-loop after a ConfigMap
+change. The player finds the pods in the `shop` namespace, reads `kubectl describe pod` (the
+back-off, exit code 1, the environment from the ConfigMap) and `kubectl logs` (an invalid
+`LOG_LEVEL`), fixes `~/shop-k8s/configmap.yaml`, sends it with `kubectl apply -f` (saving the
+file alone changes nothing in the cluster) and starts fresh pods with `kubectl rollout restart`.
+The last hint says why: a container reads its environment when it starts; crash-looping ones
+would pick up the fix at their next restart attempt, but the back-off can take minutes, and a
+running pod would never pick it up.
+
+### Share my progress (design only, not built)
+
+Mark, 27 Nov 2026, wants "share my progress", and saw that without a server it can be
+faked. Two options:
+
+- **A. A self-reported share card.** A Share button renders a card in our pixel style: stage,
+  path, XP per branch, quests done, and the brag line "with 2 AI hints". It is offered as a PNG
+  (the Web Share sheet on Android, a download on desktop) and as a link to the Pages site with
+  the progress in the URL fragment (`#share=...`, never sent to any server), which opens a
+  read-only card. No server, no account, nothing sent unless the player shares it. Anyone can
+  craft a fake link; for a game about fun that is fine.
+- **B. A card signed by a small server.** The game sends its run (the commands and answers;
+  the core is deterministic, so the server can replay the run in the same simulator) and gets
+  back a signed card. It costs a backend to build, run, secure and pay for, abuse limits, and
+  data leaving the device (Play's Data safety changes, AGENTS.md rule 3 applies in full). And it
+  still cannot stop a determined cheater: the client is open source, so a script can produce a
+  valid run. A signature proves that a valid run exists, not who played it.
+
+**Recommendation: A first.** It is fun, private and needs no infrastructure. B only makes sense
+if leaderboards or prizes ever matter, and then it needs Mark's approval for the server.
+
+### Later
+
+Not designed yet, kept in the roadmap so they are not lost: meme internet cafés (a place in
+each town with tech-meme side quests, tech debt and a jukebox), miniature games (small arcade
+cabinets: a log-grep race, packet Tetris, a YAML-indent rhythm game), and a swag shop (stickers,
+hoodies and mugs, in-game first; real merchandise only if Mark wants it). Tech, memes and fun
+lead (Mark, 27 Nov 2026).
 
 ### Battles: the war room
 
@@ -253,7 +437,7 @@ the whiteboard. Our battles take that shape.
   graded answer gets a mark and a word, never colour alone: ✓ "Spot on", ½ "Half right",
   ✗ "Not quite".
 - **Losing.** "Not this time" and the debrief, with Try again right under it. No money is
-  taken, nothing is locked; hints appear on the next try.
+  taken, nothing is locked; hints are ready on the next try (each costs an AI token).
 
 Desktop (an incident):
 

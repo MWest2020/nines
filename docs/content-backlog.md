@@ -1,4 +1,119 @@
-# Content backlog: battles still to write
+# Content backlog
+
+What still needs writing: the career paths' signature quests, the Kubernetes learning path, and
+(below those) the system-design battle briefs, all four of which are done. Write our own
+questions: these are topics, not text to copy from anywhere.
+
+## Career paths: signature quests and battles
+
+DESIGN.md, Career paths. Each path gets a mentor in Medior City, a quest line, its own gate
+interview into Senior Summit and a homelab item. Ideas to start from; tag every quest with its
+`paths`.
+
+- **Software Engineer (swe).** Quest: a flaky test that only fails on CI (a time zone, test
+  order or a shared temp dir), found with git bisect in the terminal. Battle: a code review
+  where a colleague defends a 900-line pull request (split it, what to ask, what to block on).
+  Gate: a design interview on a news feed (fan-out on write vs read). Item: a mechanical
+  keyboard (typing in the terminal pays a little XP bonus? keep it cosmetic first).
+- **Site Reliability Engineer (sre).** Quest: alerts that page on every blip; rewrite one as an
+  SLO burn-rate alert. Battle: a postmortem meeting that wants a name to blame (blameless
+  framing, contributing factors, action items that are owned). Gate: an incident commander
+  interview with three things on fire. Item: a status-page e-ink display.
+- **DevOps Engineer (devops).** Quest: a deploy that works on one server and not the other
+  (configuration drift); fix it with a small idempotent playbook. Battle: a release manager who
+  wants a code freeze for a month (trunk-based development, feature flags, small batches).
+  Gate: a pipeline design interview (build once, promote the artifact). Item: a self-hosted CI
+  runner (pipelines in quests run faster? cosmetic first).
+- **Platform Engineer (platform).** Quest: a team's app needs a database; build the golden path
+  (a template that gives a namespace, quotas and a Deployment). Battle: a product team that
+  refuses the platform ("we'll run our own cluster"): paved roads vs mandates. Gate: an
+  interview on a multi-tenant cluster (namespaces, RBAC, quotas, network policies). Item: a
+  three-node mini cluster of old laptops.
+- **Systems Engineer (systems).** Quest: a server that cannot reach the internet (a default
+  route, then MTU); `ip route`, `ping -M do`. Battle: a vendor who wants to replace the RAID
+  with "the cloud" by Friday (backups, restore tests, what RAID is not). Gate: a hardware
+  failure triage interview (SMART data, ECC errors, a dying PSU). Item: a second-hand rack
+  switch.
+
+## Kubernetes learning path
+
+DESIGN.md, Kubernetes learning path, with the exam domains and their sources (read 27 Nov 2026;
+recheck the weights before writing). Junior follows KCNA, Medior CKAD, Senior CKA and CKS. Our
+own scenarios and questions; never exam dumps or official question text. Done: CrashLoopBackOff
+(`content/quests/crashloop-config`, KCNA, Kubernetes Fundamentals).
+
+### Junior: KCNA (multiple choice, concepts)
+
+- **Container Orchestration (28%)**, node `k8s-orchestration`: a battle with Mila on Services
+  and storage. Pod IPs change, so what gives a stable name (a Service, its ClusterIP and DNS
+  name); ClusterIP vs NodePort vs LoadBalancer; a PersistentVolumeClaim vs an emptyDir (what
+  survives a pod restart); why a Secret is only base64 (encoding, not encryption) and what
+  RBAC is for. Traps: "a Deployment gives the pods a fixed IP".
+- **Cloud Native Application Delivery (16%)**, node `k8s-delivery`: a terminal quest with a bad
+  image tag (ImagePullBackOff): `kubectl describe` shows the pull error, fix the tag in the
+  manifest, apply; then a rolling update and a rollback. Simulator: `kubectl set image`,
+  `kubectl rollout status|undo|history`.
+- **Cloud Native Architecture (12%)**, node `k8s-architecture`: a battle on what the control
+  plane does (API server, etcd, scheduler, controller manager; the kubelet on each node),
+  declarative desired state and reconciliation, the three pillars of observability, and what
+  the CNCF is (projects by maturity: sandbox, incubating, graduated). Traps: "etcd runs your
+  containers".
+
+### Medior: CKAD (hands-on)
+
+Domains: Application Design and Build 20%, Application Deployment 20%, Application
+Observability and Maintenance 15%, Application Environment, Configuration and Security 25%,
+Services and Networking 20%.
+
+- Design and Build: a CronJob that never runs (bad schedule) and an init container waiting for
+  a database; a sidecar that ships logs.
+- Deployment: a canary with two Deployments behind one Service (replica ratio), a Helm release
+  upgrade that went wrong (`helm rollback`), a Kustomize overlay for staging.
+- Observability and Maintenance: a liveness probe that kills a slow-starting app (fix it with a
+  startup probe), a deprecated API version in a manifest.
+- Environment, Configuration and Security: requests and limits (an OOMKilled pod), a Secret
+  mounted as a file, a ServiceAccount, a securityContext that runs as non-root.
+- Services and Networking: a Service whose selector matches nothing (no endpoints), an Ingress
+  rule with the wrong path, a NetworkPolicy that blocks the frontend.
+- Simulator: `kubectl get svc|endpoints|deploy|cm|secret|events`, `describe` for more kinds,
+  `create`, `expose`, `scale`, `set image`, `rollout undo`, `exec`, `top`, `logs -c`, a `helm`
+  subset.
+
+### Senior: CKA (hands-on)
+
+Domains: Storage 10%, Troubleshooting 30%, Workloads & Scheduling 15%, Cluster Architecture,
+Installation & Configuration 25%, Services & Networking 20%.
+
+- Troubleshooting: a node NotReady (the kubelet is stopped: `systemctl status kubelet` on the
+  node, the journal), a pod Pending on taints or resources, CoreDNS crash-looping.
+- Storage: a PVC stuck Pending (no StorageClass, wrong access mode), a reclaim policy that
+  deleted data.
+- Workloads & Scheduling: node affinity and taints/tolerations, a HorizontalPodAutoscaler that
+  never scales (no metrics), a rollback.
+- Cluster Architecture: RBAC (a Role and RoleBinding for a team), a kubeadm upgrade in the right
+  order (control plane first, drain, then nodes), backing up and restoring etcd.
+- Services & Networking: Gateway API vs Ingress, NodePort vs LoadBalancer, a NetworkPolicy
+  default deny with the right exceptions.
+
+### Senior: CKS (hands-on; CKA required)
+
+Domains: Cluster Setup 15% (LF) or 10% (CNCF), Cluster Hardening 15%, System Hardening 10% (LF)
+or 15% (CNCF), Minimize Microservice Vulnerabilities 20%, Supply Chain Security 20%,
+Monitoring, Logging and Runtime Security 20%. The two pages disagreed on 27 Nov 2026; recheck.
+
+- Cluster Setup: default-deny NetworkPolicies, protecting the cloud metadata endpoint, a CIS
+  benchmark finding on the kubelet.
+- Cluster Hardening: an over-broad ClusterRoleBinding, a ServiceAccount token that is mounted
+  everywhere, an old cluster version.
+- System Hardening: an AppArmor or seccomp profile for a pod, removing packages from a node.
+- Microservice Vulnerabilities: Pod Security Standards (restricted), Secrets at rest, mTLS
+  between pods.
+- Supply Chain: a base image with a known CVE, an unsigned image refused by policy, an SBOM.
+- Runtime Security: an audit log that shows who exec'd into a pod, a container writing to its
+  root filesystem (make it read-only).
+
+## System-design battles (all done)
+
 
 System-design topics that need a battle (ARCHITECTURE.md, Battles; CONTRIBUTING.md for
 the folder layout). Each paragraph lists what the battle must test, at software-engineering

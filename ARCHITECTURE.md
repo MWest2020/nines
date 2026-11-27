@@ -10,8 +10,10 @@ Principles, in priority order:
 1. **Content drives a small engine.** Quests, NPCs, dialogue, machines and win conditions are
    YAML in `/content`. The engine knows a fixed set of commands and facts; content combines
    them. Contributors never write JavaScript.
-2. **Nothing leaves the device.** No network calls at runtime, no tracking, no analytics, no
-   ads. Saves live in `localStorage`. Content is bundled at build time.
+2. **Nothing leaves the device unless the player opts in.** Today the game makes no network
+   calls at runtime: no tracking, no analytics, no ads. Saves live in `localStorage`. Content is
+   bundled at build time. Since 27 Nov 2026 (AGENTS.md, rule 3) an optional online feature such
+   as share-my-progress may come, opt-in and documented here before it ships.
 3. **Pure core, thin shell.** The simulator, the condition language, saves and i18n are pure
    TypeScript with no DOM or Phaser imports, so they are unit-tested in Node. Phaser and the
    DOM only render and collect input.
@@ -109,7 +111,8 @@ The terminal is not a shell. It is a small simulator of one machine per quest, d
 | Filesystem | `fs: Record<absPath, {type:'dir'} \| {type:'file', size, content?}>` | A flat map. Children of a dir are the keys whose dirname is that dir. Scenarios hold at most a few hundred entries, so linear scans stay simple and obviously correct. A file has a `size` in bytes and optional visible `content`; a 2.4 GB log is `size: 2.4G` plus a few lines of content (its tail). Editing a file sets `size` to the content's byte length. |
 | Mounts | `mounts: {path, device, size, baseUsed}[]` | A path belongs to the longest mount path that contains it. Used = `baseUsed` (space the scenario does not list) + the sizes of the files on that mount. `df` and `disk_usage()` read this, so `rm` and `mv` free space naturally, including moving a file to another mount. |
 | Services | `services: Record<name, {description, state, enabled, logs[]}>` | `state` is `active`, `inactive` or `failed`. `logs` is the journal. A restart evaluates the scenario's `restart.succeeds_if` condition: true makes it `active` and appends success lines, false makes it `failed` and appends failure lines. |
-| Pods | `pods: {name, namespace, deployment, status, restarts, age, logs[]}[]` | Derived from `deployments` in the scenario. `kubectl rollout restart` replaces a deployment's pods with new, deterministically named ones whose status follows `restart.succeeds_if`. |
+| Pods | `pods: {name, namespace, deployment, status, restarts, age, logs[]}[]` | Derived from `deployments` in the scenario. `kubectl rollout restart` replaces a deployment's pods with new, deterministically named ones whose status follows `restart.succeeds_if`. `kubectl describe pod` derives the phase, container state, last state, envFrom (`config_map`) and events from the status. |
+| Cluster | `cluster: Record<absPath, content>` | What the cluster runs: the manifests listed in the scenario's `cluster` at their starting content, plus every file `kubectl apply -f` sent (a directory applies its `*.yaml`/`*.yml` files). Saving a manifest changes the disk, not the cluster; `applied_contains(path, text)` reads the cluster's copy. Apply checks only the shape (`kind`, `metadata.name`, no tab in the indentation) and prints `created`, `configured` or `unchanged`. |
 | Git | `git: {root, branch, head, index, commits}` | `head` and `index` map repo-relative paths to a content signature. The working tree is the filesystem. `status` diffs the three; `add` copies working tree to index; `commit` copies index to head. |
 | Pipeline | `pipeline: {status: none\|passed\|failed, runs}` | When the scenario names a pipeline file, every commit "runs CI": the committed file goes through the `nines-ci` validator and the result is printed and stored. |
 | Bookkeeping | `cwd`, `oldpwd`, `counters {commands, fails}`, `ran[]`, `restarted[]`, `flags`, `firedEvents[]`, `shownHints[]`, `generation` | What the player did, for hints and conditions. `ran` holds command names and, for systemctl, kubectl and git, "name subcommand" (`git commit`). |
@@ -154,7 +157,7 @@ may change the working copy of the state.
 | `mv` | rename, move into a dir, several sources into a dir |
 | `systemctl` | `status`, `restart` (and `start`) |
 | `journalctl` | `-u unit`, `-n N`, `-xe` accepted, `--no-pager` |
-| `kubectl` | `get pods [-n ns \| -A]`, `logs pod\|deployment/x [--tail N]`, `rollout restart deployment/x` |
+| `kubectl` | `get pods [-n ns \| -A]`, `describe pod[s] [name] [-n ns]`, `logs pod\|deployment/x [--tail N]`, `apply -f file\|dir`, `rollout restart deployment/x` |
 | `git` | `status`, `add <paths> \| . \| -A`, `commit -m msg [-a]` |
 | `edit` (`nano`, `vi`, `vim`) | opens the built-in editor (a UI action); saving calls `saveFile` |
 | `clear`, `exit` | UI actions |
@@ -200,7 +203,9 @@ TerminalOverlay below).
 **Hints** are conditions too, so a scenario can say "after two failed attempts and if the
 player has not run df yet". When hints are evaluated, the `fails` fact includes the homelab's
 `hint_boost`, which is how "faster hints" works without special code; events, objectives and
-restart rules see the real count.
+restart rules see the real count. A hint whose condition holds has *unlocked*; the player still
+pays an AI token to read it (`core/tokens.ts`, below), so the session decides when a hint is
+ready and the game decides what it costs.
 
 **Names on `Object.prototype`.** Every lookup of a name that came from content or from the
 player (commands, units, deployments, registry entries, git paths, locale keys) goes through
@@ -340,6 +345,7 @@ with the state they read:
 | `size(path)` | number, bytes in a file or below a dir |
 | `exists(path)`, `removed(path)` | boolean; `removed` = existed at the start and is gone |
 | `file_contains(path, text)` | boolean |
+| `applied_contains(path, text)` | boolean: the manifest at `path`, as the cluster last received it, contains `text` |
 | `service(name)` | `active` \| `inactive` \| `failed` |
 | `restarted(name)` | boolean, service or deployment |
 | `pods_running(deployment)` | boolean, all pods Running |
@@ -405,8 +411,8 @@ author: {name: "Nines team", handle?: "@x", url?: "https://..."}   # credits
 title: title                       # locale keys
 summary: summary
 stage: junior                      # junior | medior | senior
-branch: linux                      # one of the eight roadmap branches
-track: any                         # any | sre | platform
+branch: linux                      # a roadmap branch (ten, kubernetes included)
+paths: [sre, systems, devops]      # career paths it counts towards: swe sre devops platform systems
 roadmap_node: linux-disk           # lights up when done
 requires: []                       # quest ids
 giver: femke                       # npc id
@@ -430,7 +436,9 @@ services:
   nginx: {description: "...", state: failed, logs: [..],
           restart: {succeeds_if: '<condition>', logs_on_success?: [..], logs_on_failure?: [..]}}
 deployments:
-  api: {status: CrashLoopBackOff, restarts: 4, logs: [..], restart: {succeeds_if: '...'}}
+  api: {status: CrashLoopBackOff, restarts: 4, logs: [..], restart: {succeeds_if: '...'},
+        namespace?, replicas?, image?, config_map?}   # image and config_map show in kubectl describe
+cluster?: [/home/dev/shop-k8s/configmap.yaml]   # manifests the cluster runs at the start
 git: {root: /home/dev/shop, pipeline: {file: .nines-ci.yml, validator: nines-ci}}
 objectives: [{id, text, done_when}]          # all true = quest complete
 hints: [{id, when, text}]
@@ -591,7 +599,7 @@ uses (no dependencies of its own); it never sees content files.
 ```json
 {
   "format": "nines-save",
-  "version": 2,
+  "version": 3,
   "game": {
     "locale": "nl",
     "money": 350,
@@ -603,6 +611,9 @@ uses (no dependencies of its own); it never sees content files.
     "seed": 2840192763,
     "ticks": 4,
     "claimed": [],
+    "tokens": 2,
+    "hints": {"service-down": ["hint.status"]},
+    "path": null,
     "player": {"map": "junior-village", "x": 7, "y": 6, "facing": "down"}
   }
 }
@@ -610,12 +621,17 @@ uses (no dependencies of its own); it never sees content files.
 
 `seed` is chosen once for a new game by the game layer (the pure core has no randomness) and
 fixes card orders and pager rolls; `ticks` counts pager ticks (map changes); `claimed` lists
-the one-off event bonuses already paid (`<quest>/<event>`).
+the one-off event bonuses already paid (`<quest>/<event>`); `tokens` is the AI token balance,
+`hints` the hints paid for per quest (by locale key), `path` the career path (null until Medior
+City).
 
 - **Versioning.** `version` is the save format, not the game version. A format change bumps
   `SAVE_VERSION` and adds `MIGRATIONS[n]`, a pure function from version n to n+1; loading runs
   the chain. Version 2 (MVP build) added `seed`, `ticks` and `claimed`; `MIGRATIONS[1]` fills
-  them in. A save from a newer version loads as `{kind: 'newer'}`: the game tells the player
+  them in. Version 3 (27 Nov 2026) added `tokens`, `hints` and `path`; `MIGRATIONS[2]` gives an
+  old save the new game's 3 tokens, counts no hint against any quest (they were free until now)
+  and chooses no path. Bad values repair to those defaults (a negative or fractional token count
+  to 3, non-string hint keys dropped). A save from a newer version loads as `{kind: 'newer'}`: the game tells the player
   to update and does not autosave, so the newer save is never overwritten. `core/persist.ts`
   also checks before every write, so a newer version saving from another tab stops this one
   writing. When the browser refuses storage, the game plays on in memory.
@@ -626,7 +642,7 @@ the one-off event bonuses already paid (`<quest>/<event>`).
 - **What is not saved.** Terminal sessions and battle sessions. Opening a quest's terminal again starts its machine
   fresh, so content changes can never strand a save in a half-finished scenario. Quest ids are
   stable; a save that mentions a quest the content no longer has keeps the entry and ignores it.
-- **When.** After a quest completes, after a purchase, on a locale change, when entering a map,
+- **When.** After a quest completes, after a purchase, after a hint is paid for, on a locale change, when entering a map,
   and on `visibilitychange` to hidden (covers closing the tab and Android backgrounding).
 
 ## i18n
@@ -771,6 +787,18 @@ the one-off event bonuses already paid (`<quest>/<event>`).
   quest and event however often the terminal is replayed; penalties cost every time.
   `tech_debt` from meme side-quests is stored for later world events, which will use progress
   conditions (`tech_debt >= 3`).
+- **AI tokens** (`core/tokens.ts`, pure; DESIGN.md, AI tokens): asking for an unlocked hint costs
+  `HINT_COST` (1) token and records the hint's locale key under `hints[quest]`; a quest's money
+  and XP are paid at `rewardPercent(hints) = max(40, 100 − 20 × hints)` percent, rounded down
+  (`scaled`), never negative. A paid hint stays paid (a terminal opened again shows it free); a
+  done quest's hints are free. Homelab income and tech debt are not scaled. The `Reward` carries
+  `percent`, `hints` and the `full` amounts for the UI. Tokens come from a new game (3) and from
+  consumable shop items (`consumable: true`, `effects.tokens`), which are never owned and can be
+  bought again; a consumable has no other effect and nothing can require it.
+- **Career paths** (`core/game.ts` `choosePath`): five paths in `roadmap.yaml`; a quest lists
+  the paths it counts towards in `paths`. The choice is stored in the save (`path`, null until
+  chosen), refused before the road to Medior City opens and once chosen. Nothing reads it yet:
+  Medior City has no map (DESIGN.md, Career paths).
 - **The Career Trail's state** (`core/game.ts` `trail`): a node is done when a quest that names
   it is done; open when every node it requires is done and its town is open; locked otherwise.
   Towns lie on one road in roadmap order: a town is open when its gate battle is won and every
@@ -793,6 +821,7 @@ the game registry by `main.ts`; get it with `getGameApi(scene)`:
 | `showQuestDone(reward)` | terminal, battle | the giver's done lines in the dialogue box, after the overlay has closed |
 | `applyTerminalEvents(questId, events)` | terminal | money and flags from `RunResult.events` |
 | `hintBoost()` | terminal, battle | pass to `createSession` and `startBattle` |
+| `hintOffer(questId, key)`, `askHint(questId, key)` | terminal, battle | the price of an unlocked hint (`shown`, `free`, `ask` with the reward percent before and after, `broke`); pay a token and save at once |
 | `recordBattle(id, 'won' \| 'lost')` | battle | won pays like `completeQuest`; lost costs nothing |
 | `hold()` | terminal, battle | marks the UI busy while a DOM overlay is open; call the returned function to release |
 | `enterMap(player)` | world | stores the position, counts a pager tick, saves; returns a pager battle to open or `null` |

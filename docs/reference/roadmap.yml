@@ -2,9 +2,9 @@
 # Written 2026-11-26 by the Nines architect agent from Mark's brief of 26 Nov 2026. An item is
 # "done" only with evidence (a merged PR, a CI run or a document); everything else is "open".
 # Schema: project, goal, current (a phase id), phases [id, name, summary], and done_means for the
-# current phase [item, status done|open, evidence].
+# current phase [item, status done|open, evidence]. Later phases may carry their own done_means.
 project: nines
-goal: "A retro top-down RPG in the browser and on Android where you grow from Junior to Senior engineer by fixing simulated machines in an in-game terminal: no tracking, no ads, no network, content as data."
+goal: "A retro top-down RPG in the browser and on Android where you grow from Junior to Senior engineer along one of five career paths by fixing simulated machines in an in-game terminal; hints come from an AI that costs tokens; no ads or third-party tracking, any online feature opt-in; content as data."
 current: android
 phases:
   - id: architecture
@@ -50,6 +50,26 @@ phases:
       - {item: "Battle: ticket booking (Senior): holds with a TTL, conditional writes or row locks, idempotency", status: done, evidence: "https://github.com/MWest2020/nines/pull/13"}
       - {item: "Battle: collaborative editor (Senior): OT vs CRDT, offline merge", status: done, evidence: "https://github.com/MWest2020/nines/pull/13"}
       - {item: "Senior Summit map with spawn slots npc-1 (Noor) and npc-2 (Joris): makes the two Senior interviews reachable", status: open, evidence: "https://github.com/MWest2020/nines/blob/main/ARCHITECTURE.md"}
+  - id: paths
+    name: "Career paths, AI tokens and Kubernetes"
+    summary: "Mark, 27 Nov 2026: hints are AI usage and cost tokens; five career paths (SWE, SRE, DevOps, Platform, Systems); a Kubernetes learning path along KCNA, CKAD and CKA/CKS; Nines is no children's app, so optional online features may come, opt-in"
+    done_means:
+      - {item: "AI tokens in the pure core: a token balance, a hint costs one, rewards scale to max(40%, 100% - 20% per hint) and never go negative, no hint without tokens, AI credits (€40 for 3) in the shop, save format 3 with the v2 to v3 migration; Vitest tests (tests/core/tokens.test.ts)", status: done, evidence: "PR_URL"}
+      - {item: "Hints ask first in the terminal and the war room (\"Ask the AI? -1 token, -20% XP and money on this quest\"), tokens in the HUD and the shop; the browser smoke tests pay a hint in a quest and a battle and buy AI credits", status: done, evidence: "PR_URL"}
+      - {item: "Five career paths in content/roadmap.yaml with NL/EN pitches; quests declare paths (schema and validator); existing quests tagged; choosePath in the rules and the save; DESIGN.md, Career paths", status: done, evidence: "PR_URL"}
+      - {item: "Kubernetes learning path designed against the official KCNA, CKAD, CKA and CKS domains (DESIGN.md, sources cited); the four KCNA nodes on the Career Trail", status: done, evidence: "PR_URL"}
+      - {item: "First Kubernetes quest, CrashLoopBackOff (Junior, KCNA): kubectl describe and apply -f in the simulator, played in tests/quests/k8s.test.ts and the browser smoke test, independently reviewed", status: done, evidence: "PR_URL"}
+      - {item: "Policy: AGENTS.md rule 3 rewritten (not a children's app; network features opt-in, no third-party analytics or ads unless Mark asks); DESIGN.md, Share my progress (option A recommended)", status: done, evidence: "PR_URL"}
+      - {item: "The Kubernetes path's remaining KCNA pieces, then CKAD (Medior) and CKA/CKS (Senior) content and the kubectl commands they need (docs/content-backlog.md)", status: open, evidence: "https://github.com/MWest2020/nines/blob/main/docs/content-backlog.md"}
+      - {item: "Medior City map with the career coach: the path choice in play, each path's mentor, quest line and gate interview (docs/content-backlog.md, Career paths)", status: open, evidence: "https://github.com/MWest2020/nines/blob/main/DESIGN.md"}
+  - id: later
+    name: "Later: share, cafés, minigames, swag"
+    summary: "ideas Mark named on 27 Nov 2026, not designed beyond a line each; tech, memes and fun lead"
+    done_means:
+      - {item: "Share my progress: a self-reported share card (PNG and a link with the progress in the URL fragment), opt-in, no server (DESIGN.md, option A)", status: open, evidence: "https://github.com/MWest2020/nines/blob/main/DESIGN.md"}
+      - {item: "Meme internet cafés: a place in each town with tech-meme side quests, tech debt and a jukebox", status: open, evidence: "https://github.com/MWest2020/nines/blob/main/DESIGN.md"}
+      - {item: "Miniature games: small arcade cabinets (a log-grep race, packet Tetris, a YAML-indent rhythm game)", status: open, evidence: "https://github.com/MWest2020/nines/blob/main/DESIGN.md"}
+      - {item: "Swag shop: stickers, hoodies and mugs in-game first; real merchandise only if Mark wants it", status: open, evidence: "https://github.com/MWest2020/nines/blob/main/DESIGN.md"}
 done_means:
   - {item: "Capacitor project: @capacitor/core, cli and android 8.6.0 pinned exactly; android/ committed; target SDK 36 (Play's requirement since 31 Aug 2026); portrait and landscape; no permissions at all (INTERNET removed); allowBackup off; the Android back button closes what the game would; no service worker in the app; own launcher icon", status: done, evidence: "https://github.com/MWest2020/nines/pull/19"}
   - {item: "Signed AAB from env vars: Gradle signs the release only from NINES_KEYSTORE, NINES_KEYSTORE_PASSWORD, NINES_KEY_ALIAS and NINES_KEY_PASSWORD (unsigned with a warning when none are set); a new upload key outside the repo; a signed AAB built and verified with jarsigner", status: done, evidence: "https://github.com/MWest2020/nines/pull/19"}
