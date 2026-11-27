@@ -596,6 +596,98 @@ def buy_ai_credits(page: Page, p: Player, village: Grid, shots: Path | None) -> 
     print(f"  bought AI credits: tokens {before['tokens']} -> {after['tokens']}, money {before['money']} -> {after['money']}")
 
 
+
+# ---------------------------------------------------------------- karma (DESIGN.md, Karma)
+
+def bank_pentest(page: Page, shots: Path | None) -> None:
+    """The ethical hacker's first quest: scope, config, evidence, the finding written up."""
+    run(page, "cat ~/engagement/scope.txt", "OUT OF SCOPE")
+    run(page, "cat /etc/nginx/sites-enabled/staging", "autoindex on")
+    run(page, "ls -l /srv/www/staging/exports", "db-backup-2026-11-20.sql.gz")
+    run(page, "edit ~/engagement/finding-01.txt")
+    page.locator(".nt-editor").wait_for(state="visible")
+    edit_file(page, PENTEST_FINDING)
+    if shots:
+        page.screenshot(path=str(shots / "terminal-pentest.png"))
+    finish(page, "Pentest: Polderbank staging", reward=["€300 and 30 XP", "Karma +10."])
+
+
+PENTEST_FINDING = """FINDING 01
+Title: directory listing exposes a database backup
+Severity: high
+Where: /exports/ (autoindex on in /etc/nginx/sites-enabled/staging)
+What anyone on the internet could do: list the folder and download the backup
+Recommendation: autoindex off, and the backup out of the web root
+"""
+
+
+def toggle_contractor(page: Page) -> None:
+    """The HUD's menu icon (top right of the band), then Work as with the keyboard."""
+    box = page.locator("canvas").bounding_box()
+    scale = box["width"] / 240
+    page.mouse.click(box["x"] + (240 - 2 * 14 - 2 + 7) * scale, box["y"] + 6 * scale)
+    page.wait_for_timeout(400)
+    for _ in range(3):  # Career Trail, Language, Controls, Work as
+        page.keyboard.press("ArrowDown")
+        page.wait_for_timeout(120)
+    page.keyboard.press("Enter")
+    page.wait_for_function("() => JSON.parse(localStorage.getItem('nines.save')).game.contractor === true", timeout=5000)
+    page.keyboard.press("Escape")
+    page.wait_for_timeout(400)
+    print("  menu: working as a contractor now")
+
+
+def bakery_hotfix_contractor(page: Page, shots: Path | None) -> None:
+    """The contractor's quest variant: the procedures are skipped, the job pays 150%."""
+    assert page.locator(".nt-head .nt-tag").inner_text() == "contractor"
+    assert page.locator(".nt-objectives li.nt-skipped").count() == 2, page.locator(".nt-objectives").inner_text()
+    run(page, "systemctl status bakery-shop", "is not a number")
+    run(page, "edit /srv/bakery/prices.yaml")
+    page.locator(".nt-editor").wait_for(state="visible")
+    edit_file(page, "# prices in euros, with a dot\nbread: 3.20\ncroissant: 1.80\napple_pie: 14.50\n")
+    run(page, "systemctl restart bakery-shop")
+    finish(page, "bakery hotfix (contractor)", reward=["€300 and 25 XP", "Contractor rate: +50%."])
+
+
+def vending_hustle(page: Page, shots: Path | None) -> str:
+    """The side hustle: careful play (10% heat), then the seeded roll decides. Both endings are
+    fine here: the new game's seed is random. Returns 'clean' or 'caught'."""
+    heat = page.locator(".nt-heatline")
+    assert "30%" in heat.inner_text(), heat.inner_text()  # still signed in with your own card
+    run(page, "cat ~/job.txt", "library card")
+    run(page, "cat /mnt/munchr-public/internal/prices-2027.csv", "choco_bar,1.10,1.25")
+    run(page, "rm ~/.kiosk/signed-in-as.txt")
+    assert "10%" in heat.inner_text(), heat.inner_text()
+    if shots:
+        page.screenshot(path=str(shots / "terminal-hustle.png"))
+    run(page, "edit ~/drop/for-vince.txt")
+    page.locator(".nt-editor").wait_for(state="visible")
+    edit_file(page, "choco_bar: 1.25\ncola: 1.45\n")
+    dialog = page.locator(".nt-dialog")
+    dialog.wait_for(state="visible", timeout=5000)
+    text = dialog.inner_text()
+    outcome = "clean" if "Job done" in text else "caught"
+    assert outcome == "clean" or "Busted" in text, text
+    assert ("Karma -20." if outcome == "clean" else "Karma -10.") in text, text
+    page.keyboard.press("Enter")
+    lesson = dialog.inner_text()
+    assert "security.txt" in lesson and "bug bounty" in lesson, lesson
+    page.keyboard.press("Enter")
+    page.locator(".nt-overlay").wait_for(state="detached", timeout=5000)
+    # clean: Vince's done lines, then the terminal opens again (a replay); caught: it opens at once
+    for _ in range(8):
+        page.wait_for_timeout(450)
+        page.keyboard.press("Enter")
+        page.wait_for_timeout(250)
+        if page.locator(".nt-overlay").count() > 0:
+            break
+    run(page, "exit")
+    page.locator(".nt-overlay").wait_for(state="detached", timeout=5000)
+    page.wait_for_timeout(300)
+    print(f"  the vending machine job: {outcome}")
+    return outcome
+
+
 def play(page: Page, village: Grid, room: Grid, shots: Path | None) -> None:
     _, sx, sy = village.objects["player-start"]
     p = Player(page, "junior-village", (sx, sy), "down")
@@ -674,6 +766,39 @@ def play(page: Page, village: Grid, room: Grid, shots: Path | None) -> None:
     buy_ai_credits(page, p, village, shots)
     save = save_game(page)
     assert save["tokens"] == 5 and save["money"] == 430, (save["tokens"], save["money"])
+
+    # 9. karma (DESIGN.md, Karma): the authorised pentest raises it
+    print("quest: bank-pentest (ethical hacker)")
+    through_door(page, p, village, "server-room-door", "server-room", (ex, ey), "up")
+    leave_pager(page)
+    open_terminal(page, p, room, "rack-bank-01")
+    bank_pentest(page, shots)
+    save = save_game(page)
+    assert save["karma"] == 10 and save["money"] == 430 + 300 + 10, (save["karma"], save["money"])  # and the Pi's 10
+
+    # 10. the independent contractor: the bakery hotfix without the paperwork, at 150%
+    print("quest: bakery-hotfix (as a contractor)")
+    toggle_contractor(page)
+    open_terminal(page, p, room, "rack-bakery-01")
+    bakery_hotfix_contractor(page, shots)
+    save = save_game(page)
+    assert save["contractor"] is True and save["quests"].get("bakery-hotfix") == "done", save
+    assert save["money"] == 740 + 300 + 10, save["money"]  # 150% of 200, and the Pi's 10 (never scaled)
+
+    # 11. the side hustle behind the office: karma down, money up, or a fine
+    print("quest: vending-prices (a hustle)")
+    through_door(page, p, room, "exit", "junior-village", (vx, vy), "down")
+    leave_pager(page)
+    before = save_game(page)
+    open_terminal(page, p, village, "back-alley-laptop")
+    outcome = vending_hustle(page, shots)
+    after = save_game(page)
+    if outcome == "clean":
+        assert after["karma"] == 10 - 20 and after["money"] == before["money"] + 400 + 10, (before, after)
+        assert after["quests"].get("vending-prices") == "done", after["quests"]
+    else:
+        assert after["karma"] == 10 - 10 and after["strikes"] == 1 and after["money"] == before["money"] - 150, (before, after)
+        assert after["quests"].get("vending-prices") == "active", after["quests"]
     if shots:
         page.screenshot(path=str(shots / "world-after.png"))
 

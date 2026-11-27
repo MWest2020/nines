@@ -129,18 +129,35 @@ describe('the game store', () => {
   it('applies terminal events and saves the penalty at once', () => {
     const { st, store, changes } = make();
     store.completeQuest('disk-full');
-    const delta = store.applyEvents('disk-full', [{ id: 'db', say: 'x', scope: 'quest', money: -100, reset: true, setFlag: 'oops' }]);
-    expect(delta).toBe(-100);
+    const delta = store.applyEvents('disk-full', [{ id: 'db', say: 'x', scope: 'quest', money: -100, karma: 0, reset: true, setFlag: 'oops' }]);
+    expect(delta).toEqual({ money: -100, karma: 0, agency: null });
     expect(store.game.flags).toEqual({ oops: true });
     expect(changes.at(-1)).toEqual({ kind: 'money', delta: -100 });
     expect(JSON.parse(st.data.get(SAVE_KEY)!).game.money).toBe(50);
   });
 
+  it('finishes a hustle through the roll and saves either way; the contractor flag is saved too', () => {
+    const { st, store, changes } = make(5);
+    const clean = store.finishHustle('vending-prices', 0);
+    expect(clean).toMatchObject({ ok: true, outcome: 'clean' });
+    expect(changes.at(-1)?.kind).toBe('reward');
+    expect(JSON.parse(st.data.get(SAVE_KEY)!).game).toMatchObject({ karma: -20, money: 400 });
+    // seed 5 rolls 50 for this job (tests/core/karma.test.ts covers the roll itself)
+    const caught = make(5);
+    caught.store.startQuest('vending-prices');
+    expect(caught.store.finishHustle('vending-prices', 95)).toMatchObject({ ok: true, outcome: 'caught', roll: 50 });
+    expect(caught.changes.at(-1)).toEqual({ kind: 'caught', quest: 'vending-prices', fine: 0, arrested: false });
+    expect(JSON.parse(caught.st.data.get(SAVE_KEY)!).game).toMatchObject({ karma: -10, strikes: 1, caught: 1 });
+    store.setContractor(true);
+    expect(changes.at(-1)).toEqual({ kind: 'contractor', on: true });
+    expect(JSON.parse(st.data.get(SAVE_KEY)!).game.contractor).toBe(true);
+  });
+
   it('pays a terminal bonus once however often the terminal is replayed, and saves it', () => {
     const { st, store } = make();
-    const bonus = [{ id: 'tidy', say: 'x', scope: 'quest' as const, money: 40, reset: false }];
-    expect(store.applyEvents('disk-full', bonus)).toBe(40);
-    expect(store.applyEvents('disk-full', bonus)).toBe(0);
+    const bonus = [{ id: 'tidy', say: 'x', scope: 'quest' as const, money: 40, karma: 0, reset: false }];
+    expect(store.applyEvents('disk-full', bonus).money).toBe(40);
+    expect(store.applyEvents('disk-full', bonus).money).toBe(0);
     expect(store.game.money).toBe(40);
     expect(JSON.parse(st.data.get(SAVE_KEY)!).game).toMatchObject({ money: 40, claimed: ['disk-full/tidy'] });
   });

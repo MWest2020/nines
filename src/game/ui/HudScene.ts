@@ -5,6 +5,7 @@
 
 import Phaser from 'phaser';
 import { questKey } from '../../content/types';
+import { karmaTier } from '../../core/karma';
 import type { Change } from '../store';
 import { DialogueBox, type Page } from './DialogueBox';
 import { ellipsize, measure } from './font';
@@ -28,6 +29,8 @@ export class HudScene extends Phaser.Scene {
   private tokens!: Phaser.GameObjects.BitmapText;
   private quest!: Phaser.GameObjects.BitmapText;
   private toasts: Phaser.GameObjects.Container[] = [];
+  /** karma at the last redraw: a change is toasted with the meter's name */
+  private karma = 0;
   private menu: { layer: Phaser.GameObjects.Container; buttons: Button[]; focus: number; release: () => void } | null = null;
 
   constructor() {
@@ -68,6 +71,7 @@ export class HudScene extends Phaser.Scene {
     };
     this.game.events.on(PAD_EVENTS.use, onPadUse);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.game.events.off(PAD_EVENTS.use, onPadUse));
+    this.karma = this.ui.store.game.karma;
     const off = this.ui.store.subscribe((_g, change) => this.onChange(change));
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, off);
     this.refresh();
@@ -100,6 +104,12 @@ export class HudScene extends Phaser.Scene {
   private onChange(change: Change): void {
     const { store, t } = this.ui;
     this.refresh();
+    const k = store.game.karma;
+    if (k !== this.karma) {
+      const delta = k - this.karma;
+      this.karma = k;
+      this.toast(t('ui.toast.karma', { delta: delta > 0 ? `+${delta}` : String(delta), tier: t(`ui.karma.tier.${karmaTier(k)}`) }), delta > 0 ? C.leaf : C.orange);
+    }
     if (change.kind === 'reward') {
       const r = change.reward;
       const branch = store.content.roadmap.branches.find((b) => b.id === r.branch);
@@ -111,6 +121,10 @@ export class HudScene extends Phaser.Scene {
       const item = store.content.shop.items.find((i) => i.id === change.item);
       if (item?.consumable) this.toast(t('ui.toast.tokens', { n: item.effects.tokens ?? 0 }), C.lilac);
       else this.toast(t('ui.toast.bought', { item: item ? t(item.title) : change.item }), C.leaf);
+    } else if (change.kind === 'caught') {
+      this.toast(t(change.arrested ? 'ui.toast.arrested' : 'ui.toast.caught', { amount: change.fine }), C.orange);
+    } else if (change.kind === 'contractor') {
+      this.toast(t(change.on ? 'ui.toast.contractor_on' : 'ui.toast.contractor_off'), change.on ? C.orange : C.leaf);
     } else if (change.kind === 'locale' && this.menu) {
       const focus = this.menu.focus;
       this.closeMenu();
@@ -156,6 +170,8 @@ export class HudScene extends Phaser.Scene {
       [t('ui.roadmap.title'), () => this.fromMenu(() => this.ui.openTrail())],
       [t('ui.menu.option', { label: t('ui.language'), value: t(`ui.locale.${store.game.locale}`) }), () => this.ui.setLocale(store.game.locale === 'nl' ? 'en' : 'nl')],
       [t('ui.menu.option', { label: t('ui.controls'), value: t(`ui.controls.${controlsSetting()}`) }), () => this.refreshMenu(cycleControlsSetting)],
+      // DESIGN.md, Independent contractor: skip procedures, earn more, pay for damage
+      [t('ui.menu.option', { label: t('ui.work'), value: t(store.game.contractor ? 'ui.work.contractor' : 'ui.work.employee') }), () => this.refreshMenu(() => this.ui.setContractor(!store.game.contractor))],
       [t('ui.credits.title'), () => this.fromMenu(() => this.ui.openCredits())],
       [t('ui.close'), () => this.closeMenu()],
     ];

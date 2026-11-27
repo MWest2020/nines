@@ -12,6 +12,7 @@ import '@xterm/xterm/css/xterm.css';
 import './terminal.css';
 import { questKey, type QuestEntry } from '../../content/types';
 import type { Translate } from '../../core/i18n';
+import { ARREST_AFTER, clampRisk, DAMAGE_MULTIPLIER } from '../../core/karma';
 import { createSession, type FiredEvent, prompt, run, type RunResult, saveFile, type Session, stripControl } from '../../sim/session';
 import { complete } from '../../terminal/complete';
 import { gutter, INDENT, insertIndent, isDirty, lineCol, lineCount, normalizeText, tabLines } from '../../terminal/editor';
@@ -29,14 +30,28 @@ export interface TerminalHost {
   hints?: HintGate;
   /** locale key of the quest giver's name: they speak the consequences */
   speaker?: string;
-  /** apply money and flags from fired events; returns the money actually gained or lost */
-  applyEvents(events: readonly FiredEvent[]): number;
-  /** the last objective was met: pay the reward. Null when it was paid before. `hints` AI hints
-   *  brought it down to `percent` of the full reward. */
-  complete(): { money: number; income: number; xp: number; percent: number; hints: number } | null;
+  /** an independent contractor on a job: procedure objectives do not count (DESIGN.md) */
+  skipProcedures?: boolean;
+  /** apply money, karma and flags from fired events; returns what actually changed */
+  applyEvents(events: readonly FiredEvent[]): EventsApplied;
+  /** the last objective was met: pay the reward (a hustle rolls its `risk` first). Null when it
+   *  was paid before. `hints` AI hints brought it down to `percent` of the full reward. */
+  complete(risk?: number): Finished | null;
   /** the overlay has closed and removed itself */
   closed(won: boolean): void;
 }
+
+export interface EventsApplied {
+  money: number;
+  karma: number;
+  /** a karma drop brought the agency: its fine */
+  agency: { fine: number } | null;
+}
+
+/** How a quest ended in the terminal: paid, or (a hustle) caught. */
+export type Finished =
+  | { kind: 'paid'; money: number; income: number; xp: number; percent: number; hints: number; karma: number; contract: boolean; agency: { fine: number } | null }
+  | { kind: 'caught'; fine: number; karma: number; strikes: number; arrested: { fine: number } | null; agency: { fine: number } | null };
 
 /** SGR colours from DESIGN.md (Terminal): prompts in ice, errors in orange. */
 const SGR = {
@@ -78,6 +93,9 @@ export class TerminalOverlay {
   private readonly objCount: HTMLSpanElement;
   private readonly objToggle: HTMLButtonElement;
   private readonly hintList: HTMLDivElement;
+  private readonly heat: HTMLDivElement;
+  /** the hustle's risk after the last step */
+  private risk: number | undefined;
   private readonly dialog: HTMLDivElement;
   private readonly editor: {
     box: HTMLDivElement;
@@ -116,7 +134,7 @@ export class TerminalOverlay {
     if (!scenario) throw new Error(`quest ${quest.id} has no scenario`);
     this.t = host.t;
     const t = this.t;
-    this.session = createSession(scenario, { t, hintBoost: host.hintBoost });
+    this.session = createSession(scenario, { t, hintBoost: host.hintBoost, skipProcedures: host.skipProcedures ?? false });
 
     // ---- the frame
     this.root = el('div', 'nt-overlay');
@@ -165,6 +183,7 @@ export class TerminalOverlay {
     const win = el('div', 'nt-window');
     const head = el('div', 'nt-head');
     head.append(el('span', 'nt-host', scenario.host));
+    if (host.skipProcedures) head.append(el('span', 'nt-tag', t('ui.terminal.contractor')));
     this.objToggle = el('button', 'nt-objtoggle');
     this.objToggle.type = 'button';
     this.objCount = el('span', 'nt-count');
@@ -206,6 +225,9 @@ export class TerminalOverlay {
     this.hintList = el('div', 'nt-hints');
     this.hintList.setAttribute('aria-live', 'polite');
     side.append(this.hintList);
+    // a hustle's heat: the chance of getting caught if the job ended now, and why
+    this.heat = el('div', 'nt-heat');
+    if (scenario.risk) side.append(el('h2', 'nt-sidehead', t('ui.terminal.heat')), this.heat);
     body.append(main, side);
 
     const quick = el('div', 'nt-quick');
@@ -412,28 +434,62 @@ export class TerminalOverlay {
 
   private handle(r: RunResult): void {
     if (r.events.length > 0) {
-      const delta = this.host.applyEvents(r.events);
+      const applied = this.host.applyEvents(r.events);
       r.events.forEach((ev, i) => {
         const params = { money: Math.abs(ev.money) };
         const text = ev.scope === 'quest' ? this.t(questKey(this.quest.id, ev.say), params) : this.t(ev.say, params);
         const last = i === r.events.length - 1;
-        const extra = last && delta !== 0 ? this.t(delta < 0 ? 'ui.toast.money_lost' : 'ui.toast.money_gained', { amount: Math.abs(delta) }) : undefined;
+        const parts: string[] = [];
+        if (last && applied.money !== 0) parts.push(this.t(applied.money < 0 ? 'ui.toast.money_lost' : 'ui.toast.money_gained', { amount: Math.abs(applied.money) }));
+        if (last && applied.money < 0 && this.host.skipProcedures) parts.push(this.t('ui.terminal.billed', { times: DAMAGE_MULTIPLIER }));
+        if (last && applied.karma !== 0) parts.push(this.karmaText(applied.karma));
+        const extra = parts.join(' ');
         this.queue({ ...(this.host.speaker ? { speaker: this.t(this.host.speaker) } : {}), text, ...(extra ? { extra } : {}), button: this.t('ui.terminal.next') });
       });
+      if (applied.agency) this.queueAgency(applied.agency.fine);
     }
     this.hints.push(...r.hints);
+    this.risk = r.risk?.percent;
     this.renderSide(r);
     this.promptEl.textContent = prompt(this.session.state);
     if (r.justWon) {
       this.won = true;
-      const reward = this.host.complete();
+      const end = this.host.complete(this.risk);
+      if (end?.kind === 'caught') {
+        // the job is not done: the quest stays open, and the terminal closes on the bad news
+        this.won = false;
+        this.queue({ text: this.t(end.arrested ? 'ui.hustle.arrested' : 'ui.hustle.caught'), extra: this.caughtText(end), button: this.t('ui.terminal.continue') });
+        if (end.agency) this.queueAgency(end.agency.fine);
+        this.queue({ text: this.t('ui.hustle.lesson'), button: this.t('ui.terminal.continue'), then: () => this.close() });
+        return;
+      }
+      const hustle = this.quest.quest.kind === 'hustle';
       this.queue({
-        text: this.t('ui.terminal.won'),
-        extra: reward ? this.rewardText(reward) : this.t('ui.terminal.won_again'),
+        text: this.t(hustle ? 'ui.hustle.clean' : 'ui.terminal.won'),
+        extra: end ? this.rewardText(end) : this.t('ui.terminal.won_again'),
         button: this.t('ui.terminal.continue'),
-        then: () => this.close(),
+        ...(end?.agency || hustle ? {} : { then: () => this.close() }),
       });
+      if (end?.agency) this.queueAgency(end.agency.fine);
+      if (hustle && end) this.queue({ text: this.t('ui.hustle.lesson'), button: this.t('ui.terminal.continue'), then: () => this.close() });
+      else if (end?.agency) this.queue({ text: this.t('ui.karma.agency_after'), button: this.t('ui.terminal.continue'), then: () => this.close() });
     }
+  }
+
+  /** "Karma -20 (Hoodie in a stock photo)": the change and where the meter stands now. */
+  private karmaText(delta: number): string {
+    return this.t('ui.karma.changed', { delta: delta > 0 ? `+${delta}` : String(delta) });
+  }
+
+  /** The three-letter agency: a fine and probation (core/karma.ts). */
+  private queueAgency(fine: number): void {
+    this.queue({ speaker: this.t('ui.karma.agency_name'), text: this.t('ui.karma.agency'), extra: this.t('ui.karma.agency_fine', { amount: fine }), button: this.t('ui.terminal.next') });
+  }
+
+  private caughtText(end: Extract<Finished, { kind: 'caught' }>): string {
+    const parts = [this.t('ui.toast.money_lost', { amount: end.fine }), this.karmaText(end.karma)];
+    parts.push(end.arrested ? this.t('ui.hustle.probation') : this.t('ui.hustle.strikes', { n: end.strikes, max: ARREST_AFTER }));
+    return parts.join(' ');
   }
 
   private renderSide(r: RunResult): void {
@@ -441,12 +497,21 @@ export class TerminalOverlay {
       ...r.objectives.map((o) => {
         const li = el('li', o.done ? 'nt-done' : 'nt-open');
         // shape as well as colour: a filled dot when done, a ring when open
-        li.append(el('span', 'nt-mark', o.done ? '●' : '○'), el('span', '', this.t(questKey(this.quest.id, o.text))));
+        // a procedure a contractor skips is crossed out, with a dash for a mark
+        if (o.skipped && !o.done) li.className = 'nt-skipped';
+        li.append(el('span', 'nt-mark', o.done ? '●' : o.skipped ? '–' : '○'), el('span', '', this.t(questKey(this.quest.id, o.text))));
+        if (o.skipped && !o.done) li.append(el('span', 'nt-skipnote', this.t('ui.terminal.skipped')));
         return li;
       }),
     );
-    const done = r.objectives.filter((o) => o.done).length;
-    this.objCount.textContent = `${done}/${r.objectives.length}`;
+    const counted = r.objectives.filter((o) => !o.skipped);
+    this.objCount.textContent = `${counted.filter((o) => o.done).length}/${counted.length}`;
+    if (r.risk) {
+      const lines = r.risk.factors.map((f) => el('li', f.add > 0 ? 'nt-hot' : 'nt-cool', `${f.add > 0 ? '+' : ''}${f.add}% ${this.t(questKey(this.quest.id, f.text))}`));
+      const list = el('ul', 'nt-factors');
+      list.append(...lines);
+      this.heat.replaceChildren(el('p', 'nt-heatline', this.t('ui.terminal.heat_now', { percent: clampRisk(r.risk.percent) })), list);
+    }
     this.renderHints();
   }
 
@@ -472,10 +537,12 @@ export class TerminalOverlay {
   }
 
   /** The quest's own reward (scaled by AI hints), the hint line, then the homelab's unscaled income. */
-  private rewardText(r: { money: number; income: number; xp: number; percent: number; hints: number }): string {
+  private rewardText(r: Extract<Finished, { kind: 'paid' }>): string {
     const parts = [this.t('ui.quest.reward', { money: r.money, xp: r.xp })];
     if (r.hints > 0) parts.push(this.t(r.hints === 1 ? 'ui.reward.hints_one' : 'ui.reward.hints_many', { hints: r.hints, percent: r.percent }));
+    if (r.contract) parts.push(this.t('ui.reward.contract'));
     if (r.income > 0) parts.push(this.t('ui.toast.income', { amount: r.income }));
+    if (r.karma !== 0) parts.push(this.karmaText(r.karma));
     return parts.join(' ');
   }
 

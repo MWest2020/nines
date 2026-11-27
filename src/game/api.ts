@@ -9,7 +9,7 @@
 
 import type Phaser from 'phaser';
 import type { LocaleId } from '../content/types';
-import type { QuestRefusal, Reward } from '../core/game';
+import type { HustleResult, QuestRefusal, Reward } from '../core/game';
 import type { Params, Translate } from '../core/i18n';
 import type { GameState } from '../core/save';
 import type { HintOffer } from '../core/tokens';
@@ -58,8 +58,13 @@ export interface GameApi {
   recordBattle(id: string, outcome: 'won' | 'lost'): Reward | null;
   /** The quest giver's "done" lines in the dialogue box; resolves when read. */
   showQuestDone(reward: Reward): Promise<void>;
-  /** Apply what a terminal step fired (RunResult.events): money and flags. */
-  applyTerminalEvents(questId: string, events: readonly FiredEvent[]): void;
+  /** Apply what a terminal step fired (RunResult.events): money, karma and flags. Returns what
+   *  actually changed, and the agency's fine when a karma drop brought it. */
+  applyTerminalEvents(questId: string, events: readonly FiredEvent[]): { money: number; karma: number; agency: { fine: number } | null };
+  /** A hustle's last objective was met: roll its risk, then pay (clean) or fine (caught). */
+  finishHustle(questId: string, risk: number): HustleResult;
+  /** Work as an independent contractor (true) or an employee (false); saved. */
+  setContractor(on: boolean): void;
   /** hintBoost to pass to createSession and startBattle. */
   hintBoost(): number;
   /** What asking the AI for a quest's hint (its locale key) would cost now. */
