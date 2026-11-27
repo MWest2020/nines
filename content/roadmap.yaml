@@ -16,6 +16,15 @@ branches:
   - {id: observability, title: branch.observability}
   - {id: incident, title: branch.incident}
   - {id: design, title: branch.design}
+  - {id: kubernetes, title: branch.kubernetes}
+# The five career paths, chosen at Medior City (DESIGN.md, Career paths). A quest names the
+# paths it counts towards in its quest.yaml `paths`.
+paths:
+  - {id: swe, title: path.swe, pitch: path.swe.pitch}
+  - {id: sre, title: path.sre, pitch: path.sre.pitch}
+  - {id: devops, title: path.devops, pitch: path.devops.pitch}
+  - {id: platform, title: path.platform, pitch: path.platform.pitch}
+  - {id: systems, title: path.systems, pitch: path.systems.pitch}
 nodes:
   - {id: linux-files, branch: linux, stage: junior, title: node.linux.files, requires: []}
   - {id: linux-disk, branch: linux, stage: junior, title: node.linux.disk, requires: []}
@@ -27,6 +36,12 @@ nodes:
   - {id: cicd-release-scope, branch: cicd, stage: junior, title: node.cicd.release_scope, requires: [cicd-pipeline]}
   - {id: design-rate-limiter, branch: design, stage: junior, title: node.design.rate_limiter, requires: []}
   - {id: design-nearby, branch: design, stage: junior, title: node.design.nearby, requires: []}
+  # The Kubernetes learning path (DESIGN.md, Kubernetes learning path): Junior follows the four
+  # KCNA domains. CKAD (Medior) and CKA/CKS (Senior) nodes arrive with their quests.
+  - {id: k8s-fundamentals, branch: kubernetes, stage: junior, title: node.k8s.fundamentals, requires: []}
+  - {id: k8s-orchestration, branch: kubernetes, stage: junior, title: node.k8s.orchestration, requires: [k8s-fundamentals]}
+  - {id: k8s-delivery, branch: kubernetes, stage: junior, title: node.k8s.delivery, requires: [k8s-fundamentals]}
+  - {id: k8s-architecture, branch: kubernetes, stage: junior, title: node.k8s.architecture, requires: [k8s-fundamentals]}
   - {id: observability-logs, branch: observability, stage: medior, title: node.observability.logs, requires: [incident-first]}
   - {id: containers-pods, branch: containers, stage: medior, title: node.containers.pods, requires: [linux-services]}
   - {id: networking-dns, branch: networking, stage: medior, title: node.networking.dns, requires: [linux-files]}

@@ -5,7 +5,8 @@ export type LocaleId = 'en' | 'nl';
 export const LOCALES: readonly LocaleId[] = ['en', 'nl'];
 
 export type Stage = 'junior' | 'medior' | 'senior';
-export type Track = 'any' | 'sre' | 'platform';
+/** A career path (content/roadmap.yaml paths): swe, sre, devops, platform, systems. */
+export type PathId = string;
 export type BranchId =
   | 'linux'
   | 'networking'
@@ -15,7 +16,8 @@ export type BranchId =
   | 'iac'
   | 'observability'
   | 'incident'
-  | 'design';
+  | 'design'
+  | 'kubernetes';
 
 /** A size: bytes as a number, or a string such as "4.2G", "120M", "512K". */
 export type Size = number | string;
@@ -34,7 +36,8 @@ export interface QuestSpec {
   summary: string;
   stage: Stage;
   branch: BranchId;
-  track: Track;
+  /** the career paths this quest counts towards (DESIGN.md, Career paths) */
+  paths: PathId[];
   roadmap_node: string;
   requires: string[];
   giver: string;
@@ -68,6 +71,10 @@ export interface DeploymentSpec {
   restarts?: number;
   logs?: string[];
   restart?: RestartRule & { status_on_failure?: PodStatus };
+  /** shown by kubectl describe pod */
+  image?: string;
+  /** the ConfigMap the container reads its environment from (envFrom), for kubectl describe */
+  config_map?: string;
 }
 
 export interface ScenarioEventSpec {
@@ -91,6 +98,8 @@ export interface ScenarioSpec {
   files?: Record<string, FileSpec>;
   services?: Record<string, ServiceSpec>;
   deployments?: Record<string, DeploymentSpec>;
+  /** manifests (files above) the cluster already runs at the start; kubectl apply -f adds more */
+  cluster?: string[];
   git?: { root: string; branch?: string; pipeline?: { file: string; validator: 'nines-ci' } };
   objectives: { id: string; text: string; done_when: string }[];
   hints?: { id: string; when: string; text: string }[];
@@ -120,6 +129,8 @@ export interface RoadmapSpec {
   /** `map`: the town's map; a map named here that content/maps does not have yet is planned */
   towns: { id: string; stage: Stage; title: string; map?: string }[];
   branches: { id: BranchId; title: string }[];
+  /** the five career paths chosen at Medior City: title and a one-line pitch (locale keys) */
+  paths: { id: PathId; title: string; pitch: string }[];
   nodes: { id: string; branch: BranchId; stage: Stage; title: string; requires: string[] }[];
 }
 
@@ -131,7 +142,9 @@ export interface ShopSpec {
     description: string;
     price: number;
     requires: string[];
-    effects: { income_per_quest?: number; hint_boost?: number };
+    /** bought again and again, never owned: its effects apply once per purchase (AI credits) */
+    consumable?: boolean;
+    effects: { income_per_quest?: number; hint_boost?: number; tokens?: number };
   }[];
 }
 

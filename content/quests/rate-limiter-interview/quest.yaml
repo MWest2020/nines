@@ -6,7 +6,7 @@ title: title
 summary: summary
 stage: junior
 branch: design
-track: any
+paths: [swe, sre, platform]
 roadmap_node: design-rate-limiter
 requires: [disk-full, service-down, broken-pipeline]
 giver: ingrid

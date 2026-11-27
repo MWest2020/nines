@@ -287,7 +287,7 @@ describe('triggers', () => {
   const quest = (id: string, battle?: BattleSpec): QuestEntry => ({
     id,
     quest: {
-      schema: 1, id, author: { name: 'x' }, title: 't', summary: 's', stage: 'junior', branch: 'design', track: 'any',
+      schema: 1, id, author: { name: 'x' }, title: 't', summary: 's', stage: 'junior', branch: 'design', paths: ['swe'],
       roadmap_node: 'n', requires: [], giver: 'g', start: { map: 'm', object: 'o' }, reward: { money: 1, xp: 1 },
       dialogue: { offer: ['o'], active: ['a'], done: ['d'] },
     },

@@ -8,7 +8,7 @@ title: title
 summary: summary
 stage: junior
 branch: design
-track: any
+paths: [swe]
 roadmap_node: design-nearby
 requires: [broken-pipeline]
 giver: ravi

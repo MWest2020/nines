@@ -21,7 +21,7 @@ import {
 } from '../../src/core/game';
 import { memoryStorage, openSave } from '../../src/core/persist';
 import { progressEnv } from '../../src/core/progress';
-import { BACKUP_PREFIX, deserialize, type GameState, MIGRATIONS, newGame, SAVE_KEY, SAVE_VERSION, seedFrom, serialize } from '../../src/core/save';
+import { BACKUP_PREFIX, deserialize, type GameState, MIGRATIONS, newGame, SAVE_KEY, SAVE_VERSION, seedFrom, serialize, START_TOKENS } from '../../src/core/save';
 import { conversation } from '../../src/core/talk';
 import { compile, test } from '../../src/rules/expr';
 import { PROGRESS_FACTS } from '../../src/rules/registries';
@@ -217,21 +217,21 @@ describe('saves', () => {
   });
 
   it('migrate a version-1 save to the current version', () => {
-    expect(SAVE_VERSION).toBe(2);
-    expect(Object.keys(MIGRATIONS)).toEqual(['1']);
+    expect(SAVE_VERSION).toBe(3);
+    expect(Object.keys(MIGRATIONS)).toEqual(['1', '2']);
     const v1 = {
       format: 'nines-save',
       version: 1,
       game: { locale: 'nl', money: 350, xp: { linux: 20 }, quests: { 'disk-full': 'done' }, items: [], flags: {}, tech_debt: 0, player: { map: 'junior-village', x: 3, y: 4, facing: 'up' } },
     };
     const out = deserialize(JSON.stringify(v1), 'en');
-    expect(out).toEqual({ kind: 'ok', game: { ...v1.game, seed: seedFrom(JSON.stringify(v1.game)), ticks: 0, claimed: [] } });
+    expect(out).toEqual({ kind: 'ok', game: { ...v1.game, seed: seedFrom(JSON.stringify(v1.game)), ticks: 0, claimed: [], tokens: START_TOKENS, hints: {}, path: null } });
     // each old save keeps its own seed
     const other = deserialize(JSON.stringify({ ...v1, game: { ...v1.game, money: 1 } }), 'en');
     expect(other.kind === 'ok' && out.kind === 'ok' && other.game.seed !== out.game.seed).toBe(true);
   });
 
-  it('open a stored version-1 save, write it back as version 2, and read the same game', () => {
+  it('open a stored version-1 save, write it back in the current version, and read the same game', () => {
     const v1 = { format: 'nines-save', version: 1, game: { locale: 'nl', money: 150, xp: { linux: 20 }, quests: { 'disk-full': 'done' } } };
     const st = memoryStorage({ [SAVE_KEY]: JSON.stringify(v1) });
     const first = openSave(st, 'en', 3);
@@ -331,7 +331,7 @@ describe('the Career Trail', () => {
     const g = done(fresh(), 'disk-full', 'service-down', 'broken-pipeline');
     const view = trail(g, rules());
     expect(view.nodes.filter((n) => n.state === 'done').map((n) => n.id)).toEqual(['linux-disk', 'cicd-pipeline', 'incident-first']);
-    expect(view.towns.find((t) => t.id === 'junior')).toMatchObject({ open: true, done: 3, total: 10 });
+    expect(view.towns.find((t) => t.id === 'junior')).toMatchObject({ open: true, done: 3, total: 14 });
     expect(view.xp).toMatchObject({ linux: 20, cicd: 25, incident: 25, git: 0 });
     // the next nodes on those routes open
     expect(nodeState(g, rules(), 'incident-pager')).toBe('open');

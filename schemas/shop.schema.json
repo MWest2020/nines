@@ -21,12 +21,14 @@
           "description": { "$ref": "common.schema.json#/$defs/localeKey" },
           "price": { "type": "integer", "minimum": 1, "maximum": 100000 },
           "requires": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/id" }, "uniqueItems": true },
+          "consumable": { "type": "boolean", "description": "bought again and again and never owned: its effects apply once per purchase; only tokens" },
           "effects": {
             "type": "object",
             "additionalProperties": false,
             "properties": {
               "income_per_quest": { "type": "integer", "minimum": 0, "maximum": 1000 },
-              "hint_boost": { "type": "integer", "minimum": 0, "maximum": 5 }
+              "hint_boost": { "type": "integer", "minimum": 0, "maximum": 5, "description": "hints unlock this many tries sooner (asking still costs a token)" },
+              "tokens": { "type": "integer", "minimum": 1, "maximum": 50, "description": "AI tokens a consumable adds per purchase" }
             }
           }
         }

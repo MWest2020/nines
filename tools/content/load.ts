@@ -309,7 +309,9 @@ export function loadContent(contentDir: string, schemaDir: string, options: Load
   if (roadmap) {
     const f = join(contentDir, 'roadmap.yaml');
     const ids = new Set<string>();
-    for (const x of [...roadmap.towns, ...roadmap.branches, ...roadmap.nodes]) needGlobal(f, x.title);
+    for (const x of [...roadmap.towns, ...roadmap.branches, ...roadmap.paths, ...roadmap.nodes]) needGlobal(f, x.title);
+    for (const p of roadmap.paths) needGlobal(f, p.pitch);
+    if (new Set(roadmap.paths.map((p) => p.id)).size !== roadmap.paths.length) err(f, 'duplicate path ids');
     for (const n of roadmap.nodes) {
       if (ids.has(n.id)) err(f, `duplicate node "${n.id}"`);
       ids.add(n.id);
@@ -324,6 +326,11 @@ export function loadContent(contentDir: string, schemaDir: string, options: Load
       needGlobal(f, i.title);
       needGlobal(f, i.description);
       for (const r of i.requires) if (!ids.has(r)) err(f, `item "${i.id}" requires unknown item "${r}"`);
+      // a consumable is bought again and again: it can only add tokens, and nothing can require it
+      const kinds = Object.keys(i.effects);
+      if (i.consumable && (i.effects.tokens === undefined || kinds.length !== 1)) err(f, `item "${i.id}": a consumable has exactly one effect, tokens`);
+      if (!i.consumable && i.effects.tokens !== undefined) err(f, `item "${i.id}": tokens are only for consumable items`);
+      for (const other of shop.items) if (i.consumable && other.requires.includes(i.id)) err(f, `item "${other.id}" requires the consumable "${i.id}", which is never owned`);
     }
   }
 
@@ -651,6 +658,10 @@ export function loadContent(contentDir: string, schemaDir: string, options: Load
     const node = roadmap?.nodes.find((n) => n.id === quest.roadmap_node);
     if (roadmap && !node) err(qFile, `unknown roadmap_node "${quest.roadmap_node}"`);
     if (node && node.branch !== quest.branch) err(qFile, `roadmap_node "${node.id}" is on branch ${node.branch}, the quest on ${quest.branch}`);
+    if (roadmap) for (const p of quest.paths) if (!roadmap.paths.some((x) => x.id === p)) err(qFile, `unknown path "${p}" (content/roadmap.yaml paths)`);
+    // a paid hint is remembered by its locale key (core/tokens.ts), so a quest's hint texts are unique
+    const hintTexts = [...(scenario?.hints ?? []), ...(battle?.hints ?? [])].map((h) => h.text);
+    if (new Set(hintTexts).size !== hintTexts.length) err(hasScenario ? sFile : bFile, 'hint texts must be unique: a paid hint is remembered by its text key');
     checkMap(qFile, quest.start.map);
     // a terminal quest starts at a terminal; a battle at a battle object or where its giver stands
     checkObject(qFile, 'start', quest.start.map, quest.start.object, hasScenario ? ['terminal'] : ['battle', 'spawn']);
@@ -689,6 +700,10 @@ export function loadContent(contentDir: string, schemaDir: string, options: Load
         const ok = parsed.ok && parsed.pipeline.every((stage) => stage[0] !== undefined && has(COMMANDS, stage[0].text));
         if (!ok) err(sFile, `quick[${i}]: "${line}" must parse, and every stage must start with a command of this terminal`);
       });
+      for (const m of scenario.cluster ?? []) {
+        const f = scenario.files?.[m];
+        if (f === undefined || (typeof f !== 'string' && f.content === undefined)) err(sFile, `cluster manifest ${m} must be listed under files with content`);
+      }
       if (scenario.git?.pipeline) {
         const pf = normalize(`${scenario.git.root}/${scenario.git.pipeline.file}`);
         const f = scenario.files?.[pf];

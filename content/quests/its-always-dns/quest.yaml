@@ -8,7 +8,7 @@ title: title
 summary: summary
 stage: junior
 branch: linux
-track: any
+paths: [systems, sre]
 roadmap_node: linux-services
 requires: []
 giver: yara

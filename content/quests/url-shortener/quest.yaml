@@ -9,7 +9,7 @@ title: title
 summary: summary
 stage: medior
 branch: design
-track: any
+paths: [swe, sre]
 roadmap_node: design-url-shortener
 requires: [rate-limiter-interview]
 giver: ingrid

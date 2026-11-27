@@ -5,7 +5,7 @@ title: title
 summary: summary
 stage: junior
 branch: incident
-track: any
+paths: [sre, systems, devops]
 roadmap_node: incident-first
 requires: []
 giver: bas
