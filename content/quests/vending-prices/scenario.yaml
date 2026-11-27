@@ -3,7 +3,11 @@
 # in it. The job: two 2027 prices into ~/drop/for-vince.txt. The risk is what gives the player
 # away: snooping beyond the job (the HR folder, or a recursive grep that walks through it), a
 # beeping kiosk (failed commands), dawdling, taking the file instead of reading it, and staying
-# signed in with their own library card when they drop.
+# signed in with their own library card when they drop. The kiosk session is a login (who, w,
+# last): logout, kill <pid> or pkill -u guest signs the card out and the kiosk logs straight back
+# in as an anonymous guest. A card borrowed from Ans's desk (content/npcs/ans, a dialogue choice
+# that costs karma) is carried in from the save: the kiosk shows that card, the heat drops, and
+# being caught with it adds to the fine (carry.caught_fine).
 schema: 1
 host: kiosk-07
 user: guest
@@ -24,13 +28,10 @@ files:
 
     Put the two prices in ~/drop/for-vince.txt. The moment that file is right, I collect.
     So: get in, read only what you need, and sign out of the kiosk BEFORE you drop.
-    You're signed in with your own library card. Think about that.
+    The kiosk knows whose card signed in (who shows it). Think about that.
   /home/guest/drop/for-vince.txt: |
     choco_bar: ?
     cola: ?
-  /home/guest/.kiosk/signed-in-as.txt: |
-    Kiosk session: library card 4417 (that's you).
-    Remove this file to sign out.
   /mnt/munchr-public/README.txt: |
     Munchr Vending: public share
     Logos and photos for the website and our partners.
@@ -52,13 +53,23 @@ files:
   /mnt/munchr-public/internal/hr/salaries-2026.csv: {size: 18K}
   /mnt/munchr-public/internal/hr/README.txt: |
     CONFIDENTIAL. Seriously, Dave.
+# the kiosk's login: your library card, unless you carry a borrowed one in from Ans's desk
+sessions:
+  - {id: card, user: guest, tty: pts/0, from: "library card 4417", login: "08:58", self: true, relogin: "kiosk (anonymous)", cover: {flag: borrowed-card, from: "library card 2291"}}
+  - {id: before, user: guest, tty: pts/0, from: "library card 2291", login: "07:40", logout: "08:12"}
+carry:
+  - {flag: borrowed-card, caught_fine: 150, taken_flag: card-taken}
 quick:
   - "cat ~/job.txt"
+  - who
   - ls /mnt/munchr-public
   - "edit ~/drop/for-vince.txt"
   - help
 objectives:
-  - {id: drop, text: obj.drop, done_when: 'file_contains("/home/guest/drop/for-vince.txt", "1.25") && file_contains("/home/guest/drop/for-vince.txt", "1.45")'}
+  # graded fairly: 1.25, 1,25 or €1.25 all count; the panel says which price is still off
+  - id: drop
+    text: obj.drop
+    check: {file: /home/guest/drop/for-vince.txt, fields: [{name: choco_bar, number: 1.25}, {name: cola, number: 1.45}]}
 hints:
   - {id: look, when: 'commands >= 3 && !touched("/mnt/munchr-public")', text: hint.look}
   - {id: readme, when: 'touched("/mnt/munchr-public") && !touched("/mnt/munchr-public/internal") && commands >= 5', text: hint.readme}
@@ -79,4 +90,6 @@ risk:
     - {id: took, when: 'removed("/mnt/munchr-public/internal/prices-2027.csv")', add: 40, text: risk.took}
     - {id: beeping, when: 'fails >= 3', add: 15, text: risk.beeping}
     - {id: dawdling, when: 'commands >= 20', add: 15, text: risk.dawdling}
-    - {id: signed-in, when: '!removed("/home/guest/.kiosk/signed-in-as.txt")', add: 20, text: risk.signed_in}
+    - {id: signed-in, when: 'session_active("card") && !flag("borrowed-card")', add: 20, text: risk.signed_in}
+    - {id: borrowed, when: 'flag("borrowed-card")', add: -10, text: risk.borrowed}
+    - {id: borrowed-signed-in, when: 'session_active("card") && flag("borrowed-card")', add: 5, text: risk.borrowed_signed_in}

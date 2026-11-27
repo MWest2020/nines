@@ -34,6 +34,16 @@ export interface Conversation {
   offer?: string;
   /** a battle quest that starts when the lines are read */
   battle?: string;
+  /** the player answers after the lines (locale keys already namespaced) */
+  choices?: TalkChoice[];
+}
+
+/** A dialogue choice: its label, the NPC's reply, and what it costs or sets (core/choice.ts). */
+export interface TalkChoice {
+  text: string;
+  lines: string[];
+  karma: number;
+  setFlag?: string;
 }
 
 export function conversation(game: GameState, content: TalkContent, npcId: string): Conversation | null {
@@ -56,5 +66,6 @@ export function conversation(game: GameState, content: TalkContent, npcId: strin
     return { speaker, lines, offer: offer.id, ...battleOf(offer.id) };
   }
   const entry = npc.spec.dialogue.find(holds);
-  return { speaker, lines: (entry?.lines ?? []).map(npc.key) };
+  const choices = (entry?.choices ?? []).map((c) => ({ text: npc.key(c.text), lines: (c.lines ?? []).map(npc.key), karma: c.karma ?? 0, ...(c.set_flag ? { setFlag: c.set_flag } : {}) }));
+  return { speaker, lines: (entry?.lines ?? []).map(npc.key), ...(choices.length > 0 ? { choices } : {}) };
 }

@@ -40,10 +40,12 @@ services:
       - "Nov 26 03:12:01 app-01 systemd[1]: nginx.service: Failed with result 'exit-code'."
       - "Nov 26 03:12:01 app-01 systemd[1]: Failed to start nginx.service - A high performance web server and a reverse proxy server."
     restart:
-      succeeds_if: 'file_contains("/etc/nginx/conf.d/shop.conf", "listen 80;") && !file_contains("/etc/nginx/conf.d/shop.conf", "listn")'
+      # systemd tests the config first (nginx -t): a broken one fails with nginx's own error, file and
+      # line (src/sim/shell/nginx.ts). A config that passes but does not serve the shop on port 80 (an
+      # empty file, server {}, listen 8080) starts nothing the shop's users can reach.
+      succeeds_if: 'nginx_config_ok && file_contains("/etc/nginx/conf.d/shop.conf", "listen 80;")'
       logs_on_failure:
-        - "Nov 26 09:00:00 app-01 nginx[1204]: nginx: [emerg] unknown directive \"listn\" in /etc/nginx/conf.d/shop.conf:2"
-        - "Nov 26 09:00:00 app-01 nginx[1204]: nginx: configuration file /etc/nginx/nginx.conf test failed"
+        - "Nov 26 09:00:00 app-01 nginx[1204]: nginx: [warn] no server block listens on port 80 for shop.example.test (/etc/nginx/conf.d/shop.conf)"
   shop-api:
     description: Shop API
     state: active
@@ -54,6 +56,7 @@ quick:
   - systemctl status nginx
   - journalctl -u nginx
   - "cat ~/handover.txt"
+  - nginx -t
   - systemctl restart nginx
   - help
 objectives:

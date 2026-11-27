@@ -87,6 +87,35 @@ export interface DeploymentSpec {
   readiness_failure?: string;
 }
 
+/** A login on the simulated machine (src/sim/base.ts Login). */
+export interface SessionSpec {
+  id: string;
+  user?: string;
+  tty: string;
+  from: string;
+  login?: string;
+  /** the player's own shell */
+  self?: boolean;
+  /** HH:MM it ended: shown by last only */
+  logout?: string;
+  /** a kiosk: logging out of this session logs straight back in as this (the shell stays) */
+  relogin?: string;
+  /** while the carried progress flag holds, the session shows this `from` instead */
+  cover?: { flag: string; from: string };
+}
+
+/** A free-text file graded fairly (src/sim/check.ts). Every part given must pass. */
+export interface CheckSpec {
+  file: string;
+  /** `Name: value` lines that must be filled in; `number`: the value must be this number
+   *  (a dot or a comma, a euro sign and spaces allowed) */
+  fields?: (string | { name: string; number?: number })[];
+  /** a `Field: value` line with exactly one value from `scale`, one of `accept` */
+  choice?: { field: string; scale: string[]; accept: string[]; wrong?: string };
+  /** words that must appear (any of each group, case-insensitive); `missing` says what is missing */
+  mentions?: { any: string[]; missing: string }[];
+}
+
 export interface ScenarioEventSpec {
   id: string;
   when: string;
@@ -121,8 +150,16 @@ export interface ScenarioSpec {
   /** manifests (files above) the cluster already runs at the start; kubectl apply -f adds more */
   cluster?: string[];
   git?: { root: string; branch?: string; pipeline?: { file: string; validator: 'nines-ci' } };
-  /** `procedure`: a change ticket or review that an independent contractor may skip */
-  objectives: { id: string; text: string; done_when: string; procedure?: boolean }[];
+  /** `procedure`: a change ticket or review that an independent contractor may skip; `check`: a
+   *  free-text file graded fairly, with a note in the objectives panel on what is still wrong
+   *  (src/sim/check.ts). An objective has `done_when`, `check` or both (both must hold). */
+  objectives: { id: string; text: string; done_when?: string; procedure?: boolean; check?: CheckSpec }[];
+  /** logins on the machine (who, w, last); without a `self` one the player gets a default shell */
+  sessions?: SessionSpec[];
+  /** progress flags from the save that this machine starts with: flag() reads them. A hustle's
+   *  `caught_fine` is added to the fine when the player is caught while carrying it; the flag is
+   *  then taken away and `taken_flag` set, so content can say so (and the card stays gone). */
+  carry?: { flag: string; caught_fine?: number; taken_flag?: string }[];
   hints?: { id: string; when: string; text: string }[];
   events?: ScenarioEventSpec[];
   /** only a hustle has one */
@@ -130,6 +167,14 @@ export interface ScenarioSpec {
   /** suggested command lines for the terminal's quick-command strip */
   quick?: string[];
   outage?: { say?: string; money?: number };
+}
+
+/** A choice after an NPC's lines (src/core/talk.ts): what it costs or sets, and the reply. */
+export interface DialogueChoice {
+  text: string;
+  lines?: string[];
+  karma?: number;
+  set_flag?: string;
 }
 
 export interface NpcSpec {
@@ -141,7 +186,7 @@ export interface NpcSpec {
   tint?: string;
   spawn: { map: string; slot: string; facing?: 'up' | 'down' | 'left' | 'right' };
   /** intro: also said before a quest's offer, when it holds (src/core/talk.ts) */
-  dialogue: { when?: string; lines: string[]; intro?: boolean }[];
+  dialogue: { when?: string; lines: string[]; intro?: boolean; choices?: DialogueChoice[] }[];
   /** coach: talking opens the career coach's screen after the lines (DESIGN.md, Career paths) */
   role?: 'coach';
   /** Set by the build for a world npc with a sheet: a same-origin URL in dist/. */

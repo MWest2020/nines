@@ -1,114 +1,28 @@
-// The MVP commands. Each one is a pure function of (context, arguments, stdin) that may change
-// the working copy of the state it is handed and returns lines of output.
+// The core commands: files, services, git and help. Each one is a pure function of (context,
+// arguments, stdin) that may change the working copy of the state it is handed and returns lines
+// of output. More commands live beside this file: basic.ts (the shared base shell: whoami, ps,
+// find, head...), procs.ts (logins and processes: who, w, last, kill, pkill, logout), nginx.ts
+// and kubectl.ts. COMMANDS below gathers them all.
 //
 // Translation boundary: messages go through t() and live in the locale files (sh.* keys).
 // Command names, flags, column headers, git/systemctl status labels and log lines are the
 // interface being taught, so they stay as the real tools print them.
 
-import type { Translate } from '../../core/i18n';
-import type { DeploymentSpec, ScenarioSpec } from '../../content/types';
-import { type Compiled, type Env, test } from '../../rules/expr';
+import { test } from '../../rules/expr';
 import { has, own, setOwn } from '../../rules/own';
 import { validateNinesCi } from '../ci';
 import { gitChanges, pipelineFile } from '../facts';
-import { basename, dirname, isUnder, join, relativeTo, resolve } from '../path';
+import { basename, dirname, isUnder, join, relativeTo } from '../path';
 import { formatHuman, kblocks } from '../size';
-import { manifestId, objectKey, resourceName, significant } from '../manifest';
-import { makePods, podSuffix, signature, type SimState } from '../state';
+import { gitHash, signature, type SimState, writeFile } from '../state';
 import { isDir, listDir, mountFor, mountUsed, move, remove, sizeOf, subtree } from '../vfs';
-import { type FlagSpec, type Flags, parseFlags } from './parse';
+import { BASIC_COMMANDS, makeWhich } from './basic';
+import { kubectl } from './kubectl';
+import { nginx, nginxTest } from './nginx';
+import { PROC_COMMANDS } from './procs';
+import { abs, clock, type Command, type Ctx, fail, fileLines, flags, isResult, lines, ok, USAGE, type Ui, VITAL_PATHS } from './util';
 
-export interface Ui {
-  pager?: true;
-  clear?: true;
-  close?: true;
-  editor?: { path: string; content: string };
-}
-
-export interface CmdResult {
-  out: string[];
-  exit: number;
-  /** counts as a failed attempt for hints; defaults to exit !== 0 */
-  fail?: boolean;
-  ui?: Ui;
-  /** a destructive command hit something vital: the session raises the outage event */
-  outage?: true;
-}
-
-export interface Ctx {
-  s: SimState;
-  spec: ScenarioSpec;
-  env: Env;
-  t: Translate;
-  serviceRules: Record<string, Compiled | undefined>;
-  deploymentRules: Record<string, Compiled | undefined>;
-}
-
-export type Command = (ctx: Ctx, args: string[], stdin: string[] | null) => CmdResult;
-
-/** Paths whose recursive removal (or move) takes the whole machine down. */
-export const VITAL_PATHS = new Set([
-  '/', '/bin', '/boot', '/dev', '/etc', '/home', '/lib', '/lib64', '/opt', '/proc', '/root',
-  '/sbin', '/srv', '/sys', '/usr', '/var',
-]);
-
-/** Syntax shown by `help <cmd>`. Syntax is code, not prose, so it is not translated. */
-export const USAGE: Record<string, string> = {
-  help: 'help [command]',
-  ls: 'ls [-l] [-a] [-h] [path...]',
-  cd: 'cd [dir | - | ~]',
-  pwd: 'pwd',
-  cat: 'cat <file...>',
-  less: 'less <file>',
-  tail: 'tail [-n N] <file...>',
-  grep: 'grep [-i] [-v] [-n] [-c] [-r] [-F] <pattern> [file...]',
-  df: 'df [-h] [path...]',
-  du: 'du [-s] [-h] [-c] [path...]',
-  rm: 'rm [-r] [-f] <path...>',
-  mv: 'mv <source...> <destination>',
-  edit: 'edit <file>',
-  systemctl: 'systemctl status|restart <unit>',
-  journalctl: 'journalctl -u <unit> [-n N]',
-  kubectl: 'kubectl get pods|deployments | kubectl describe pod [pod] | kubectl logs <pod> | kubectl apply -f <file> | kubectl rollout restart|status deployment/<name>',
-  git: 'git status | git add <path...> | git commit -m "message"',
-  clear: 'clear',
-  exit: 'exit',
-};
-
-const ok = (out: string[] = [], ui?: Ui): CmdResult => (ui ? { out, exit: 0, ui } : { out, exit: 0 });
-const fail = (out: string[], exit = 1): CmdResult => ({ out, exit, fail: true });
-
-function flags(ctx: Ctx, cmd: string, args: string[], spec: FlagSpec): { f: Flags; rest: string[] } | CmdResult {
-  const r = parseFlags(args, spec);
-  if (!r.ok) return fail([ctx.t('sh.bad_option', { cmd, opt: r.bad }), ctx.t('sh.usage', { usage: own(USAGE, cmd) ?? cmd })], 2);
-  return { f: r.flags, rest: r.rest };
-}
-const isResult = (x: unknown): x is CmdResult => typeof x === 'object' && x !== null && 'exit' in x;
-
-const abs = (ctx: Ctx, p: string): string => resolve(ctx.s.cwd, ctx.s.home, p);
-
-function lines(content: string | undefined): string[] {
-  if (content === undefined || content === '') return [];
-  return content.replace(/\n$/, '').split('\n');
-}
-
-/** A fake clock for log lines: it moves 7 seconds per command, so output is deterministic. */
-function clock(s: SimState): string {
-  const secs = 9 * 3600 + s.counters.commands * 7;
-  const hh = String(Math.floor(secs / 3600) % 24).padStart(2, '0');
-  const mm = String(Math.floor(secs / 60) % 60).padStart(2, '0');
-  const ss = String(secs % 60).padStart(2, '0');
-  return `Nov 26 ${hh}:${mm}:${ss}`;
-}
-
-function fileLines(ctx: Ctx, cmd: string, arg: string): { lines: string[] } | { error: string } {
-  const p = abs(ctx, arg);
-  const n = ctx.s.fs[p];
-  if (!n) return { error: ctx.t('sh.no_such', { cmd, path: arg }) };
-  if (n.type === 'dir') return { error: ctx.t('sh.is_dir', { cmd, path: arg }) };
-  if (n.content === undefined) return { lines: [ctx.t('sh.size_only', { path: arg, size: formatHuman(n.size) })] };
-  return { lines: lines(n.content) };
-}
+export { type CmdResult, type Command, type Ctx, type Ui, USAGE, VITAL_PATHS } from './util';
 
 // ------------------------------------------------------------------ files
 
@@ -477,6 +391,20 @@ const systemctl: Command = (ctx, args) => {
       const spec = own(ctx.spec.services, unit)?.restart;
       const now = clock(ctx.s);
       ctx.s.restarted.push(unit);
+      // systemd runs `nginx -t` before it starts nginx: a broken config fails with its own error
+      const conf = unit === 'nginx' ? nginxTest(ctx.s) : null;
+      if (conf && !conf.ok) {
+        svc.state = 'failed';
+        const pid = 1200 + ctx.s.counters.commands;
+        svc.logs.push(
+          `${now} ${ctx.s.host} systemd[1]: Starting ${unit}.service - ${svc.description}...`,
+          ...conf.lines.map((l) => `${now} ${ctx.s.host} nginx[${pid}]: ${l}`),
+          `${now} ${ctx.s.host} systemd[1]: ${unit}.service: Control process exited, code=exited, status=1/FAILURE`,
+          `${now} ${ctx.s.host} systemd[1]: ${unit}.service: Failed with result 'exit-code'.`,
+          `${now} ${ctx.s.host} systemd[1]: Failed to start ${unit}.service - ${svc.description}.`,
+        );
+        return fail([ctx.t('sh.restart_failed', { unit }), ctx.t('sh.restart_failed_hint', { unit })]);
+      }
       if (rule === undefined || test(rule, ctx.env)) {
         svc.state = 'active';
         svc.logs.push(
@@ -497,6 +425,29 @@ const systemctl: Command = (ctx, args) => {
       );
       return fail([ctx.t('sh.restart_failed', { unit }), ctx.t('sh.restart_failed_hint', { unit })]);
     }
+    case 'stop': {
+      if (!svc) return fail([ctx.t('sh.restart_not_found', { unit, verb: sub })], 5);
+      const now = clock(ctx.s);
+      if (svc.state === 'active') svc.logs.push(`${now} ${ctx.s.host} systemd[1]: Stopping ${unit}.service - ${svc.description}...`, `${now} ${ctx.s.host} systemd[1]: ${unit}.service: Deactivated successfully.`);
+      svc.state = 'inactive';
+      return ok();
+    }
+    case 'reload': {
+      if (!svc) return fail([ctx.t('sh.restart_not_found', { unit, verb: sub })], 5);
+      if (svc.state !== 'active') return fail([`${unit}.service is not active, cannot reload.`]);
+      const conf = unit === 'nginx' ? nginxTest(ctx.s) : null;
+      const now = clock(ctx.s);
+      if (conf && !conf.ok) {
+        // the running nginx keeps its old config; the reload job fails
+        svc.logs.push(`${now} ${ctx.s.host} systemd[1]: Reloading ${unit}.service - ${svc.description}...`, ...conf.lines.map((l) => `${now} ${ctx.s.host} nginx[${1200 + ctx.s.counters.commands}]: ${l}`), `${now} ${ctx.s.host} systemd[1]: ${unit}.service: Control process exited, code=exited, status=1/FAILURE`, `${now} ${ctx.s.host} systemd[1]: Reload failed for ${unit}.service - ${svc.description}.`);
+        return fail([`Job for ${unit}.service failed because the control process exited with error code.`, ctx.t('sh.restart_failed_hint', { unit })]);
+      }
+      svc.logs.push(`${now} ${ctx.s.host} systemd[1]: Reloading ${unit}.service - ${svc.description}...`, `${now} ${ctx.s.host} systemd[1]: Reloaded ${unit}.service - ${svc.description}.`);
+      return ok();
+    }
+    case 'is-active':
+      if (!svc) return { out: ['inactive'], exit: 3, fail: false };
+      return { out: [svc.state], exit: svc.state === 'active' ? 0 : 3, fail: false };
     default:
       return fail([ctx.t('sh.usage', { usage: USAGE['systemctl']! })]);
   }
@@ -527,232 +478,124 @@ const journalctl: Command = (ctx, args) => {
   return f['no-pager'] ? ok(out) : ok(out, { pager: true });
 };
 
-const kubectl: Command = (ctx, args) => {
-  const r = flags(ctx, 'kubectl', args, {
-    bool: 'Ap',
-    value: 'nof',
-    long: { namespace: 'value', 'all-namespaces': 'bool', tail: 'value', previous: 'bool', output: 'value', filename: 'value', follow: 'bool' },
-  });
-  if (isResult(r)) return r;
-  const { f, rest } = r;
-  const usage = () => fail([ctx.t('sh.usage', { usage: USAGE['kubectl']! })]);
-  const nsFlag = f['n'] ?? f['namespace'];
-  const ns = typeof nsFlag === 'string' ? nsFlag : 'default';
-  const all = f['A'] || f['all-namespaces'];
-  switch (rest[0]) {
-    case 'get': {
-      if (['deployments', 'deployment', 'deploy'].includes(rest[1] ?? '')) return getDeployments(ctx, all ? null : ns);
-      if (!['pods', 'pod', 'po'].includes(rest[1] ?? '')) return usage();
-      const pods = ctx.s.pods.filter((p) => all || p.namespace === ns);
-      if (pods.length === 0) return ok([ctx.t('sh.no_pods', { ns })]);
-      const w = Math.max(4, ...pods.map((p) => p.name.length)) + 3;
-      // a pod whose readiness probe fails runs, but is not ready: Running, READY 0/1
-      const shown = (p: SimState['pods'][number]) => (p.status === 'NotReady' ? 'Running' : p.status);
-      const sw = Math.max(6, ...pods.map((p) => shown(p).length)) + 3;
-      const nsCol = (v: string) => (all ? v.padEnd(Math.max(9, ...pods.map((p) => p.namespace.length)) + 3) : '');
-      return ok([
-        `${nsCol('NAMESPACE')}${'NAME'.padEnd(w)}READY   ${'STATUS'.padEnd(sw)}RESTARTS   AGE`,
-        ...pods.map(
-          (p) =>
-            `${nsCol(p.namespace)}${p.name.padEnd(w)}${(p.status === 'Running' ? '1/1' : '0/1').padEnd(8)}${shown(p).padEnd(sw)}${String(p.restarts).padEnd(11)}${p.age}`,
-        ),
-      ]);
-    }
-    case 'describe': {
-      if (!['pods', 'pod', 'po'].includes(rest[1] ?? '')) return usage();
-      const name = rest[2];
-      // like kubectl: an exact name, else every pod whose name starts with it
-      const here = ctx.s.pods.filter((p) => all || p.namespace === ns);
-      const exact = here.filter((p) => p.name === name);
-      const pods = name === undefined ? here : exact.length > 0 ? exact : here.filter((p) => p.name.startsWith(name));
-      if (pods.length === 0) return name === undefined ? ok([ctx.t('sh.no_pods', { ns })]) : fail([ctx.t('sh.pod_not_found', { pod: name })]);
-      return ok(pods.flatMap((p, i) => [...(i > 0 ? [''] : []), ...describePod(p, own(ctx.spec.deployments, p.deployment))]), { pager: true });
-    }
-    case 'apply': {
-      const file = f['f'] ?? f['filename'];
-      if (typeof file !== 'string') return fail([ctx.t('sh.kubectl_need_file')]);
-      const p = abs(ctx, file);
-      const node = ctx.s.fs[p];
-      if (!node) return fail([ctx.t('sh.kubectl_no_path', { path: file })]);
-      const targets = node.type === 'dir'
-        ? listDir(ctx.s, p).filter((n) => /\.ya?ml$/.test(n) && ctx.s.fs[join(p, n)]?.type === 'file').map((n) => ({ path: join(p, n), shown: join(file, n) }))
-        : [{ path: p, shown: file }];
-      const out: string[] = [];
-      let bad = false;
-      const rolls: string[] = [];
-      for (const target of targets) {
-        const r = applyManifest(ctx, target.path, target.shown, ns);
-        out.push(r.line);
-        bad ||= r.bad;
-        if (r.rollout && !rolls.includes(r.rollout)) rolls.push(r.rollout);
-      }
-      // a changed pod template rolls the Deployment out, as on a real cluster: after the whole
-      // apply, so a ConfigMap applied in the same command is already there for the new pods
-      for (const name of rolls) rollout(ctx, name);
-      return bad ? { out, exit: 1, fail: true } : ok(out);
-    }
-    case 'logs': {
-      // -f is a filename for apply, so here it arrives holding the target: logs -f <pod> follows
-      const follow = typeof f['f'] === 'string' || f['follow'] === true;
-      const target = rest[1] ?? (typeof f['f'] === 'string' ? f['f'] : undefined);
-      if (!target) return usage();
-      const dep = /^(?:deployments?|deploy)\/(.+)$/.exec(target)?.[1];
-      const matches = dep !== undefined ? ctx.s.pods.filter((p) => p.namespace === ns && p.deployment === dep) : [];
-      const pod = dep !== undefined ? matches[0] : ctx.s.pods.find((p) => p.namespace === ns && p.name === target);
-      if (!pod) return fail([ctx.t('sh.pod_not_found', { pod: target })]);
-      const tailRaw = f['tail'];
-      const n = typeof tailRaw === 'string' ? Number(tailRaw) : -1;
-      return ok([
-        // kubectl says which pod it picked when a deployment has several
-        ...(matches.length > 1 ? [`Found ${matches.length} pods, using pod/${pod.name}`] : []),
-        ...(n >= 0 ? (n === 0 ? [] : pod.logs.slice(-n)) : pod.logs),
-        ...(follow ? [ctx.t('sh.follow_note')] : []),
-      ]);
-    }
-    case 'rollout': {
-      if (rest[1] !== 'restart' && rest[1] !== 'status') return usage();
-      let name: string | undefined;
-      const m = /^(?:deployment|deployments|deploy)\/(.+)$/.exec(rest[2] ?? '');
-      if (m) name = m[1];
-      else if (['deployment', 'deployments', 'deploy'].includes(rest[2] ?? '')) name = rest[3];
-      if (!name) return usage();
-      const spec = own(ctx.spec.deployments, name);
-      if (!spec || (spec.namespace ?? 'default') !== ns) return fail([ctx.t('sh.deploy_not_found', { name })]);
-      if (rest[1] === 'status') {
-        const pods = ctx.s.pods.filter((p) => p.deployment === name);
-        const ready = pods.filter((p) => p.status === 'Running').length;
-        if (ready === pods.length) return ok([`deployment "${name}" successfully rolled out`]);
-        // the real command waits; this terminal shows where the rollout stands and returns
-        return { out: [`Waiting for deployment "${name}" rollout to finish: ${ready} of ${pods.length} updated replicas are available...`, ctx.t('sh.rollout_wait_note')], exit: 1, fail: false };
-      }
-      rollout(ctx, name);
-      ctx.s.restarted.push(name);
-      return ok([`deployment.apps/${name} restarted`]);
-    }
-    default:
-      return usage();
+
+/** A small diff of two texts: one hunk around the changed lines, three lines of context. */
+export function diffLines(path: string, before: string, after: string): string[] {
+  const a = lines(before);
+  const b = lines(after);
+  let start = 0;
+  while (start < a.length && start < b.length && a[start] === b[start]) start++;
+  let endA = a.length;
+  let endB = b.length;
+  while (endA > start && endB > start && a[endA - 1] === b[endB - 1]) {
+    endA--;
+    endB--;
   }
-};
-
-/**
- * Replace a Deployment's pods with a new generation, healthy when its `restart.succeeds_if` holds:
- * what `rollout restart` does, and what applying a changed Deployment does on a real cluster.
- */
-function rollout(ctx: Ctx, name: string): void {
-  const spec = own(ctx.spec.deployments, name);
-  if (!spec) return;
-  const rule = own(ctx.deploymentRules, name);
-  const healthy = rule === undefined || test(rule, ctx.env);
-  ctx.s.generation++;
-  const status = healthy ? 'Running' : (spec.restart?.status_on_failure ?? spec.status);
-  const logs = healthy ? (spec.restart?.logs_on_success ?? []) : (spec.restart?.logs_on_failure ?? spec.logs ?? []);
-  ctx.s.pods = [...ctx.s.pods.filter((p) => p.deployment !== name), ...makePods(name, spec, ctx.s.generation, status, 0, '3s', logs)];
-}
-
-/** kubectl get deployments: ready, up to date and available replicas per Deployment. */
-function getDeployments(ctx: Ctx, ns: string | null): CmdResult {
-  const names = Object.keys(ctx.spec.deployments ?? {}).filter((n) => ns === null || (own(ctx.spec.deployments, n)?.namespace ?? 'default') === ns);
-  if (names.length === 0) return ok([ctx.t('sh.no_pods', { ns: ns ?? 'default' })]);
-  const w = Math.max(4, ...names.map((n) => n.length)) + 3;
-  const nsW = ns === null ? Math.max(9, ...names.map((n) => (own(ctx.spec.deployments, n)?.namespace ?? 'default').length)) + 3 : 0;
-  const col = (v: string) => (ns === null ? v.padEnd(nsW) : '');
-  return ok([
-    `${col('NAMESPACE')}${'NAME'.padEnd(w)}READY   UP-TO-DATE   AVAILABLE   AGE`,
-    ...names.map((n) => {
-      const pods = ctx.s.pods.filter((p) => p.deployment === n);
-      const ready = pods.filter((p) => p.status === 'Running').length;
-      return `${col(own(ctx.spec.deployments, n)?.namespace ?? 'default')}${n.padEnd(w)}${`${ready}/${pods.length}`.padEnd(8)}${String(pods.length).padEnd(13)}${String(ready).padEnd(12)}${pods[0]?.age ?? '42m'}`;
-    }),
-  ]);
-}
-
-/** Phase, container state and events of a pod, as kubectl describe pod prints them (abridged). */
-function describePod(p: SimState['pods'][number], spec: DeploymentSpec | undefined): string[] {
-  const rs = p.name.slice(0, p.name.lastIndexOf('-'));
-  const phase = p.status === 'Pending' || p.status === 'ImagePullBackOff' ? 'Pending' : 'Running';
-  const ready = p.status === 'Running';
-  const image = spec?.image ?? `${p.deployment}:latest`;
-  const state: string[] =
-    p.status === 'Running' || p.status === 'NotReady'
-      ? ['    State:          Running']
-      : p.status === 'Error'
-        ? ['    State:          Terminated', '      Reason:       Error', '      Exit Code:    1']
-        : p.status === 'Pending'
-          ? [] // not scheduled yet: no node, so no container state
-          : ['    State:          Waiting', `      Reason:       ${p.status}`];
-  if (p.status === 'CrashLoopBackOff') state.push('    Last State:     Terminated', '      Reason:       Error', '      Exit Code:    1');
-  const seen = (n: number) => (n > 1 ? `20s (x${n} over ${p.age})` : p.age);
-  const events: string[] =
-    p.status === 'NotReady'
-      ? [
-          `  Normal   Started    ${p.age.padEnd(19)}kubelet  Started container ${p.deployment}`,
-          `  Warning  Unhealthy  ${seen(p.restarts + 12).padEnd(19)}kubelet  Readiness probe failed: ${spec?.readiness_failure ?? 'the probe did not succeed'}`,
-        ]
-      : p.status === 'Running'
-      ? [
-          `  Normal   Pulled     ${p.age.padEnd(19)}kubelet  Container image "${image}" already present on machine`,
-          `  Normal   Started    ${p.age.padEnd(19)}kubelet  Started container ${p.deployment}`,
-        ]
-      : p.status === 'Pending'
-        ? [`  Warning  FailedScheduling  ${p.age.padEnd(12)}default-scheduler  0/3 nodes are available: 3 Insufficient cpu.`]
-        : p.status === 'ImagePullBackOff'
-          ? [
-              `  Warning  Failed     ${seen(p.restarts + 1).padEnd(19)}kubelet  Failed to pull image "${image}": not found`,
-              `  Normal   BackOff    ${seen(p.restarts + 1).padEnd(19)}kubelet  Back-off pulling image "${image}"`,
-            ]
-          : [`  Warning  BackOff    ${seen(p.restarts + 1).padEnd(19)}kubelet  Back-off restarting failed container ${p.deployment} in pod ${p.name}_${p.namespace}`];
+  const from = Math.max(0, start - 3);
+  const toA = Math.min(a.length, endA + 3);
+  const toB = Math.min(b.length, endB + 3);
   return [
-    `Name:             ${p.name}`,
-    `Namespace:        ${p.namespace}`,
-    ...(p.status === 'Pending' ? ['Node:             <none>'] : []),
-    `Labels:           app=${p.deployment}`,
-    `Status:           ${phase}`,
-    `Controlled By:    ReplicaSet/${rs}`,
-    'Containers:',
-    `  ${p.deployment}:`,
-    `    Image:          ${image}`,
-    ...state,
-    `    Ready:          ${ready ? 'True' : 'False'}`,
-    `    Restart Count:  ${p.restarts}`,
-    ...(spec?.config_map ? ['    Environment Variables from:', `      ${spec.config_map}  ConfigMap  Optional: false`] : []),
-    'Events:',
-    '  Type     Reason     Age                From     Message',
-    '  ----     ------     ----               ----     -------',
-    ...events,
+    `diff --git a/${path} b/${path}`,
+    `--- a/${path}`,
+    `+++ b/${path}`,
+    `@@ -${from + 1},${toA - from} +${from + 1},${toB - from} @@`,
+    ...a.slice(from, start).map((l) => ` ${l}`),
+    ...a.slice(start, endA).map((l) => `-${l}`),
+    ...b.slice(start, endB).map((l) => `+${l}`),
+    ...a.slice(endA, toA).map((l) => ` ${l}`),
   ];
 }
 
-/**
- * kubectl apply -f for one file: the cluster now runs this content for the object the file
- * names (kind, metadata.namespace or the -n namespace, metadata.name), whichever file it came
- * from. Only the shape is checked (kind and name, no tabs in the indentation, as YAML forbids
- * them); comments and blank lines never make a change. The content is what a scenario's
- * applied_value() and applied_contains() read.
- */
-function applyManifest(ctx: Ctx, path: string, shown: string, ns: string): { line: string; bad: boolean; rollout?: string } {
-  const node = ctx.s.fs[path];
-  const text = node?.type === 'file' ? (node.content ?? '') : '';
-  const tab = text.split('\n').findIndex((l) => /^[ ]*\t/.test(l));
-  if (tab >= 0) return { bad: true, line: ctx.t('sh.kubectl_yaml_tab', { path: shown, line: tab + 1 }) };
-  const id = manifestId(text);
-  if (!id) return { bad: true, line: ctx.t('sh.kubectl_invalid', { path: shown }) };
-  const key = objectKey(id, ns);
-  const before = own(ctx.s.cluster, key);
-  setOwn(ctx.s.cluster, key, text);
-  const how = before === undefined ? 'created' : significant(before) === significant(text) ? 'unchanged' : 'configured';
-  // a configured Deployment that the scenario runs rolls out new pods (its namespace must match)
-  const dep = id.kind === 'Deployment' && how === 'configured' ? own(ctx.spec.deployments, id.name) : undefined;
-  const rollsOut = dep !== undefined && (dep.namespace ?? 'default') === (id.namespace ?? ns);
-  return { bad: false, line: `${resourceName(id.kind)}/${id.name} ${how}`, ...(rollsOut ? { rollout: id.name } : {}) };
-}
+const sizeOnly = (sig: string | undefined): boolean => sig === undefined || sig.startsWith('\u0000');
 
-// ------------------------------------------------------------------ git
-
-const git: Command = (ctx, args) => {
+const git: Command = (ctx, argsIn) => {
+  let args = argsIn;
+  // git -C <dir> runs as if started in <dir>
+  if (args[0] === '-C') {
+    const dir = args[1];
+    if (dir === undefined) return fail([ctx.t('sh.usage', { usage: USAGE['git']! })], 129);
+    const p = abs(ctx, dir);
+    if (!isDir(ctx.s, p)) return fail([`fatal: cannot change to '${dir}': No such file or directory`], 128);
+    const saved = ctx.s.cwd;
+    ctx.s.cwd = p;
+    try {
+      return git(ctx, args.slice(2), null);
+    } finally {
+      ctx.s.cwd = saved;
+    }
+  }
+  if (args[0] === '--version' || args[0] === 'version') return ok(['git version 2.43.0']);
   const g = ctx.s.git;
-  if (!g || !isUnder(ctx.s.cwd, g.root)) return fail([ctx.t('sh.not_git')], 128);
+  if (!g || !isUnder(ctx.s.cwd, g.root)) {
+    // honest, and helpful: name the repository this machine does have
+    return fail(g ? [ctx.t('sh.not_git'), ctx.t('sh.not_git_here', { root: g.root })] : [ctx.t('sh.not_git')], 128);
+  }
+  if (args[0] === undefined || args[0] === 'help' || args[0] === '--help') return ok([ctx.t('sh.usage', { usage: USAGE['git']! })]);
   const [sub, ...subArgs] = args;
   switch (sub) {
+    case 'log': {
+      const r = flags(ctx, 'git', subArgs, { value: 'n', long: { oneline: 'bool', 'no-pager': 'bool', stat: 'bool' } });
+      if (isResult(r)) return r;
+      const n = typeof r.f['n'] === 'string' ? Number(r.f['n']) : Infinity;
+      const shown = [...g.log].reverse().slice(0, Number.isFinite(n) ? n : undefined);
+      if (r.f['oneline']) return ok(shown.map((c, i) => `${c.hash}${i === 0 ? ` (HEAD -> ${g.branch})` : ''} ${c.msg}`));
+      return ok(shown.flatMap((c, i) => [
+        `commit ${c.hash}${'0'.repeat(33)}${i === 0 ? ` (HEAD -> ${g.branch})` : ''}`,
+        `Author: ${ctx.s.user} <${ctx.s.user}@${ctx.s.host}>`,
+        `Date:   Thu Nov 26 ${i === shown.length - 1 && c.msg === 'Initial import' ? '06:00:00' : clock(ctx.s).slice(7)} 2026 +0100`,
+        '',
+        `    ${c.msg}`,
+        '',
+      ]), { pager: true });
+    }
+    case 'diff': {
+      const r = flags(ctx, 'git', subArgs, { long: { staged: 'bool', cached: 'bool', stat: 'bool', 'name-only': 'bool' } });
+      if (isResult(r)) return r;
+      const staged = r.f['staged'] === true || r.f['cached'] === true;
+      const c = gitChanges(ctx.s);
+      const paths = (staged ? c.staged : c.unstaged).filter((p) => r.rest.length === 0 || r.rest.some((a) => isUnder(join(g.root, p), abs(ctx, a))));
+      if (r.f['name-only']) return ok(paths);
+      const out: string[] = [];
+      for (const p of paths) {
+        const before = staged ? own(g.head, p) : own(g.index, p);
+        const afterSig = staged ? own(g.index, p) : signature(ctx.s.fs[join(g.root, p)]);
+        if (sizeOnly(before) && before !== undefined || sizeOnly(afterSig) && afterSig !== undefined) {
+          out.push(`diff --git a/${p} b/${p}`, `Binary files a/${p} and b/${p} differ`);
+          continue;
+        }
+        out.push(...diffLines(p, before ?? '', afterSig ?? ''));
+      }
+      return ok(out, out.length > 20 ? { pager: true } : undefined);
+    }
+    case 'branch':
+      return ok([`* ${g.branch}`]);
+    case 'restore':
+    case 'checkout': {
+      const r = flags(ctx, 'git', subArgs, { long: { staged: 'bool' } });
+      if (isResult(r)) return r;
+      const targets = r.rest.filter((a) => a !== '--');
+      if (targets.length === 0) return fail([ctx.t('sh.usage', { usage: 'git restore [--staged] <path...>' })], 128);
+      for (const a of targets) {
+        const p = abs(ctx, a);
+        if (!isUnder(p, g.root)) return fail([ctx.t('sh.git_outside', { path: a })], 128);
+        const rel = relativeTo(p, g.root);
+        const known = Object.keys(g.index).filter((k) => rel === '' || k === rel || k.startsWith(rel + '/'));
+        if (known.length === 0) return fail([`error: pathspec '${a}' did not match any file(s) known to git`], 1);
+        for (const k of known) {
+          if (r.f['staged']) {
+            const h = own(g.head, k);
+            if (h === undefined) delete g.index[k];
+            else setOwn(g.index, k, h);
+            continue;
+          }
+          const sig = own(g.index, k)!;
+          const full = join(g.root, k);
+          if (sig.startsWith('\u0000')) continue; // a file known only by its size stays as it is
+          writeFile(ctx.s.fs, full, sig);
+        }
+      }
+      return ok();
+    }
     case 'status': {
       const c = gitChanges(ctx.s);
       const out = [ctx.t('sh.git_on_branch', { branch: g.branch })];
@@ -821,7 +664,8 @@ const git: Command = (ctx, args) => {
       }
       g.head = { ...g.index };
       g.commits++;
-      const hash = podSuffix(`${msg}#${g.commits}`, 7).replace(/[^0-9a-f]/g, (ch) => 'abcdef'[ch.charCodeAt(0) % 6]!);
+      const hash = gitHash(`${msg}#${g.commits}`);
+      g.log.push({ hash, msg });
       const out = [`[${g.branch} ${hash}] ${msg}`, ctx.t('sh.git_files_changed', { n: c.staged.length })];
       const pf = pipelineFile(ctx.spec, ctx.s);
       if (pf) {
@@ -847,23 +691,43 @@ const git: Command = (ctx, args) => {
 
 // ------------------------------------------------------------------ session
 
+/** `help` lists these with a line each; the base shell's everyday commands follow on one line. */
 export const HELP_ORDER = [
-  'ls', 'cd', 'pwd', 'cat', 'less', 'tail', 'grep', 'df', 'du', 'rm', 'mv', 'edit',
-  'systemctl', 'journalctl', 'kubectl', 'git', 'clear', 'exit',
+  'ls', 'cd', 'pwd', 'cat', 'less', 'tail', 'grep', 'find', 'df', 'du', 'rm', 'mv', 'edit',
+  'systemctl', 'journalctl', 'nginx', 'kubectl', 'git', 'ps', 'kill', 'who', 'clear', 'exit',
 ];
+/** The rest of the base shell, named on one line under the list. */
+export const HELP_MORE = [
+  'whoami', 'id', 'w', 'last', 'logout', 'hostname', 'uname', 'env', 'echo', 'date', 'uptime',
+  'head', 'wc', 'sort', 'uniq', 'which', 'man', 'history', 'pkill',
+];
+
+/** nginx is a command only where nginx is installed. */
+export const hasNginx = (s: SimState): boolean => s.fs['/etc/nginx/nginx.conf'] !== undefined || has(s.services, 'nginx');
 
 const help: Command = (ctx, args) => {
   const topic = args[0];
   if (topic !== undefined) {
     const name = own(ALIASES, topic) ?? topic;
     const usage = own(USAGE, name);
-    if (usage === undefined) return fail([ctx.t('sh.help_unknown', { cmd: topic })]);
+    if (usage === undefined || (name === 'nginx' && !hasNginx(ctx.s))) return fail([ctx.t('sh.help_unknown', { cmd: topic })]);
     return ok([usage, `  ${ctx.t(`help.${name}`)}`]);
   }
-  return ok([ctx.t('help.intro'), ...HELP_ORDER.map((c) => `  ${c.padEnd(11)} ${ctx.t(`help.${c}`)}`)]);
+  const list = HELP_ORDER.filter((c) => c !== 'nginx' || hasNginx(ctx.s));
+  return ok([ctx.t('help.intro'), ...list.map((c) => `  ${c.padEnd(11)} ${ctx.t(`help.${c}`)}`), '', ctx.t('help.more', { list: HELP_MORE.join(' ') })]);
 };
 
-const ALIASES: Record<string, string> = { nano: 'edit', vi: 'edit', vim: 'edit' };
+/** man <cmd>: the short manual, help's usage and line under a man-like header. */
+const man: Command = (ctx, args) => {
+  const topic = args.find((a) => !a.startsWith('-'));
+  if (topic === undefined) return fail(['What manual page do you want?', 'For example, try \'man man\'.']);
+  const name = own(ALIASES, topic) ?? topic;
+  const usage = name === 'man' ? USAGE['man'] : own(USAGE, name);
+  if (usage === undefined || (name === 'nginx' && !hasNginx(ctx.s))) return fail([`No manual entry for ${topic}`]);
+  return ok([`${name.toUpperCase()}(1)`, '', 'NAME', `       ${name} - ${ctx.t(`help.${name}`)}`, '', 'SYNOPSIS', `       ${usage}`, '', ctx.t('sh.man_note')]);
+};
+
+const ALIASES: Record<string, string> = { nano: 'edit', vi: 'edit', vim: 'edit', printenv: 'env', killall: 'pkill' };
 
 export const COMMANDS: Record<string, Command> = {
   help,
@@ -885,10 +749,15 @@ export const COMMANDS: Record<string, Command> = {
   systemctl,
   journalctl,
   kubectl,
+  nginx,
   git,
+  man,
   clear: () => ok([], { clear: true }),
   exit: () => ok([], { close: true }),
+  ...BASIC_COMMANDS,
+  ...PROC_COMMANDS,
 };
+COMMANDS['which'] = makeWhich((name) => has(COMMANDS, name));
 
 /** Commands whose first operand is a subcommand worth remembering for ran("git commit"). */
 export const SUBCOMMANDS = new Set(['systemctl', 'kubectl', 'git']);

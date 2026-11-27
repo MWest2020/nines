@@ -1,0 +1,27 @@
+# Ans runs the library desk by the co-working space (Mark's playtest, 27 Nov 2026: "for the hack it
+# would be cool if you could steal another library card somewhere, social engineering"). While the
+# vending job is on offer or under way, someone's card lies on her desk while she is at the
+# printer. The player chooses: pocket it (karma down; the job carries borrowed-card in, so the
+# kiosk shows that card, the heat drops, and being caught with it raises the fine), hand it in
+# (karma up, once), or leave it. Game mechanics only: a choice in a conversation, no technique.
+schema: 1
+id: ans
+author: {name: "Nines team"}
+name: npc.name
+tint: "#7898c8"
+spawn: {map: junior-village, slot: cameo-2, facing: down}
+dialogue:
+  # caught with it: the card went back to Joris by way of the police, and is never on the desk again
+  - when: 'flag("card-taken")'
+    lines: [taken.1, legal.1]
+  - when: 'flag("borrowed-card")'
+    lines: [missing.1, missing.2]
+  - when: 'flag("returned-card")'
+    lines: [thanks.1, legal.1]
+  - when: 'quest("vending-prices") == "available" || quest("vending-prices") == "active"'
+    lines: [desk.1, desk.2]
+    choices:
+      - {text: choice.pocket, lines: [pocket.1], karma: -10, set_flag: borrowed-card}
+      - {text: choice.hand_in, lines: [hand_in.1, legal.1], karma: 5, set_flag: returned-card}
+      - {text: choice.leave, lines: [leave.1]}
+  - lines: [idle.1, legal.1]

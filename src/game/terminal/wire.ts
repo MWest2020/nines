@@ -36,12 +36,18 @@ function open(api: GameApi, quest: QuestEntry, done: () => void): void {
   const giver = findNpc(api.store.content, quest.quest.giver);
   const release = api.hold();
   let reward: Reward | null = null;
+  // progress flags the machine carries in from the save (a borrowed card), as they stand at opening
+  const flags = Object.fromEntries((quest.scenario?.carry ?? []).filter((c) => api.store.game.flags[c.flag] === true).map((c) => [c.flag, true]));
+  const carried = (quest.scenario?.carry ?? []).filter((c) => flags[c.flag] === true);
   try {
     current = openTerminal(quest, {
       t: api.t,
       hintBoost: api.hintBoost(),
       // the mode at opening holds for the whole session (the menu is shut while it is open)
       skipProcedures: contracted(api.store.game, quest),
+      flags,
+      // a done quest's machine is a practice run: it says so, and pays nothing
+      practice: state === 'done',
       hints: { offer: (key) => api.hintOffer(quest.id, key), ask: (key) => api.askHint(quest.id, key) },
       ...(giver ? { speaker: giver.key(giver.spec.name) } : {}),
       applyEvents: (events) => api.applyTerminalEvents(quest.id, events),
@@ -49,13 +55,20 @@ function open(api: GameApi, quest: QuestEntry, done: () => void): void {
         let lesson = false;
         if (quest.quest.kind === 'hustle') {
           // no risk reported (never, for a valid hustle) fails closed: the cap
-          const r = api.finishHustle(quest.id, risk ?? RISK_CAP);
+          const r = api.finishHustle(quest.id, risk ?? RISK_CAP, {
+            caughtFine: carried.reduce((sum, c) => sum + (c.caught_fine ?? 0), 0),
+            confiscate: carried.filter((c) => c.caught_fine !== undefined || c.taken_flag !== undefined).map((c) => c.flag),
+            taken: carried.flatMap((c) => (c.taken_flag ? [c.taken_flag] : [])),
+          });
           if (!r.ok) return null;
           if (r.outcome === 'caught') return { kind: 'caught', fine: r.fine, karma: r.karma, strikes: r.strikes, arrested: r.arrested, agency: r.agency, lesson: r.lesson };
           reward = r.reward;
           lesson = r.lesson;
         } else {
-          reward = api.completeQuest(quest.id);
+          // a practice run's win pays nothing: keep the first win's reward for the done lines
+          const r = api.completeQuest(quest.id);
+          if (!r) return null;
+          reward = r;
         }
         if (!reward) return null;
         const { money, income, xp, percent, hints, karma, contract, agency } = reward;

@@ -3,13 +3,15 @@
 // Phaser, no clock, no randomness. The UI layer renders RunResult and applies money changes.
 
 import type { Translate } from '../core/i18n';
-import type { ScenarioSpec } from '../content/types';
+import type { CheckSpec, ScenarioSpec } from '../content/types';
 import { type Compiled, compile, test } from '../rules/expr';
 import { own } from '../rules/own';
 import { SCENARIO_FACTS } from '../rules/registries';
+import { type CheckNote, grade } from './check';
 import { scenarioEnv } from './facts';
+import { applyManifest, rollout } from './shell/kubectl';
 import { normalize, resolve } from './path';
-import { COMMANDS, type Ctx, SUBCOMMANDS, type Ui } from './shell/commands';
+import { COMMANDS, type Ctx, hasNginx, SUBCOMMANDS, type Ui } from './shell/commands';
 import { parseLine } from './shell/parse';
 import { createState, type SimState, writeFile } from './state';
 import { expandGlob } from './vfs';
@@ -34,8 +36,9 @@ export interface RunResult {
   events: FiredEvent[];
   /** locale keys of hints unlocked by this step (at most one per step) */
   hints: string[];
-  /** `procedure`: a contractor may skip it; `skipped`: this session does (it does not count) */
-  objectives: { id: string; text: string; done: boolean; procedure?: true; skipped?: true }[];
+  /** `procedure`: a contractor may skip it; `skipped`: this session does (it does not count);
+   *  `note`: what a free-text check still finds wrong, once the player has changed that file */
+  objectives: { id: string; text: string; done: boolean; procedure?: true; skipped?: true; note?: CheckNote }[];
   /** a hustle's chance of getting caught right now (scenario `risk`); absent without one */
   risk?: Risk;
   won: boolean;
@@ -50,7 +53,7 @@ export interface Risk {
 }
 
 interface CompiledScenario {
-  objectives: { id: string; text: string; when: Compiled; procedure: boolean }[];
+  objectives: { id: string; text: string; when: Compiled | null; procedure: boolean; check?: CheckSpec }[];
   risk: { base: number; factors: { id: string; text: string; add: number; when: Compiled }[] } | null;
   hints: { id: string; text: string; when: Compiled }[];
   events: { id: string; when: Compiled; say: string; money: number; karma: number; reset: boolean; setFlag?: string }[];
@@ -84,7 +87,13 @@ export function compileScenario(spec: ScenarioSpec): CompiledScenario {
     deploymentRules[name] = d.restart?.succeeds_if !== undefined ? c(d.restart.succeeds_if) : undefined;
   }
   return {
-    objectives: spec.objectives.map((o) => ({ id: o.id, text: o.text, when: c(o.done_when), procedure: o.procedure === true })),
+    objectives: spec.objectives.map((o) => ({
+      id: o.id,
+      text: o.text,
+      when: o.done_when !== undefined ? c(o.done_when) : null,
+      procedure: o.procedure === true,
+      ...(o.check ? { check: o.check } : {}),
+    })),
     risk: spec.risk ? { base: spec.risk.base, factors: spec.risk.factors.map((f) => ({ id: f.id, text: f.text, add: f.add, when: c(f.when) })) } : null,
     hints: (spec.hints ?? []).map((h) => ({ id: h.id, text: h.text, when: c(h.when) })),
     events: (spec.events ?? []).map((e) => ({
@@ -101,8 +110,9 @@ export function compileScenario(spec: ScenarioSpec): CompiledScenario {
   };
 }
 
-export function createSession(spec: ScenarioSpec, opts: { t: Translate; hintBoost?: number; skipProcedures?: boolean }): Session {
-  const initial = createState(spec);
+/** `flags`: the save's progress flags; the machine starts with those its scenario `carry`s. */
+export function createSession(spec: ScenarioSpec, opts: { t: Translate; hintBoost?: number; skipProcedures?: boolean; flags?: Record<string, boolean> }): Session {
+  const initial = createState(spec, opts.flags ?? {});
   return {
     spec,
     t: opts.t,
@@ -133,6 +143,9 @@ function resetMachine(session: Session, work: SimState): SimState {
   fresh.firedEvents = work.firedEvents;
   fresh.shownHints = work.shownHints;
   fresh.flags = work.flags;
+  fresh.logins = work.logins;
+  fresh.history = work.history;
+  fresh.unknown = work.unknown;
   return fresh;
 }
 
@@ -188,19 +201,33 @@ function settle(session: Session, work: SimState, out: string[], exit: number, u
     hints.push(h.text);
     break;
   }
-  const objectives = session.compiled.objectives.map((o) => ({
-    id: o.id,
-    text: o.text,
-    done: test(o.when, env),
-    ...(o.procedure ? { procedure: true as const } : {}),
-    ...(o.procedure && session.skipProcedures ? { skipped: true as const } : {}),
-  }));
+  const objectives = session.compiled.objectives.map((o) => {
+    const graded = o.check ? gradeIn(session, work, o.check) : null;
+    const done = (o.when === null || test(o.when, env)) && (graded === null || graded.ok);
+    return {
+      id: o.id,
+      text: o.text,
+      done,
+      ...(o.procedure ? { procedure: true as const } : {}),
+      ...(o.procedure && session.skipProcedures ? { skipped: true as const } : {}),
+      ...(!done && graded?.note && graded.changed ? { note: graded.note } : {}),
+    };
+  });
   const won = objectives.every((o) => o.done || o.skipped);
   const justWon = won && !session.won;
   session.won ||= won;
   session.state = work;
   const risk = riskIn(session, work);
   return { out, exit, ...(ui ? { ui } : {}), events, hints, objectives, won, justWon, ...(risk ? { risk } : {}) };
+}
+
+/** Grade a check's file; `changed`: the player has written it (a note before that would nag). */
+function gradeIn(session: Session, work: SimState, check: CheckSpec) {
+  const n = work.fs[check.file];
+  const text = n?.type === 'file' ? (n.content ?? '') : undefined;
+  const before = session.initial.fs[check.file];
+  const changed = text !== (before?.type === 'file' ? (before.content ?? '') : undefined);
+  return { ...grade(check, text), changed };
 }
 
 function riskIn(session: Session, work: SimState): Risk | null {
@@ -215,11 +242,13 @@ function riskIn(session: Session, work: SimState): Risk | null {
 /** A hustle's risk of getting caught as the machine stands now; null for a scenario without one. */
 export const riskOf = (session: Session): Risk | null => riskIn(session, session.state);
 
-/** Commands that read what is inside a file (the opened() fact); listing and sizing do not. */
-const READERS = new Set(['cat', 'less', 'tail', 'grep', 'edit', 'nano', 'vi', 'vim', 'mv']);
+/** Commands that read what is inside a file (the opened() fact); listing and sizing (ls, du, wc) do not. */
+const READERS = new Set(['cat', 'less', 'tail', 'head', 'grep', 'sort', 'uniq', 'edit', 'nano', 'vi', 'vim', 'mv']);
 /** Flags whose next word is a value, never a path. */
 const VALUE_FLAGS: Record<string, string[]> = {
   tail: ['-n'],
+  head: ['-n'],
+  find: ['-name', '-iname', '-type', '-maxdepth', '-size'],
   grep: ['-e', '-m', '-A', '-B', '-C'],
   journalctl: ['-u', '-n'],
   kubectl: ['-n', '--namespace', '-o', '--output', '--tail'],
@@ -227,7 +256,8 @@ const VALUE_FLAGS: Record<string, string[]> = {
 
 /** Does a command line's words name a recursive walk (grep -r, du, rm -r)? */
 function recursive(name: string, args: readonly string[]): boolean {
-  if (name === 'du') return true;
+  // du and find always walk the folders they are given (the working directory without one)
+  if (name === 'du' || name === 'find') return true;
   if (name !== 'grep' && name !== 'rm') return false;
   return args.some((a) => a === '--recursive' || (/^-[A-Za-z]+$/.test(a) && /[rR]/.test(a)));
 }
@@ -298,6 +328,7 @@ export function run(session: Session, rawLine: string): RunResult {
   let ui: Ui | undefined;
   let outage = false;
 
+  if (work.history.length < 500) work.history.push(line);
   const parsed = parseLine(line);
   if (!parsed.ok) {
     out.push(parsed.error === 'unsupported' ? t('sh.unsupported', { op: parsed.op }) : t(`sh.${parsed.error}`));
@@ -315,9 +346,12 @@ export function run(session: Session, rawLine: string): RunResult {
       }
       const cmd = own(COMMANDS, name);
       if (cmd) touch(work, name, args.slice(1));
-      if (!cmd) {
+      if (!cmd || !available(work, name)) {
         out.length = 0;
         out.push(t('sh.not_found', { cmd: name }));
+        // the gaps players hit (src/sim/unknown.ts collects them in the page); a command this
+        // machine lacks but others have (nginx) is not a gap
+        if (!cmd && !work.unknown.includes(name) && work.unknown.length < 100) work.unknown.push(name);
         exit = 127;
         failed = true;
         break;
@@ -362,13 +396,53 @@ export function run(session: Session, rawLine: string): RunResult {
   return settle(session, work, out, exit, ui, pre);
 }
 
-/** The editor's Save. The path comes from the editor ui returned by `edit`. */
+/** The editor's Save. The path comes from the editor ui returned by `edit` (or kubectl edit). */
 export function saveFile(session: Session, path: string, content: string): RunResult {
   const work = structuredClone(session.state);
   const p = normalize(path);
   writeFile(work.fs, p, stripControl(content.replace(/\r\n?/g, '\n')));
-  if (!work.ran.includes('edit')) work.ran.push('edit');
-  if (!work.touched.includes(p)) work.touched.push(p);
-  if (!work.opened.includes(p)) work.opened.push(p);
-  return settle(session, work, [], 0, undefined, []);
+  const out: string[] = [];
+  let exit = 0;
+  let ui: Ui | undefined;
+  const edit = work.kubeEdit;
+  if (edit && edit.path === p) {
+    // kubectl edit: saving the temporary file applies it to the object it came from
+    const env = scenarioEnv({ state: () => work, initial: session.initial, spec: session.spec, hintBoost: 0 });
+    const ctx: Ctx = { s: work, spec: session.spec, env, t: session.t, serviceRules: session.compiled.serviceRules, deploymentRules: session.compiled.deploymentRules };
+    const r = applyManifest(ctx, p, p, edit.key.split('/')[1] ?? 'default', edit.key);
+    if (r.bad) {
+      // like kubectl, the editor opens again on the same text, so nothing typed is lost
+      out.push(r.line, session.t('sh.kubectl_edit_again'));
+      exit = 1;
+      const n = work.fs[p];
+      ui = { editor: { path: p, content: n?.type === 'file' ? (n.content ?? '') : '' } };
+    } else {
+      out.push(r.line.replace(/ (configured|unchanged|created)$/, (_m, how: string) => (how === 'unchanged' ? ' skipped: no changes' : ' edited')));
+      // an edited Deployment rolls out new pods, as apply does
+      if (r.rollout) rollout(ctx, r.rollout);
+      work.kubeEdit = null;
+      delete work.fs[p];
+    }
+  } else {
+    if (!work.ran.includes('edit')) work.ran.push('edit');
+    if (!work.touched.includes(p)) work.touched.push(p);
+    if (!work.opened.includes(p)) work.opened.push(p);
+  }
+  return settle(session, work, out, exit, ui, []);
+}
+
+/** The editor closed without saving: a kubectl edit is cancelled ("Edit cancelled, no changes made."). */
+export function cancelEdit(session: Session, path: string): string[] {
+  const edit = session.state.kubeEdit;
+  if (!edit || edit.path !== normalize(path)) return [];
+  const work = structuredClone(session.state);
+  delete work.fs[edit.path];
+  work.kubeEdit = null;
+  session.state = work;
+  return ['Edit cancelled, no changes made.'];
+}
+
+/** A command this machine has: nginx only where nginx is installed. */
+function available(s: SimState, name: string): boolean {
+  return name !== 'nginx' || hasNginx(s);
 }

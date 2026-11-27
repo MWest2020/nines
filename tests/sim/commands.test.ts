@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { scenarioEnv } from '../../src/sim/facts';
 import { createSession, prompt, riskOf, run, saveFile } from '../../src/sim/session';
-import { FIXTURE, session, sh, steps } from '../helpers';
+import { COMMANDS, USAGE } from '../../src/sim/shell/commands';
+import { FIXTURE, session, sh, steps, t } from '../helpers';
 
 const fresh = () => session(FIXTURE);
 
@@ -325,7 +326,7 @@ describe('kubectl', () => {
     expect(sh(s, 'kubectl logs nope')).toBe('Error from server (NotFound): pods "nope" not found');
     expect(sh(s, 'kubectl rollout restart deployment/nope')).toBe('Error from server (NotFound): deployments.apps "nope" not found');
     expect(sh(s, 'kubectl describe pod x')).toBe('Error from server (NotFound): pods "x" not found');
-    expect(sh(s, 'kubectl describe deployment api')).toMatch(/^usage: kubectl/);
+    expect(sh(s, 'kubectl describe secret x')).toMatch(/doesn't have a resource type "secret"/);
   });
 });
 
@@ -380,7 +381,7 @@ describe('the session', () => {
   it('unknown commands, unsupported syntax, blank lines', () => {
     const s = fresh();
     expect(run(s, 'vim2 x').exit).toBe(127);
-    expect(sh(s, 'vim2 x')).toBe('vim2: command not found');
+    expect(sh(s, 'vim2 x')).toMatch(/^vim2: command not found. .*help lists/);
     expect(sh(s, 'ls > out.txt')).toMatch(/has no '>'/);
     const before = s.state.counters.commands;
     run(s, '   ');
@@ -407,7 +408,7 @@ describe('the session', () => {
   });
   it('strips escape sequences from what the player types and saves', () => {
     const s = fresh();
-    expect(sh(s, 'x\u001b[31my\u0007')).toBe('x[31my: command not found');
+    expect(sh(s, 'x\u001b[31my\u0007')).toMatch(/^x\[31my: command not found/);
     saveFile(s, '/tmp/f', 'a\u001b[31mb\r\nc\tz\n');
     expect(s.state.fs['/tmp/f']).toMatchObject({ content: 'a[31mb\nc\tz\n' });
   });
@@ -679,5 +680,20 @@ describe('kubectl for Medior City: readiness, rollouts from apply, rollout statu
     saveFile(t, '/home/dev/d.yaml', dep('/ready').replace('  namespace: shop\n', ''));
     expect(sh(t, 'kubectl apply -f d.yaml')).toBe('deployment.apps/api created');
     expect(run(t, 'kubectl get pods -n shop').out[1]).toMatch(/0\/1/);
+  });
+});
+
+// The base shell, nginx and kubectl have their own files (tests/sim/base.test.ts, nginx.test.ts,
+// kubectl.test.ts); this keeps AGENTS.md's rule that every command is covered here too.
+describe('every command', () => {
+  it('has usage and a help line in both languages, and runs on a fresh machine without throwing', () => {
+    for (const name of Object.keys(COMMANDS)) {
+      if (['nano', 'vi', 'vim', 'printenv', 'killall'].includes(name)) continue; // aliases
+      expect(USAGE[name], name).toBeTruthy();
+      expect(t(`help.${name}`), name).not.toBe(`help.${name}`);
+      const s = session(FIXTURE);
+      expect(() => run(s, name), name).not.toThrow();
+      expect(() => run(s, `${name} --help-me`), name).not.toThrow();
+    }
   });
 });

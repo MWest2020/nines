@@ -89,6 +89,7 @@ deployments:
 quick:
   - "cat ~/handover.txt"
   - kubectl get pods -n shop
+  - kubectl get deploy -n shop
   - kubectl describe pods -n shop
   - kubectl logs deployment/shop-api -n shop
   - "ls ~/shop-k8s"
@@ -102,6 +103,10 @@ hints:
   - {id: apply, when: 'ran("edit") && !ran("kubectl apply") && (restarted("shop-api") || commands >= 12)', text: hint.apply}
   - {id: restart, when: 'ran("kubectl apply") && applied_value("configmap/shop/shop-api-config", "LOG_LEVEL") != "verbose" && !pods_running("shop-api") && (fails >= 3 || commands >= 14)', text: hint.restart}
 events:
+  # kubectl edit patches the cluster by hand: it works now, but the file still says verbose
+  - id: hand-edit
+    when: 'ran("kubectl edit") && file_contains("/home/dev/shop-k8s/configmap.yaml", "LOG_LEVEL: verbose")'
+    say: event.hand_edit
   - id: manifest-gone
     when: 'removed("/home/dev/shop-k8s/configmap.yaml")'
     say: event.manifest_gone

@@ -168,21 +168,38 @@ quick:
   - help
 objectives:
   - {id: scope, text: obj.scope, done_when: 'touched("/home/pentest/engagement/scope.txt")'}
+  # graded fairly (src/sim/check.ts): words in any case and either language, one severity on the
+  # Severity line; the panel says what is still missing
   - id: where
     text: obj.where
-    done_when: 'file_contains("/home/pentest/engagement/finding-01.txt", "/_debug") && (file_contains("/home/pentest/engagement/finding-01.txt", "debug = true") || file_contains("/home/pentest/engagement/finding-01.txt", "debug=true") || file_contains("/home/pentest/engagement/finding-01.txt", "settings.ini") || file_contains("/home/pentest/engagement/finding-01.txt", "debug mode") || file_contains("/home/pentest/engagement/finding-01.txt", "debugmodus"))'
+    check:
+      file: /home/pentest/engagement/finding-01.txt
+      mentions:
+        - {any: [/_debug], missing: check.where_path}
+        - {any: ["debug = true", "debug=true", settings.ini, debug mode, debugmodus, debug-modus], missing: check.where_setting}
   - id: what
     text: obj.what
-    done_when: 'file_contains("/home/pentest/engagement/finding-01.txt", "KEY") || file_contains("/home/pentest/engagement/finding-01.txt", "key") || file_contains("/home/pentest/engagement/finding-01.txt", "PASSWORD") || file_contains("/home/pentest/engagement/finding-01.txt", "password") || file_contains("/home/pentest/engagement/finding-01.txt", "wachtwoord") || file_contains("/home/pentest/engagement/finding-01.txt", "secret") || file_contains("/home/pentest/engagement/finding-01.txt", "geheim")'
+    check:
+      file: /home/pentest/engagement/finding-01.txt
+      mentions:
+        - {any: [key, password, wachtwoord, secret, geheim, token], missing: check.what_secrets}
   - id: severity
     text: obj.severity
-    done_when: 'file_contains("/home/pentest/engagement/finding-01.txt", "Severity: high") || file_contains("/home/pentest/engagement/finding-01.txt", "Severity: High") || file_contains("/home/pentest/engagement/finding-01.txt", "Severity: critical") || file_contains("/home/pentest/engagement/finding-01.txt", "Severity: Critical") || file_contains("/home/pentest/engagement/finding-01.txt", "Severity: hoog") || file_contains("/home/pentest/engagement/finding-01.txt", "Severity: Hoog")'
+    check:
+      file: /home/pentest/engagement/finding-01.txt
+      choice: {field: Severity, scale: [low, medium, high, critical], accept: [high, critical], wrong: check.severity_low}
   - id: close
     text: obj.close
-    done_when: 'file_contains("/home/pentest/engagement/finding-01.txt", "false") || file_contains("/home/pentest/engagement/finding-01.txt", "deny") || file_contains("/home/pentest/engagement/finding-01.txt", "remov") || file_contains("/home/pentest/engagement/finding-01.txt", "disabl") || file_contains("/home/pentest/engagement/finding-01.txt", "verwijder") || file_contains("/home/pentest/engagement/finding-01.txt", "uitzet") || file_contains("/home/pentest/engagement/finding-01.txt", "afscherm")'
+    check:
+      file: /home/pentest/engagement/finding-01.txt
+      mentions:
+        - {any: ["false", deny, denied, remov, disabl, "debug off", "switch off", "turn off", "turned off", verwijder, uitzet, uit te zetten, afscherm, block, blokkeer, "403"], missing: check.close_missing}
   - id: rotate
     text: obj.rotate
-    done_when: 'file_contains("/home/pentest/engagement/finding-01.txt", "rotat") || file_contains("/home/pentest/engagement/finding-01.txt", "roteer") || file_contains("/home/pentest/engagement/finding-01.txt", "roteren") || file_contains("/home/pentest/engagement/finding-01.txt", "revoke") || file_contains("/home/pentest/engagement/finding-01.txt", "intrek") || file_contains("/home/pentest/engagement/finding-01.txt", "new key") || file_contains("/home/pentest/engagement/finding-01.txt", "nieuwe")'
+    check:
+      file: /home/pentest/engagement/finding-01.txt
+      mentions:
+        - {any: [rotat, roteer, roteren, revoke, intrek, new key, nieuwe, replace, vervang], missing: check.rotate_missing}
 hints:
   - {id: read-scope, when: 'commands >= 2 && !touched("/home/pentest/engagement/scope.txt")', text: hint.scope}
   - {id: config, when: 'touched("/home/pentest/engagement/scope.txt") && !touched("/etc/nginx/sites-enabled/staging") && !touched("/srv/staging/app/settings.ini") && commands >= 5', text: hint.config}

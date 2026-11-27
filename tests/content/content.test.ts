@@ -115,6 +115,21 @@ describe('the validator rejects broken content', () => {
     expect(errorsAfter('quests/repair-cafe/scenario.yaml', (s) => s.replace('{id: logbook, text: obj.logbook, done_when', '{id: logbook, text: obj.logbook, procedure: true, done_when'))).toMatch(/procedure objectives are a job's \(a contractor skips them\); this quest is a service/);
     expect(errorsAfter('quests/disk-full/quest.yaml', (s) => s.replace('paths: [sre, systems, devops]', 'paths: [sre, hacker]'))).toMatch(/must be equal to one of the allowed values/);
   });
+  it('playtest fields: checks, sessions, carried flags and dialogue choices are validated', () => {
+    const v = 'quests/vending-prices/scenario.yaml';
+    const b = 'quests/bank-pentest/scenario.yaml';
+    // a check must not pass on the template it ships, and its keys must exist
+    expect(errorsAfter(b, (s) => s.replace('accept: [high, critical]', 'accept: [high, critical, nope]'))).toMatch(/must be equal to pattern|every accepted value must be on the scale/);
+    expect(errorsAfter(b, (s) => s.replace('missing: check.where_path', 'missing: check.nope'))).toMatch(/unknown locale key "check.nope"/);
+    expect(errorsAfter(b, (s) => s.replace('Severity: ?', 'Severity: high').replace('Where: ?', 'Where: autoindex on /exports/'))).toMatch(/check passes on the file as shipped/);
+    expect(errorsAfter(b, (s) => s.replace('    check:\n      file: /home/pentest/engagement/finding-01.txt\n      choice:', '    check:\n      file: /home/pentest/engagement/finding-01.txt\n      nope:'))).toMatch(/additional properties|must have required property/);
+    // sessions and carried flags
+    expect(errorsAfter(v, (s) => s.replace(`when: 'session_active("card") && !flag`, `when: 'session_active("kard") && !flag`))).toMatch(/no such session in this scenario/);
+    expect(errorsAfter(v, (s) => s.replace('{flag: borrowed-card, caught_fine: 150, taken_flag: card-taken}', '{flag: stolen-car, caught_fine: 150}'))).toMatch(/cover.flag "borrowed-card" must be listed under carry|nothing sets the progress flag "stolen-car"/);
+    expect(errorsAfter(v, (s) => s.replace('id: before, user: guest, tty: pts/0', 'id: card, user: guest, tty: pts/1'))).toMatch(/session ids must be unique/);
+    // a dialogue choice's keys must exist
+    expect(errorsAfter('npcs/ans/npc.yaml', (s) => s.replace('text: choice.leave', 'text: choice.nope'))).toMatch(/unknown locale key "choice.nope"/);
+  });
   it('requirements may not form a cycle', () => {
     copy();
     edit('quests/disk-full/quest.yaml', (s) => s.replace('requires: []', 'requires: [service-down]'));

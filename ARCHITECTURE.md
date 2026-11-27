@@ -28,13 +28,22 @@ src/
     expr.ts         lexer, parser, type checker, evaluator
     registries.ts   which facts content may ask about, with their types
   sim/            the terminal simulator (pure)
-    state.ts        SimState and createState(scenario)
+    base.ts         the shared base machine: /etc, users, logins, the fake clock
+    state.ts        SimState and createState(scenario, carried flags)
     vfs.ts          filesystem queries and changes, globbing, disk usage
     path.ts, size.ts  path and size helpers
     ci.ts           the "nines-ci" pipeline validator
     facts.ts        SCENARIO_FACTS implemented over SimState
+    check.ts        fair grading of free text (an objective's `check`), with a note on what is wrong
+    unknown.ts      the dev-only list of commands players typed that no machine has
     shell/parse.ts  command line and flag parser
-    shell/commands.ts  the commands
+    shell/util.ts   what commands share: the signature, flags, usage lines, the fake clock
+    shell/commands.ts  files, services, git, help and man; COMMANDS gathers every module
+    shell/basic.ts  the base shell: whoami, id, hostname, uname, env, echo, date, uptime, head,
+                    wc, sort, uniq, find, history, which
+    shell/procs.ts  logins and processes: who, w, last, ps, kill, pkill, killall, logout
+    shell/nginx.ts  nginx -t|-T|-v|-s and the config test systemctl runs before starting nginx
+    shell/kubectl.ts  kubectl against the stored cluster model
     session.ts      run a line, save a file, evaluate events, hints, objectives
   battle/         battles: someone questions the player (pure)
     engine.ts       BattleState, rounds, meters, retry, hints
@@ -47,6 +56,7 @@ src/
     save.ts         save format, versioning, migrations
     progress.ts     PROGRESS_FACTS implemented over the saved game
     game.ts         money, XP, quest completion, shop purchases, the Career Trail's state, hustles
+    choice.ts       a dialogue choice's karma and flag
     karma.ts        karma, the meter, fines, the agency, community service, the seeded risk roll,
                     the contractor's multipliers
     tokens.ts       AI tokens: hints cost a token and scale a quest's reward
@@ -122,7 +132,10 @@ The terminal is not a shell. It is a small simulator of one machine per quest, d
 | Cluster | `cluster: Record<objectKey, content>` | What the cluster runs, per object (`configmap/shop/shop-api-config`: kind, `metadata.namespace` or the `-n` namespace, `metadata.name`): the manifests listed in the scenario's `cluster` at their starting content, then whatever `kubectl apply -f` sent for that object, from any file (a directory applies its `*.yaml`/`*.yml` files). Saving a manifest changes the disk, not the cluster; `applied_value(object, key)` and `applied_contains(object, text)` read the cluster's copy. Apply checks only the shape (`kind`, `metadata.name`, no tab in the indentation), ignores comments and blank lines, and prints `created`, `configured` or `unchanged` with kubectl's resource name (`deployment.apps/x`). |
 | Git | `git: {root, branch, head, index, commits}` | `head` and `index` map repo-relative paths to a content signature. The working tree is the filesystem. `status` diffs the three; `add` copies working tree to index; `commit` copies index to head. |
 | Pipeline | `pipeline: {status: none\|passed\|failed, runs}` | When the scenario names a pipeline file, every commit "runs CI": the committed file goes through the `nines-ci` validator and the result is printed and stored. `nines-ci` (`sim/ci.ts`) knows stages, jobs with `stage`, `script`, `needs`, `image`, and since Medior City a `cache` (`key`: a file whose hash keys it, `paths`) and `secrets` (names from the CI's secret store, never values). |
-| Bookkeeping | `cwd`, `oldpwd`, `counters {commands, fails}`, `ran[]`, `restarted[]`, `flags`, `firedEvents[]`, `shownHints[]`, `generation` | What the player did, for hints and conditions. `ran` holds command names and, for systemctl, kubectl and git, "name subcommand" (`git commit`). |
+| Base | `/etc` (passwd, group, hostname, hosts, os-release, motd, shells), `/home`, `/root`, `/tmp`, `/usr/bin`, `/var/log`; nginx's package files where nginx is configured | `src/sim/base.ts`, Mark's playtest of 27 Nov 2026. The scenario's own files override these; their bytes count as part of the mount's `base_used`, so `df` and `disk_usage()` do not move. |
+| Logins | `logins: {id, user, tty, from, login, pid, self, active, logout?, relogin?}[]` | From the scenario's `sessions`, or the player's own default shell (`you`). `who`, `w`, `last` read them; `logout`, `kill <pid>` and `pkill -u/-t` end them. A `relogin` session is a kiosk: logging out of it logs straight back in, anonymously, and the shell stays. `session_active(id)` reads it. Processes for `ps` are derived: init, cron, sshd, one per running service (nginx as master and worker), one shell per login; killing a service's process fails the service. |
+| Rollouts | `rollouts: Record<deployment, {replicas, revisions: {rs, cause}[]}>`, `kubeEdit` | `kubectl scale` sets replicas (and adds or removes pods), each rollout adds a revision (`rollout history`, `undo`). `kubectl edit` writes the object to a temporary file in `/tmp`, opens the editor and remembers it in `kubeEdit`; saving applies that file to the object (kind and name may not change), cancelling removes it. |
+| Bookkeeping | `history`, `unknown`, `cwd`, `oldpwd`, `counters {commands, fails}`, `ran[]`, `restarted[]`, `flags`, `firedEvents[]`, `shownHints[]`, `generation` | What the player did, for hints and conditions. `ran` holds command names and, for systemctl, kubectl and git, "name subcommand" (`git commit`). |
 
 No clocks and no randomness: log timestamps come from a fake clock that moves 7 seconds per
 command, and pod names come from a hash of the deployment and a counter. The same inputs give
@@ -162,12 +175,16 @@ may change the working copy of the state.
 | `du` | `-s -h -c`, several operands and globs, recursive listing without `-s` |
 | `rm` | `-r -f -v`; see Consequences |
 | `mv` | rename, move into a dir, several sources into a dir |
-| `systemctl` | `status`, `restart` (and `start`) |
+| `systemctl` | `status`, `restart`, `start`, `stop`, `reload`, `is-active`; for nginx a start or reload runs the config test first and fails with its error |
 | `journalctl` | `-u unit`, `-n N`, `-xe` accepted, `--no-pager` |
-| `kubectl` | `get pods\|deployments [-n ns \| -A]`, `describe pod[s] [name or prefix] [-n ns]`, `logs [-f] pod\|deployment/x [--tail N]`, `apply -f file\|dir`, `rollout restart\|status deployment/x` (status does not wait: it says where the rollout stands) |
-| `git` | `status`, `add <paths> \| . \| -A`, `commit -m msg [-a]` |
+| `nginx` | only where nginx is installed: `-t` (OK, or `[emerg]` with file:line), `-T` (the test and every file it read), `-v`, `-V`, `-s reload\|stop\|quit\|reopen`; includes and globs relative to `/etc/nginx`, `types`/`map` blocks as data, a list of known directives |
+| `kubectl` | `get pods\|deploy\|svc\|cm\|ns\|events\|rs\|nodes\|all [name] [-n ns \| -A] [-o wide\|yaml\|name] [-l app=x]`, `describe pod\|deploy\|svc\|cm\|node`, `logs [-f] pod\|deployment/x [--tail N]`, `apply -f file\|dir`, `rollout restart\|status\|history\|undo` (status does not wait), `scale --replicas=N`, `edit` (the built-in editor), `delete pod` (its Deployment makes a new one, which starts like any fresh pod; also `delete cm\|svc`), `top pods\|nodes` (simulated), `version`, `config current-context` |
+| `git` | `status`, `add <paths> \| . \| -A`, `commit -m msg [-a]`, `log [--oneline] [-n N]`, `diff [--staged] [--name-only]`, `restore [--staged]`, `branch`, `-C <dir>`; outside the repository it names where the repository is |
 | `edit` (`nano`, `vi`, `vim`) | opens the built-in editor (a UI action); saving calls `saveFile` |
+| the base shell | `whoami`, `id`, `hostname`, `uname [-a]`, `env`/`printenv`, `echo`, `date`, `uptime`, `head`, `wc`, `sort [-r -n -h -u -f]`, `uniq [-c -d -u]`, `find [-name -iname -type -maxdepth -size]`, `which`, `man`, `history`; `who`, `w`, `last`, `ps [aux \| -ef]`, `kill`, `pkill`/`killall [-u -t]`, `logout` |
 | `clear`, `exit` | UI actions |
+
+**Unknown commands** answer honestly: "foo: command not found. This machine's shell has no 'foo' (yet); help lists what it does have." Each name goes once into `SimState.unknown`; the terminal overlay copies it into a page-wide list (`src/sim/unknown.ts`, at most 200, never shown to the player and never sent anywhere), so the simulator itself stays free of side effects. A command other machines have (`nginx` where nginx is not installed) is not counted as a gap. The browser exposes it as `ninesUnknownCommands()` in `vite dev` or with `localStorage nines.debug = 1`; the smoke test sets that and prints the list, so the gaps players hit show up in test runs.
 
 Output imitates the real tools closely enough that what the player learns transfers.
 
@@ -359,10 +376,12 @@ with the state they read:
 | `pods_running(deployment)` | boolean, all pods Running |
 | `ran(command)` | boolean, `"df"` or `"git commit"` |
 | `flag(name)` | boolean, set by events |
-| `touched(path)` | boolean: a command named `path` or something inside it as an operand (cd, cat, ls, less, edit, any pipe stage; not flag values or grep's pattern), or a recursive command (grep -r, du, rm -r; the working directory without an operand) walked a folder above it |
-| `opened(path)` | boolean: a reading command (cat, less, tail, grep, edit, mv) opened that file or one inside that folder, or grep -r read through a folder above it; `ls` and `du` only touch |
+| `touched(path)` | boolean: a command named `path` or something inside it as an operand (cd, cat, ls, less, edit, any pipe stage; not flag values or grep's pattern), or a recursive command (grep -r, du, find, rm -r; the working directory without an operand) walked a folder above it |
+| `opened(path)` | boolean: a reading command (cat, less, tail, head, grep, sort, uniq, edit, mv) opened that file or one inside that folder, or grep -r read through a folder above it; `ls`, `du` and `wc` only touch |
 | `pipeline_valid` | boolean, the pipeline file in the working tree validates |
 | `pipeline_status` | `none` \| `passed` \| `failed`, the last CI run |
+| `nginx_config_ok` | boolean: `nginx -t` passes (false without an nginx config) |
+| `session_active(id)` | boolean: the login with this id (scenario `sessions`, or `you`) is still logged in |
 | `git_clean`, `commits`, `fails`, `commands` | boolean, numbers |
 
 | Progress facts (`core/progress.ts`) | Type |
@@ -455,7 +474,14 @@ deployments:
         namespace?, replicas?, image?, config_map?}   # image and config_map show in kubectl describe
 cluster?: [/home/dev/shop-k8s/configmap.yaml]   # manifests whose objects the cluster runs at the start
 git: {root: /home/dev/shop, pipeline: {file: .nines-ci.yml, validator: nines-ci}}
-objectives: [{id, text, done_when, procedure?}]   # all true = quest complete; a contractor skips procedures
+objectives: [{id, text, done_when?, check?, procedure?}]   # all true = quest complete; a contractor skips procedures
+#   check: {file, fields?: [Name | {name, number}], choice?: {field, scale, accept, wrong?}, mentions?: [{any, missing}]}
+#   free text graded fairly (src/sim/check.ts): `Name: value` lines filled in (1.25 = 1,25 = €1.25),
+#   exactly one scale value on a `Field:` line (Dutch words too; two values is a note, not a pass),
+#   words in any case. While it fails, once the player has written the file, the objectives
+#   panel shows a note saying what is wrong ("Severity line has two values: high, critical. Pick one.").
+sessions?: [{id, user?, tty, from, login?, self?, logout?, relogin?, cover?: {flag, from}}]   # logins (who, w, last)
+carry?: [{flag, caught_fine?, taken_flag?}]   # progress flags from the save the machine starts with (flag() reads them)
 hints: [{id, when, text}]
 events: [{id, when, say, money?, karma?, reset?, set_flag?}]
 risk?: {base, factors: [{id, when, add, text}]}   # a hustle's chance of getting caught (only a hustle)
@@ -470,7 +496,7 @@ name: npc.name
 sprite?: {file: femke.png, frame: 16, source: "drawn by ...", license: CC0-1.0}
 tint?: "#c86848"                   # placeholder sprite colour when there is no sheet
 spawn: {map: junior-village, slot: npc-1, facing: down}
-dialogue: [{when?: '<progress condition>', lines: [..], intro?: true}]   # first match is spoken;
+dialogue: [{when?: '<progress condition>', lines: [..], intro?: true, choices?: [{text, lines?, karma?, set_flag?}]}]   # first match is spoken;
                                    # an intro entry that holds is also said before a quest offer
 role?: coach                       # the career coach: her lines, then the career screen
 
@@ -502,6 +528,11 @@ file and then what a schema cannot express:
   and the same `{placeholders}`, and a folder has no unused keys;
 - paths are absolute and normalised, a `/` mount exists, a pipeline file has content, nothing
   lies below a file, `home` and `cwd` are directories;
+- a `check` names locale keys that exist (`missing`, `wrong`), accepts only values on its scale,
+  and fails on the file the scenario ships (an untouched template never counts as done);
+  session ids are unique, at most one is `self`, a cover names a carried flag; a carried flag is
+  set by something (an event's `set_flag` or a dialogue choice's), and `caught_fine` is a hustle's;
+  `session_active` names a session of that scenario; `flag()` may name a carried flag;
 - the scenario actually starts (`createSession`); a battle is won by its perfect answers and
   lost by its worst (see Battles);
 - sprites are real PNGs whose size is 3 x 4 frames;
@@ -775,9 +806,19 @@ City); `karma` (-100..100), `strikes` (times caught since the last community ser
     marks lines that contain a tab with `⇥`, the status line names them, Tab inserts two
     spaces, Ctrl+S or Save calls `saveFile` and re-checks the objectives, Esc or Cancel
     discards.
-  - **The win.** On `justWon` the overlay calls `completeQuest` (pays once, saves), shows
-    "Quest complete!" with the reward, and Continue closes it; then `showQuestDone` plays the
-    giver's done lines and the world takes control back.
+  - **The win.** On `justWon` the overlay calls `completeQuest` (pays once, saves) and shows the
+    done banner ("Assignment complete", "Quest complete!" and the reward) with two buttons: Close
+    (focused) and Practice again. Practice again starts the same machine fresh in the same overlay
+    (a "practice" tag in the header); the quest is done, so a win pays nothing and says so, hints
+    are free and penalties still cost (Economy, below). A done quest's terminal opened from the
+    world starts as a practice run too. After Close, `showQuestDone` plays the giver's done lines
+    and the world takes control back. A battle's end screen offers Practice again after a win and
+    Try again after a loss.
+  - **Notes.** An objective with a `check` that still fails shows its note under it, in orange,
+    once the player has written that file.
+  - **Underscores.** xterm draws with `lineHeight: 1.2` (and `fit()` counts rows with it), so a
+    glyph's descender stays inside its row: Mark's screenshots showed "[U_]" as "[U ]". The smoke
+    test prints `a_b` and checks the underscore's pixels on a desktop and on an emulated phone.
   - **Look.** The device's monospace font (`ui-monospace, monospace`), DESIGN.md's terminal
     colours (prompt in ice, failed commands in orange). xterm is sized by measuring one cell in
     that font, without the fit addon. Every string is a locale key; the machine's own output
@@ -849,6 +890,15 @@ City); `karma` (-100..100), `strikes` (times caught since the last community ser
   for a fee. Content reads it through `path_chosen` and `career_path(id)`: the mentors' first
   quests open with `available_when: 'path_chosen'`, and a mentor's `intro` dialogue greets their
   own path differently from a side-quester (DESIGN.md, Medior City).
+- **Dialogue choices** (`core/talk.ts`, `core/choice.ts`): an NPC dialogue entry may end in two
+  or three choices, shown as a panel like the menu (`HudScene.choose`); a choice's `karma` goes
+  through `changeKarma` (a gain is paid once per choice, `claimed` `choice/<key>`, so talking
+  again cannot farm it), its `set_flag` into the save, then the NPC replies. Ans's desk
+  (content/npcs/ans) is the social-engineering one: pocketing a library card sets
+  `borrowed-card` (karma -10). The vending job `carry`s that flag: its kiosk login shows that
+  card, its risk drops, and being caught with it adds `caught_fine` to the fine, takes the card and
+  sets `taken_flag` (`card-taken`), so it never lies on Ans's desk again
+  (`finishHustle(..., {caughtFine, confiscate, taken})`). Game mechanics only: a choice, never a method.
 - **Karma** (`core/karma.ts`, pure; DESIGN.md, Karma): `reward.karma` and event `karma` go through
   `changeKarma` (bounds; a drop below zero reopens community service; a drop to -60 or below off
   probation brings the agency: a fine and probation). A hustle's terminal win calls

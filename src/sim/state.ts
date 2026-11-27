@@ -3,6 +3,7 @@
 
 import type { PodStatus, ScenarioSpec } from '../content/types';
 import { setOwn } from '../rules/own';
+import { BASE_DIRS, baseFiles, baseLogins, type Login } from './base';
 import { manifestId, objectKey } from './manifest';
 import { dirname, isUnder, normalize } from './path';
 import { parseSize, utf8Length } from './size';
@@ -41,6 +42,8 @@ export interface GitState {
   /** root-relative path -> content signature, staged */
   index: Record<string, string>;
   commits: number;
+  /** what git log shows, oldest first: the import the scenario starts from, then each commit */
+  log: { hash: string; msg: string }[];
 }
 
 export interface SimState {
@@ -76,6 +79,19 @@ export interface SimState {
   /** what the cluster runs: object key ("configmap/shop/shop-api-config") -> the manifest text
    *  last applied for it (kubectl apply -f), from whichever file */
   cluster: Record<string, string>;
+  /** per Deployment: replicas (kubectl scale) and its revisions, oldest first: the ReplicaSet
+   *  hash of each and its change cause (kubectl rollout history) */
+  rollouts: Record<string, { replicas: number; revisions: { rs: string; cause: string }[] }>;
+  /** kubectl edit: the temporary file the editor has open and the object it belongs to */
+  kubeEdit: { path: string; key: string; kind: string; name: string } | null;
+  /** logins (who, w, last); logout, kill and pkill end them */
+  logins: Login[];
+  /** processes the player killed (by pid), so ps stops listing them */
+  killed: number[];
+  /** the lines the player typed, for history */
+  history: string[];
+  /** command names this machine did not have, in order (each once): the gaps players hit */
+  unknown: string[];
 }
 
 export function ensureDir(fs: Record<string, FsNode>, p: string): void {
@@ -115,6 +131,9 @@ export function podSuffix(seed: string, length: number): string {
   return out;
 }
 
+/** A short, git-looking hex hash. */
+export const gitHash = (seed: string): string => podSuffix(seed, 7).replace(/[^0-9a-f]/g, (ch) => 'abcdef'[ch.charCodeAt(0) % 6]!);
+
 export function makePods(
   name: string,
   spec: { namespace?: string; replicas?: number },
@@ -136,8 +155,13 @@ export function makePods(
   }));
 }
 
-export function createState(spec: ScenarioSpec): SimState {
+/** The machine at the start. `flags`: progress flags the scenario carries in from the save. */
+export function createState(spec: ScenarioSpec, flags: Record<string, boolean> = {}): SimState {
   const fs: Record<string, FsNode> = { '/': { type: 'dir' } };
+  // the shared base first; the scenario's own dirs and files go on top of it
+  for (const d of BASE_DIRS) ensureDir(fs, d);
+  const base = baseFiles(spec);
+  for (const [p, content] of Object.entries(base)) writeFile(fs, p, content);
   for (const m of spec.mounts) ensureDir(fs, normalize(m.path));
   for (const d of spec.dirs ?? []) ensureDir(fs, normalize(d));
   for (const [raw, f] of Object.entries(spec.files ?? {})) {
@@ -154,6 +178,12 @@ export function createState(spec: ScenarioSpec): SimState {
   const cwd = normalize(spec.cwd ?? spec.home);
   ensureDir(fs, home);
   ensureDir(fs, cwd);
+  // the base files the scenario kept are part of the space it already counts as used
+  let baseBytes = 0;
+  for (const [p, content] of Object.entries(base)) {
+    const n = fs[p];
+    if (n?.type === 'file' && n.content === content) baseBytes += n.size;
+  }
 
   const services: Record<string, ServiceState> = {};
   for (const [name, s] of Object.entries(spec.services ?? {})) {
@@ -187,7 +217,7 @@ export function createState(spec: ScenarioSpec): SimState {
       const sig = signature(node);
       if (sig !== undefined && isUnder(p, root) && p !== root) setOwn(head, p.slice(root === '/' ? 1 : root.length + 1), sig);
     }
-    git = { root, branch: spec.git.branch ?? 'main', head, index: { ...head }, commits: 0 };
+    git = { root, branch: spec.git.branch ?? 'main', head, index: { ...head }, commits: 0, log: [{ hash: gitHash(`${root}#import`), msg: 'Initial import' }] };
   }
 
   return {
@@ -204,7 +234,12 @@ export function createState(spec: ScenarioSpec): SimState {
         size: parseSize(m.size),
         baseUsed: parseSize(m.base_used ?? 0),
       }))
-      .sort((a, b) => a.path.length - b.path.length),
+      .sort((a, b) => a.path.length - b.path.length)
+      .map((m, _i, all) => {
+        // /etc lives on the longest mount above it: that mount's base_used already holds the base
+        const etc = all.filter((x) => isUnder('/etc', x.path)).at(-1);
+        return m === etc ? { ...m, baseUsed: Math.max(0, m.baseUsed - baseBytes) } : m;
+      }),
     services,
     pods,
     git,
@@ -216,10 +251,16 @@ export function createState(spec: ScenarioSpec): SimState {
     opened: [],
     read: [],
     restarted: [],
-    flags: {},
+    flags: Object.fromEntries((spec.carry ?? []).filter((c) => flags[c.flag] === true).map((c) => [c.flag, true])),
     firedEvents: [],
     shownHints: [],
     generation: 0,
     cluster,
+    rollouts: Object.fromEntries(Object.entries(spec.deployments ?? {}).map(([name, d]) => [name, { replicas: d.replicas ?? 1, revisions: [{ rs: podSuffix(`${name}#0`, 9), cause: '<none>' }] }])),
+    kubeEdit: null,
+    logins: baseLogins(spec, flags),
+    killed: [],
+    history: [],
+    unknown: [],
   };
 }

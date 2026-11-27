@@ -11,5 +11,5 @@ motd: "app-01. The shop is down: nginx failed to start at 03:12. Find out why, f
 obj.web: "nginx is running"
 hint.status: "systemctl status nginx shows the service and its last log lines."
 hint.journal: "Restarting again won't help. Read why it failed: journalctl -u nginx"
-hint.typo: "The log names a file and a line: /etc/nginx/conf.d/shop.conf:2. Open it with edit and look closely at that line."
+hint.typo: "The log names a file and a line: /etc/nginx/conf.d/shop.conf:2. Open it with edit and look closely at that line. nginx -t tells you whether the config is right before you restart."
 event.config_gone: "You deleted the shop's config. If nginx starts now, it will happily serve its 'Welcome to nginx!' page instead of the shop. Write a new shop.conf with edit, or think again."

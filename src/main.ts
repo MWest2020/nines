@@ -14,6 +14,15 @@ import { installBackButton } from './game/back';
 import type { HudScene } from './game/ui/HudScene';
 import { installGameApi, UI_SCENES } from './game/ui/install';
 import { WorldScene } from './game/WorldScene';
+import { unknownCommands } from './sim/unknown';
+
+const debugOn = (): boolean => {
+  try {
+    return localStorage.getItem('nines.debug') === '1';
+  } catch {
+    return false;
+  }
+};
 
 // The save is opened before Phaser starts: a newer version's save is detected here and never
 // written over (src/core/persist.ts).
@@ -40,6 +49,10 @@ new Phaser.Game({
       bridgeWorld(game, api);
       // In `vite dev` only: the API on the console, for trying screens by hand.
       if (import.meta.env.DEV) (globalThis as { nines?: unknown }).nines = api;
+      // The commands players typed that no machine has (src/sim/unknown.ts): a read-only list on
+      // the console in `vite dev`, or with localStorage nines.debug = 1 (the smoke test sets it).
+      // Never shown in the game, never sent anywhere.
+      if (import.meta.env.DEV || debugOn()) (globalThis as { ninesUnknownCommands?: () => readonly string[] }).ninesUnknownCommands = unknownCommands;
     },
     // The page layout (the canvas scaled by a whole number where it fits) and, on touch screens
     // or narrow windows, the on-screen controls (src/game/touch).

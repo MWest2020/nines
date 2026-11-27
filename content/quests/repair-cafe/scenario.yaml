@@ -38,7 +38,7 @@ quick:
   - help
 objectives:
   - {id: booking, text: obj.booking, done_when: 'service("booking-web") == "active"'}
-  - {id: logbook, text: obj.logbook, done_when: 'exists("/home/volunteer/logbook.txt") && !file_contains("/home/volunteer/logbook.txt", "what I did: ?")'}
+  - {id: logbook, text: obj.logbook, done_when: 'exists("/home/volunteer/logbook.txt")', check: {file: /home/volunteer/logbook.txt, fields: [what I did]}}
 hints:
   - {id: status, when: 'commands >= 3 && !ran("systemctl")', text: hint.status}
   - {id: start, when: 'ran("systemctl status") && service("booking-web") != "active" && commands >= 5', text: hint.start}

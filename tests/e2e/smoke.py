@@ -190,6 +190,43 @@ def objectives(page: Page) -> tuple[int, int]:
     return done, page.locator(".nt-objectives li").count()
 
 
+def underscore_visible(page: Page, where: str) -> None:
+    """Mark's screenshots (27 Nov 2026): "[U_]" showed as "[U ]". Print a_b and look at the pixels
+    under the underscore's cell: some must be lit (the glyph is inside the row, not clipped)."""
+    run(page, "echo a_b", "a_b")
+    rect = page.evaluate(
+        """() => {
+        const rows = [...document.querySelectorAll('.nt-screen .xterm-rows > div')];
+        const row = rows.reverse().find((r) => r.textContent.trimEnd() === 'a_b');
+        if (!row) return null;
+        const walker = document.createTreeWalker(row, NodeFilter.SHOW_TEXT);
+        for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+          const i = n.textContent.indexOf('_');
+          if (i < 0) continue;
+          const r = document.createRange();
+          r.setStart(n, i);
+          r.setEnd(n, i + 1);
+          const b = r.getBoundingClientRect();
+          const rb = row.getBoundingClientRect();
+          // the character's cell: its width, the row's full height
+          return { x: b.left, y: rb.top, w: b.width, h: rb.height };
+        }
+        return null;
+      }"""
+    )
+    assert rect and rect["w"] > 0 and rect["h"] > 0, rect
+    shot = page.screenshot(clip={"x": rect["x"], "y": rect["y"], "width": rect["w"], "height": rect["h"]})
+    w, h, bpp, rows = png_pixels(shot)
+    lit = 0
+    for y in range(h):
+        for x in range(w):
+            r, g, b = rows[y][x * bpp : x * bpp + 3]
+            if g > 90 and r + g + b > 200:  # the phosphor green text on #081008
+                lit += 1
+    assert lit >= 2, f"{where}: the underscore in a_b is not drawn ({w}x{h} cell, {lit} lit pixels)"
+    print(f"  {where}: the underscore in a_b is drawn ({lit} lit pixels in its {w}x{h} cell)")
+
+
 def edit_file(page: Page, text: str) -> None:
     """Replace the editor's text by typing it (Tab would indent; this text has none), then Ctrl+S."""
     area = page.locator(".nt-area")
@@ -208,6 +245,9 @@ def finish(page: Page, title_part: str, reward: str | list[str] | None = None) -
     text = dialog.inner_text()
     assert "Quest complete" in text, text
     assert "Reward" in text, text
+    # the done banner: complete, with Close (focused) and Practice again
+    assert "ASSIGNMENT COMPLETE" in text.upper(), text
+    assert dialog.locator(".nt-again").inner_text() == "Practice again", text
     for part in [reward] if isinstance(reward, str) else reward or []:
         assert part in text, (part, text)
     page.keyboard.press("Enter")  # the Continue button has focus
@@ -243,6 +283,7 @@ def open_terminal(page: Page, p: Player, grid: Grid, obj: str) -> None:
 # ---------------------------------------------------------------- the quests
 
 def disk_full(page: Page, shots: Path | None) -> None:
+    underscore_visible(page, "desktop")
     run(page, "df -h", "/dev/sdb1")
     assert "95% /var" in term_text(page), term_text(page)
     run(page, "du -sh /var/*", "/var/log")
@@ -327,6 +368,9 @@ def broken_pipeline(page: Page, shots: Path | None) -> None:
 def service_down(page: Page, shots: Path | None, reward: str | list[str] | None = None) -> None:
     run(page, "systemctl status nginx", "failed")
     run(page, "journalctl -u nginx", 'unknown directive "listn"')
+    # the web server's own test names the file and the line, before any restart
+    run(page, "nginx -t", "/etc/nginx/conf.d/shop.conf:2")
+    assert "test failed" in term_text(page), term_text(page)
     # Esc on a changed buffer asks for a second Esc before it throws the change away
     run(page, "edit /etc/nginx/conf.d/shop.conf")
     page.locator(".nt-editor").wait_for(state="visible")
@@ -340,6 +384,7 @@ def service_down(page: Page, shots: Path | None, reward: str | list[str] | None 
     run(page, "edit /etc/nginx/conf.d/shop.conf", "Closed /etc/nginx/conf.d/shop.conf without saving.")
     page.locator(".nt-editor").wait_for(state="visible")
     edit_file(page, SHOP_CONF_FIXED)
+    run(page, "nginx -t", "test is successful")
     run(page, "systemctl restart nginx")
     finish(page, "Service down", reward)
 
@@ -551,6 +596,8 @@ def crashloop_config(page: Page, shots: Path | None) -> None:
     run(page, "cat ~/handover.txt", "namespace")
     ask_the_ai(page, shots)
     run(page, "kubectl get pods -n shop", "CrashLoopBackOff")
+    run(page, "kubectl get deploy -n shop", "UP-TO-DATE")
+    assert "0/2" in term_text(page), term_text(page)
     run(page, "kubectl describe pods -n shop", "Back-off restarting failed container")
     run(page, "kubectl logs deployment/shop-api -n shop", "invalid LOG_LEVEL")
     run(page, "edit ~/shop-k8s/configmap.yaml")
@@ -604,6 +651,15 @@ def bank_pentest(page: Page, shots: Path | None) -> None:
     run(page, "cat ~/engagement/scope.txt", "OUT OF SCOPE")
     run(page, "cat /etc/nginx/sites-enabled/staging", "autoindex on")
     run(page, "ls -l /srv/www/staging/exports", "db-backup-2026-11-20.sql.gz")
+    # Mark's write-up rated it "critical and high": now the panel says what is wrong
+    run(page, "edit ~/engagement/finding-01.txt")
+    page.locator(".nt-editor").wait_for(state="visible")
+    edit_file(page, PENTEST_FINDING.replace("Severity: high", "Severity: Critical / High"))
+    note = page.locator(".nt-objectives .nt-note")
+    note.wait_for(state="visible", timeout=5000)
+    assert note.inner_text() == "Severity line has two values: high, critical. Pick one.", note.inner_text()
+    if shots:
+        page.screenshot(path=str(shots / "terminal-severity-note.png"))
     run(page, "edit ~/engagement/finding-01.txt")
     page.locator(".nt-editor").wait_for(state="visible")
     edit_file(page, PENTEST_FINDING)
@@ -639,14 +695,56 @@ def toggle_contractor(page: Page) -> None:
 
 def bakery_hotfix_contractor(page: Page, shots: Path | None) -> None:
     """The contractor's quest variant: the procedures are skipped, the job pays 150%."""
-    assert page.locator(".nt-head .nt-tag").inner_text() == "contractor"
+    assert page.locator(".nt-head .nt-tag:not(.nt-practice)").inner_text() == "contractor"
     assert page.locator(".nt-objectives li.nt-skipped").count() == 2, page.locator(".nt-objectives").inner_text()
     run(page, "systemctl status bakery-shop", "is not a number")
     run(page, "edit /srv/bakery/prices.yaml")
     page.locator(".nt-editor").wait_for(state="visible")
     edit_file(page, "# prices in euros, with a dot\nbread: 3.20\ncroissant: 1.80\napple_pie: 14.50\n")
     run(page, "systemctl restart bakery-shop")
-    finish(page, "bakery hotfix (contractor)", reward=["€300 and 25 XP", "Contractor rate: +50%."])
+    # the done banner, then Practice again: a fresh machine, and this time the commit as well
+    dialog = page.locator(".nt-dialog")
+    dialog.wait_for(state="visible", timeout=5000)
+    text = dialog.inner_text()
+    assert "Quest complete" in text and "€300 and 25 XP" in text and "Contractor rate: +50%." in text, text
+    assert "ASSIGNMENT COMPLETE" in text.upper(), text
+    if shots:
+        page.screenshot(path=str(shots / "terminal-done-banner.png"))
+    dialog.locator(".nt-again").click()
+    dialog.wait_for(state="hidden", timeout=5000)
+    assert page.locator(".nt-head .nt-practice").is_visible(), "the practice tag in the header"
+    # xterm draws on its next frame: wait for the practice line, not just the dialog
+    page.wait_for_function("s => document.querySelector('.nt-screen .xterm-rows').innerText.includes(s)", arg="Practice run", timeout=5000)
+    assert objectives(page)[0] == 0, objectives(page)
+    # Femke's rules say commit: from home git names the repository, then it just works
+    run(page, "git status", "The repository on this machine is /srv/bakery")
+    run(page, "edit /srv/bakery/prices.yaml")
+    page.locator(".nt-editor").wait_for(state="visible")
+    edit_file(page, "# prices in euros, with a dot\nbread: 3.20\ncroissant: 1.80\napple_pie: 14.50\n")
+    run(page, "cd /srv/bakery")
+    run(page, "git diff", "+croissant: 1.80")
+    run(page, "git add prices.yaml")
+    run(page, 'git commit -m "prices: a dot, not a comma"', "] prices: a dot, not a comma")
+    run(page, "git log --oneline", "Initial import")
+    run(page, "systemctl restart bakery-shop")
+    # the practice win pays nothing: it says so, and the banner offers another round
+    dialog.wait_for(state="visible", timeout=5000)
+    text = dialog.inner_text()
+    assert "already had the reward" in text and "Practice again" in text, text
+    page.keyboard.press("Enter")  # Close
+    page.locator(".nt-overlay").wait_for(state="detached", timeout=5000)
+    for _ in range(12):
+        page.wait_for_timeout(450)
+        page.keyboard.press("Enter")
+        page.wait_for_timeout(250)
+        if page.locator(".nt-overlay").count() > 0:
+            break
+    else:
+        raise AssertionError("the world did not take control back after the bakery")
+    run(page, "exit")
+    page.locator(".nt-overlay").wait_for(state="detached", timeout=5000)
+    page.wait_for_timeout(300)
+    print("  done: bakery hotfix (contractor), then a practice run with the commit")
 
 
 def vending_hustle(page: Page, shots: Path | None) -> str:
@@ -654,9 +752,12 @@ def vending_hustle(page: Page, shots: Path | None) -> str:
     fine here: the new game's seed is random. Returns 'clean' or 'caught'."""
     heat = page.locator(".nt-heatline")
     assert "40%" in heat.inner_text(), heat.inner_text()  # still signed in with your own card
-    run(page, "cat ~/job.txt", "library card")
+    run(page, "cat ~/job.txt", "who shows it")
     run(page, "cat /mnt/munchr-public/internal/prices-2027.csv", "choco_bar,1.10,1.25")
-    run(page, "rm ~/.kiosk/signed-in-as.txt")
+    # log the guest out: who shows the card, logout signs it out (the kiosk logs back in anonymously)
+    run(page, "who", "(library card 4417)")
+    run(page, "logout", "Signed out: library card 4417")
+    run(page, "who", "kiosk (anonymous)")
     assert "20%" in heat.inner_text(), heat.inner_text()
     if shots:
         page.screenshot(path=str(shots / "terminal-hustle.png"))
@@ -988,6 +1089,7 @@ def touch_portrait(browser, origin: str, device: dict, village: Grid, room: Grid
     # the terminal on a phone: input line and quick strip on screen, typing works
     assert in_view(page, ".nt-inputline", vh) and in_view(page, ".nt-quick", vh)
     run(page, "cat ci-last-run.log", "Tabs are not allowed")
+    underscore_visible(page, "Pixel 7 portrait")
 
     # a keyboard that only shrinks the visual viewport (the overlay follows it)
     kb = round(vh * 0.55)
@@ -1161,6 +1263,8 @@ def main() -> int:
             # play everything with the network off.
             print("desktop, offline after the first load")
             ctx = browser.new_context(viewport={"width": 1280, "height": 800}, locale="en-US")
+            # the dev-only list of commands no machine has (src/sim/unknown.ts), printed at the end
+            ctx.add_init_script("try { localStorage.setItem('nines.debug', '1') } catch (e) {}")
             watch(ctx)
             page = ctx.new_page()
             page.goto(origin + BASE)
@@ -1184,6 +1288,9 @@ def main() -> int:
                 # update check, same origin, outside the page). Playwright's offline switch does
                 # not reach that check; on a real offline device it simply fails. Nothing else
                 # may reach the server.
+                unknown = page.evaluate("() => (globalThis.ninesUnknownCommands ? globalThis.ninesUnknownCommands() : null)")
+                assert unknown is not None, "the debug list of unknown commands is reachable"
+                print(f"  unknown commands typed in this run: {unknown or 'none'}")
                 late = [u for u in Handler.served[served:] if u != BASE + "sw.js"]
                 assert not late, f"requests reached the server while offline: {late}"
                 print("  offline: no request reached the server during the whole play")

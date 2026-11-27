@@ -49,7 +49,7 @@ describe('the vending machine job (a hustle)', () => {
     expect(sh(s, 'ls /mnt/munchr-public')).toMatch(/internal/);
     expect(sh(s, 'cat /mnt/munchr-public/README.txt')).toMatch(/is \/internal still in here/);
     expect(sh(s, 'cat /mnt/munchr-public/internal/prices-2027.csv')).toMatch(/choco_bar,1.10,1.25/);
-    if (signOut) run(s, 'rm ~/.kiosk/signed-in-as.txt');
+    if (signOut) expect(sh(s, 'logout')).toMatch(/Signed out: library card 4417.*anonymous/);
     const drop = editorText(s, '~/drop/for-vince.txt').replace('choco_bar: ?', 'choco_bar: 1.25').replace('cola: ?', 'cola: 1.45');
     return { s, win: saveFile(s, '/home/guest/drop/for-vince.txt', drop) };
   }

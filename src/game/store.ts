@@ -13,7 +13,8 @@ import { progressEnv } from '../core/progress';
 import type { GameState } from '../core/save';
 import * as karma from '../core/karma';
 import * as tokens from '../core/tokens';
-import { type Conversation, conversation } from '../core/talk';
+import { applyChoice, type ChoiceResult } from '../core/choice';
+import { type Conversation, conversation, type TalkChoice } from '../core/talk';
 import type { FiredEvent } from '../sim/session';
 
 export type Change =
@@ -113,12 +114,19 @@ export class GameStore {
   // ---- hustles and the contractor (core/karma.ts)
 
   /** Finish a hustle: roll its risk, then pay or fine (saved at once either way). */
-  finishHustle(id: string, risk: number): rules.HustleResult {
-    const r = rules.finishHustle(this.state, this.content, id, risk);
+  finishHustle(id: string, risk: number, cover: rules.HustleCover = {}): rules.HustleResult {
+    const r = rules.finishHustle(this.state, this.content, id, risk, cover);
     if (r.ok) {
       const change: Change = r.outcome === 'clean' ? { kind: 'reward', reward: r.reward } : { kind: 'caught', quest: id, fine: r.fine, arrested: r.arrested !== null };
       this.commit(r.game, change, true);
     }
+    return r;
+  }
+
+  /** A dialogue choice was made: its karma and flag (core/choice.ts), saved at once. */
+  choose(choice: Pick<TalkChoice, 'text' | 'karma' | 'setFlag'>): ChoiceResult {
+    const r = applyChoice(this.state, this.content, choice);
+    this.commit(r.game, { kind: 'other' }, true);
     return r;
   }
 

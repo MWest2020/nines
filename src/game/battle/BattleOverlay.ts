@@ -566,8 +566,10 @@ class BattleOverlay {
     const outro = won ? s.battle.spec.outro.won : s.battle.spec.outro.lost;
     for (const k of outro) box.append(el('p', undefined, t(questKey(s.quest, k))));
     for (const line of this.lines) box.append(el('p', 'nb-reward', line));
+    if (won) box.append(el('p', 'nb-practice', t('ui.battle.practice_note')));
     const actions = el('div', 'nb-actions');
-    const again = this.button(t('ui.battle.retry'), () => {
+    // a win can be practised again (no second reward); a loss is tried again
+    const again = this.button(t(won ? 'ui.battle.practice' : 'ui.battle.retry'), () => {
       this.set(S.retry(this.s));
       this.focusFirst();
     }, !won);

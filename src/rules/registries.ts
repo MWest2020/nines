@@ -19,6 +19,8 @@ export const SCENARIO_FACTS: Registry = {
     commits: { args: [], returns: 'number' },
     fails: { args: [], returns: 'number' },
     commands: { args: [], returns: 'number' },
+    /** nginx -t passes on this machine (false where nginx has no config) */
+    nginx_config_ok: { args: [], returns: 'boolean' },
   },
   funcs: {
     disk_usage: { args: ['string'], returns: 'number', pathArgs: [0] },
@@ -35,10 +37,12 @@ export const SCENARIO_FACTS: Registry = {
     pods_running: { args: ['string'], returns: 'boolean' },
     ran: { args: ['string'], returns: 'boolean' },
     flag: { args: ['string'], returns: 'boolean' },
+    /** the login with this id (scenario `sessions`) is still logged in */
+    session_active: { args: ['string'], returns: 'boolean' },
     /** a command named this path, or something inside it, as an operand (cd, cat, ls, edit...),
-     *  or swept over it recursively (grep -r, du, rm -r on a folder above it) */
+     *  or swept over it recursively (grep -r, du, find, rm -r on a folder above it) */
     touched: { args: ['string'], returns: 'boolean', pathArgs: [0] },
-    /** a reading command (cat, less, tail, grep, edit, mv) opened this file or one inside this
+    /** a reading command (cat, less, tail, head, grep, sort, uniq, edit, mv) opened this file or one inside this
      *  folder, or grep -r read through a folder above it; ls and du only touch */
     opened: { args: ['string'], returns: 'boolean', pathArgs: [0] },
   },

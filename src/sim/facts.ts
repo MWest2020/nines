@@ -5,6 +5,7 @@ import type { Env } from '../rules/expr';
 import { has, own, setOwn } from '../rules/own';
 import { validateNinesCi } from './ci';
 import { manifestValue } from './manifest';
+import { nginxTest } from './shell/nginx';
 import { isUnder, join } from './path';
 import { signature, type SimState } from './state';
 import { diskUsage, sizeOf } from './vfs';
@@ -59,6 +60,7 @@ export function scenarioEnv(src: FactSource): Env {
       commits: () => s().git?.commits ?? 0,
       fails: () => s().counters.fails + src.hintBoost,
       commands: () => s().counters.commands,
+      nginx_config_ok: () => nginxTest(s())?.ok ?? false,
     },
     funcs: {
       disk_usage: (p) => diskUsage(s(), String(p)),
@@ -82,6 +84,7 @@ export function scenarioEnv(src: FactSource): Env {
       },
       ran: (cmd) => s().ran.includes(String(cmd)),
       flag: (name) => own(s().flags, String(name)) === true,
+      session_active: (id) => s().logins.some((l) => l.id === String(id) && l.active),
       touched: (p) => {
         const want = String(p);
         const st = s();

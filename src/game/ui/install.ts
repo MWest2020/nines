@@ -5,11 +5,11 @@
 import Phaser from 'phaser';
 import { questKey } from '../../content/types';
 import type { LocaleId } from '../../content/types';
-import type { HustleResult, QuestRefusal, Reward } from '../../core/game';
+import type { HustleCover, HustleResult, QuestRefusal, Reward } from '../../core/game';
 import type { Params } from '../../core/i18n';
 import type { GameState } from '../../core/save';
 import type { HintOffer } from '../../core/tokens';
-import { type Conversation, findNpc } from '../../core/talk';
+import { type Conversation, findNpc, type TalkChoice } from '../../core/talk';
 import type { FiredEvent } from '../../sim/session';
 import { type DialogueLine, type GameApi, setGameApi } from '../api';
 import type { GameStore } from '../store';
@@ -85,8 +85,25 @@ export class GameUi implements GameApi {
     const c = this.store.conversation(npcId);
     if (!c) return null;
     await this.showDialogue(c.lines.map((text) => ({ speaker: c.speaker, text })));
+    if (c.choices) await this.answer(c.speaker, c.choices);
     if (c.offer && this.startQuest(c.offer) === 'started') (await this.hud()).toast(this.t('ui.toast.quest', { title: this.t(questKey(c.offer, 'title')) }));
     return c;
+  }
+
+  /** The player picks a dialogue choice; its karma and flag apply, then the NPC replies. */
+  private async answer(speaker: string, choices: readonly TalkChoice[]): Promise<void> {
+    const release = this.hold();
+    try {
+      const hud = await this.hud();
+      const i = await hud.choose(choices.map((c) => this.t(c.text)));
+      const choice = choices[i];
+      if (!choice) return;
+      const r = this.store.choose(choice);
+      await hud.showPages(pagesOf(choice.lines.map((k) => ({ speaker: this.t(speaker), text: this.t(k) }))));
+      if (r.agency) await hud.showPages(pagesOf([{ speaker: this.t('ui.karma.agency_name'), text: `${this.t('ui.karma.agency')} ${this.t('ui.karma.agency_fine', { amount: r.agency.fine })}` }]));
+    } finally {
+      release();
+    }
   }
 
   private open = new Map<string, Promise<void>>();
@@ -159,8 +176,8 @@ export class GameUi implements GameApi {
     return this.store.applyEvents(questId, events);
   }
 
-  finishHustle(questId: string, risk: number): HustleResult {
-    return this.store.finishHustle(questId, risk);
+  finishHustle(questId: string, risk: number, cover?: HustleCover): HustleResult {
+    return this.store.finishHustle(questId, risk, cover);
   }
 
   setContractor(on: boolean): void {

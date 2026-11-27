@@ -220,13 +220,22 @@ export type HustleResult =
     }
   | { ok: false; game: GameState; reason: QuestRefusal };
 
+/** What the player carried into a hustle from the save (scenario `carry`): the extra fine if
+ *  caught with it, and the flags taken away then. */
+export interface HustleCover {
+  caughtFine?: number;
+  confiscate?: string[];
+  /** flags set when caught (scenario carry taken_flag): what was taken stays gone */
+  taken?: string[];
+}
+
 /**
  * Finish a hustle: its risk (the scenario's, from sim/session.ts riskOf, 0 to RISK_CAP) against
  * the seeded roll. Clean: paid like any quest, its karma included. Caught: a fine, a karma hit
  * and a strike, and the job stays active; at ARREST_AFTER strikes the player is arrested: a big
  * fine and probation.
  */
-export function finishHustle(game: GameState, rules: Rules, id: string, risk: number): HustleResult {
+export function finishHustle(game: GameState, rules: Rules, id: string, risk: number, opts: HustleCover = {}): HustleResult {
   const entry = findQuest(rules, id);
   if (!entry || questKind(entry) !== 'hustle') return { ok: false, game, reason: 'unknown' };
   const state = stateOf(game, rules, id);
@@ -243,9 +252,13 @@ export function finishHustle(game: GameState, rules: Rules, id: string, risk: nu
   }
   const strikes = game.strikes + 1;
   const arrest = strikes >= ARREST_AFTER;
-  // an arrest is probation already, so the agency does not come on top of it
-  let g: GameState = { ...game, quests: { ...game.quests, [id]: 'active' }, strikes, caught: game.caught + 1, ...(arrest ? { probation: true } : {}) };
-  const f1 = fine(g, CAUGHT_FINE);
+  // an arrest is probation already, so the agency does not come on top of it; whatever the player
+  // carried in that was not theirs (a borrowed card) is taken, and raises the fine
+  const flags = { ...game.flags };
+  for (const f of opts.confiscate ?? []) delete flags[f];
+  for (const f of opts.taken ?? []) flags[f] = true;
+  let g: GameState = { ...game, flags, quests: { ...game.quests, [id]: 'active' }, strikes, caught: game.caught + 1, ...(arrest ? { probation: true } : {}) };
+  const f1 = fine(g, CAUGHT_FINE + Math.max(0, Math.floor(opts.caughtFine ?? 0)));
   g = f1.game;
   const k1 = changeKarma(g, rules, CAUGHT_KARMA);
   g = k1.game;
