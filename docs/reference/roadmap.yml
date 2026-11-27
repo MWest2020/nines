@@ -5,7 +5,7 @@
 # current phase [item, status done|open, evidence].
 project: nines
 goal: "A retro top-down RPG in the browser and on Android where you grow from Junior to Senior engineer by fixing simulated machines in an in-game terminal: no tracking, no ads, no network, content as data."
-current: mvp
+current: android
 phases:
   - id: architecture
     name: "Architecture and skeleton"
@@ -16,7 +16,22 @@ phases:
       - {item: "JSON Schemas for quest, scenario, npc and locale files (plus roadmap and shop) and a content validator run by npm test and CI", status: done, evidence: "https://github.com/MWest2020/nines/pull/1"}
       - {item: "Skeleton: TypeScript, Vite, Phaser 3 and Vitest pinned exactly; the command parser and condition evaluator implemented and tested; the three MVP quests completable in the simulator tests", status: done, evidence: "https://github.com/MWest2020/nines/pull/1"}
       - {item: "CI on every pull request and push to main (npm ci, content validation, tests, build, a scan of what ships), actions pinned to SHAs, green", status: done, evidence: "https://github.com/MWest2020/nines/pull/1"}
-  - {id: mvp, name: "MVP build", summary: "Junior Village with three NPCs and the server room, the three terminal quests, money and a shop with one homelab item, the Career Trail with three nodes, save/load, NL/EN, desktop and touch controls"}
+  - id: mvp
+    name: "MVP build"
+    summary: "Junior Village with three NPCs and the server room, the three terminal quests, money and a shop with one homelab item, the Career Trail with three nodes, save/load, NL/EN, desktop and touch controls"
+    done_means:
+      - {item: "Junior Village: one Tiled map, player movement with collision, three NPCs, the server room interior; CC0 tiles recorded in ASSETS.md", status: done, evidence: "https://github.com/MWest2020/nines/pull/8"}
+      - {item: "The terminal overlay (xterm.js output, own input line, quick-command buttons, the built-in editor) runs the simulator; the three quests are completable on desktop (tests/e2e/smoke.py plays them in CI)", status: done, evidence: "https://github.com/MWest2020/nines/pull/12"}
+      - {item: "Money from quests and a shop with the Raspberry Pi, reachable in play (quests finished in the terminal, the shop counter in the village)", status: done, evidence: "https://github.com/MWest2020/nines/pull/17"}
+      - {item: "The Career Trail screen shows the three completed nodes after playing the three quests", status: done, evidence: "https://github.com/MWest2020/nines/pull/17"}
+      - {item: "Save and load in localStorage; the NL/EN toggle", status: done, evidence: "https://github.com/MWest2020/nines/pull/9"}
+      - {item: "Game state and screens: money, XP per branch, rewards paid once, purchases, save format 2 with its migration, the HUD, dialogue box, Career Trail, shop and credits screens, and the game API the world, terminal and battle code call; Vitest tests", status: done, evidence: "https://github.com/MWest2020/nines/pull/9"}
+      - {item: "Touch controls: D-pad, tap to walk and use, the terminal usable with the Android soft keyboard and quick commands (checked in phone and tablet emulation; a real device is the Android phase)", status: done, evidence: "https://github.com/MWest2020/nines/pull/17"}
+      - {item: "No runtime network requests, verified in devtools and documented; npm ci && npm run build gives a static site that runs offline", status: done, evidence: "https://github.com/MWest2020/nines/pull/17"}
+      - {item: "Battles: the engine (src/battle), schemas/battle.schema.json and the validator checks, with Vitest tests for every question type, the meters, retries, hints and triggers", status: done, evidence: "https://github.com/MWest2020/nines/pull/5"}
+      - {item: "Battles: three Junior encounters as content (rate limiter interview as the gate to Medior City, the 3 AM pager, Friday scope creep), each won by a perfect play and lost by an all-wrong play in tests", status: done, evidence: "https://github.com/MWest2020/nines/pull/5"}
+      - {item: "Battles in the game: the war-room overlay from DESIGN.md (desktop layout, basic touch), NPC, pager and gate triggers wired, rewards and retries", status: done, evidence: "https://github.com/MWest2020/nines/pull/15"}
+      - {item: "Battles on a phone: DESIGN.md's portrait layout (thin gauges under the header, hints as a count that opens over the transcript) and a landscape layout, checked in phone emulation (a real device is the Android phase)", status: done, evidence: "https://github.com/MWest2020/nines/pull/17"}
   - {id: android, name: "Android", summary: "Capacitor project, signed AAB from env vars, portrait and landscape, the three quests completed on a real device (touch controls, the soft keyboard in the terminal, a battle in portrait), PLAY_STORE.md filled in"}
   - id: cameo
     name: "Fourth-quest cameo proof"
@@ -36,15 +51,8 @@ phases:
       - {item: "Battle: collaborative editor (Senior): OT vs CRDT, offline merge", status: done, evidence: "https://github.com/MWest2020/nines/pull/13"}
       - {item: "Senior Summit map with spawn slots npc-1 (Noor) and npc-2 (Joris): makes the two Senior interviews reachable", status: open, evidence: "https://github.com/MWest2020/nines/blob/main/ARCHITECTURE.md"}
 done_means:
-  - {item: "Junior Village: one Tiled map, player movement with collision, three NPCs, the server room interior; CC0 tiles recorded in ASSETS.md", status: done, evidence: "https://github.com/MWest2020/nines/pull/8"}
-  - {item: "The terminal overlay (xterm.js output, own input line, quick-command buttons, the built-in editor) runs the simulator; the three quests are completable on desktop (tests/e2e/smoke.py plays them in CI)", status: done, evidence: "https://github.com/MWest2020/nines/pull/12"}
-  - {item: "Money from quests and a shop with the Raspberry Pi, reachable in play (quests finished in the terminal, the shop counter in the village)", status: done, evidence: "https://github.com/MWest2020/nines/pull/17"}
-  - {item: "The Career Trail screen shows the three completed nodes after playing the three quests", status: done, evidence: "https://github.com/MWest2020/nines/pull/17"}
-  - {item: "Save and load in localStorage; the NL/EN toggle", status: done, evidence: "https://github.com/MWest2020/nines/pull/9"}
-  - {item: "Game state and screens: money, XP per branch, rewards paid once, purchases, save format 2 with its migration, the HUD, dialogue box, Career Trail, shop and credits screens, and the game API the world, terminal and battle code call; Vitest tests", status: done, evidence: "https://github.com/MWest2020/nines/pull/9"}
-  - {item: "Touch controls: D-pad, tap to walk and use, the terminal usable with the Android soft keyboard and quick commands (checked in phone and tablet emulation; a real device is the Android phase)", status: done, evidence: "https://github.com/MWest2020/nines/pull/17"}
-  - {item: "No runtime network requests, verified in devtools and documented; npm ci && npm run build gives a static site that runs offline", status: done, evidence: "https://github.com/MWest2020/nines/pull/17"}
-  - {item: "Battles: the engine (src/battle), schemas/battle.schema.json and the validator checks, with Vitest tests for every question type, the meters, retries, hints and triggers", status: done, evidence: "https://github.com/MWest2020/nines/pull/5"}
-  - {item: "Battles: three Junior encounters as content (rate limiter interview as the gate to Medior City, the 3 AM pager, Friday scope creep), each won by a perfect play and lost by an all-wrong play in tests", status: done, evidence: "https://github.com/MWest2020/nines/pull/5"}
-  - {item: "Battles in the game: the war-room overlay from DESIGN.md (desktop layout, basic touch), NPC, pager and gate triggers wired, rewards and retries", status: done, evidence: "https://github.com/MWest2020/nines/pull/15"}
-  - {item: "Battles on a phone: DESIGN.md's portrait layout (thin gauges under the header, hints as a count that opens over the transcript) and a landscape layout, checked in phone emulation (a real device is the Android phase)", status: done, evidence: "https://github.com/MWest2020/nines/pull/17"}
+  - {item: "Capacitor project: @capacitor/core, cli and android 8.6.0 pinned exactly; android/ committed; target SDK 36 (Play's requirement since 31 Aug 2026); portrait and landscape; no permissions at all (INTERNET removed); allowBackup off; the Android back button closes what the game would; no service worker in the app; own launcher icon", status: done, evidence: "https://github.com/MWest2020/nines/pull/19"}
+  - {item: "Signed AAB from env vars: Gradle signs the release only from NINES_KEYSTORE, NINES_KEYSTORE_PASSWORD, NINES_KEY_ALIAS and NINES_KEY_PASSWORD (unsigned with a warning when none are set); a new upload key outside the repo; a signed AAB built and verified with jarsigner", status: done, evidence: "https://github.com/MWest2020/nines/pull/19"}
+  - {item: "CI builds the debug APK and an unsigned release AAB on every push to main, checks the badging (no permissions, target 36, no backup) and keeps both as workflow artifacts; no secrets", status: done, evidence: "https://github.com/MWest2020/nines/pull/19"}
+  - {item: "PLAY_STORE.md filled in: listing in NL and EN, Data safety (no data collected or shared), content rating notes, screenshot checklist, target API level, release steps", status: done, evidence: "https://github.com/MWest2020/nines/blob/main/PLAY_STORE.md"}
+  - {item: "The three quests (and the DNS cameo) completed on a real device: touch controls, the soft keyboard in the terminal, a battle in portrait; the app loads without the INTERNET permission", status: open, evidence: "https://github.com/MWest2020/nines/issues/20"}

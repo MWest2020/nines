@@ -67,7 +67,10 @@ browsers.
 - A decision only Mark can take: open an issue labelled `waiting-on-mark` with the question as
   the title, a link, and a line `Default: ...`; then continue with the default.
 - Never commit secrets or signing material. Android signing comes from environment variables
-  (`NINES_KEYSTORE_FILE`, `NINES_KEYSTORE_PASSWORD`, `NINES_KEY_ALIAS`, `NINES_KEY_PASSWORD`).
+  (`NINES_KEYSTORE`, `NINES_KEYSTORE_PASSWORD`, `NINES_KEY_ALIAS`, `NINES_KEY_PASSWORD`).
+- Android builds (Gradle) are heavy: one at a time, memory-capped and without a daemon:
+  `systemd-run --user --scope -q -p MemoryMax=3G -p MemorySwapMax=0 ./gradlew --no-daemon ...`,
+  then `./gradlew --stop`. Check `pgrep -f 'GradleDaemon|gradlew'` first and wait if one runs.
 - The app id is `work.westerweel.nines` (Mark, 26 Nov 2026), configurable with `NINES_APP_ID`.
 - GitHub Pages is not set up yet. A Pages deploy is a public surface: it needs Mark's own
   explicit go-ahead in the conversation where it is built.
