@@ -5,7 +5,7 @@ export type LocaleId = 'en' | 'nl';
 export const LOCALES: readonly LocaleId[] = ['en', 'nl'];
 
 export type Stage = 'junior' | 'medior' | 'senior';
-/** A career path (content/roadmap.yaml paths): swe, sre, devops, platform, systems. */
+/** A career path (content/roadmap.yaml paths): swe, sre, devops, platform, systems, ethical. */
 export type PathId = string;
 export type BranchId =
   | 'linux'
@@ -28,6 +28,9 @@ export interface Author {
   url?: string;
 }
 
+/** DESIGN.md, Karma: legit work, a shady side job, or community service. */
+export type QuestKind = 'job' | 'hustle' | 'service';
+
 export interface QuestSpec {
   schema: 1;
   id: string;
@@ -40,9 +43,13 @@ export interface QuestSpec {
   paths: PathId[];
   roadmap_node: string;
   requires: string[];
+  /** job (default), hustle (a shady side job with a risk roll) or service (community service) */
+  kind?: QuestKind;
+  /** a progress condition that must hold before the quest is offered (karma gates) */
+  available_when?: string;
   giver: string;
   start: { map: string; object: string };
-  reward: { money: number; xp: number; tech_debt?: number };
+  reward: { money: number; xp: number; tech_debt?: number; karma?: number };
   dialogue: { offer: string[]; active: string[]; done: string[] };
 }
 
@@ -82,8 +89,18 @@ export interface ScenarioEventSpec {
   when: string;
   say: string;
   money?: number;
+  /** a loss costs every time, a gain counts once per quest and event */
+  karma?: number;
   reset?: boolean;
   set_flag?: string;
+}
+
+/** A hustle's chance of getting caught (DESIGN.md, Side hustles). */
+export interface RiskSpec {
+  /** percent */
+  base: number;
+  /** percentage points added while `when` holds */
+  factors: { id: string; when: string; add: number; text: string }[];
 }
 
 export interface ScenarioSpec {
@@ -101,9 +118,12 @@ export interface ScenarioSpec {
   /** manifests (files above) the cluster already runs at the start; kubectl apply -f adds more */
   cluster?: string[];
   git?: { root: string; branch?: string; pipeline?: { file: string; validator: 'nines-ci' } };
-  objectives: { id: string; text: string; done_when: string }[];
+  /** `procedure`: a change ticket or review that an independent contractor may skip */
+  objectives: { id: string; text: string; done_when: string; procedure?: boolean }[];
   hints?: { id: string; when: string; text: string }[];
   events?: ScenarioEventSpec[];
+  /** only a hustle has one */
+  risk?: RiskSpec;
   /** suggested command lines for the terminal's quick-command strip */
   quick?: string[];
   outage?: { say?: string; money?: number };
@@ -129,7 +149,7 @@ export interface RoadmapSpec {
   /** `map`: the town's map; a map named here that content/maps does not have yet is planned */
   towns: { id: string; stage: Stage; title: string; map?: string }[];
   branches: { id: BranchId; title: string }[];
-  /** the five career paths chosen at Medior City: title and a one-line pitch (locale keys) */
+  /** the six career paths chosen at Medior City: title and a one-line pitch (locale keys) */
   paths: { id: PathId; title: string; pitch: string }[];
   nodes: { id: string; branch: BranchId; stage: Stage; title: string; requires: string[] }[];
 }

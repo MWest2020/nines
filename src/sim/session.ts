@@ -20,6 +20,8 @@ export interface FiredEvent {
   say: string;
   scope: 'quest' | 'global';
   money: number;
+  /** karma change (a loss costs every time, a gain counts once) */
+  karma: number;
   reset: boolean;
   /** a progress flag the game stores in its save (progress flag() reads it) */
   setFlag?: string;
@@ -32,16 +34,26 @@ export interface RunResult {
   events: FiredEvent[];
   /** locale keys of hints unlocked by this step (at most one per step) */
   hints: string[];
-  objectives: { id: string; text: string; done: boolean }[];
+  /** `procedure`: a contractor may skip it; `skipped`: this session does (it does not count) */
+  objectives: { id: string; text: string; done: boolean; procedure?: true; skipped?: true }[];
+  /** a hustle's chance of getting caught right now (scenario `risk`); absent without one */
+  risk?: Risk;
   won: boolean;
   /** true only on the step that completed the last objective */
   justWon: boolean;
 }
 
+/** A hustle's risk now: percent (0 to 100) and the factors that hold, as locale keys. */
+export interface Risk {
+  percent: number;
+  factors: { id: string; text: string; add: number }[];
+}
+
 interface CompiledScenario {
-  objectives: { id: string; text: string; when: Compiled }[];
+  objectives: { id: string; text: string; when: Compiled; procedure: boolean }[];
+  risk: { base: number; factors: { id: string; text: string; add: number; when: Compiled }[] } | null;
   hints: { id: string; text: string; when: Compiled }[];
-  events: { id: string; when: Compiled; say: string; money: number; reset: boolean; setFlag?: string }[];
+  events: { id: string; when: Compiled; say: string; money: number; karma: number; reset: boolean; setFlag?: string }[];
   serviceRules: Record<string, Compiled | undefined>;
   deploymentRules: Record<string, Compiled | undefined>;
 }
@@ -50,6 +62,8 @@ export interface Session {
   spec: ScenarioSpec;
   t: Translate;
   hintBoost: number;
+  /** an independent contractor: procedure objectives do not count towards the win */
+  skipProcedures: boolean;
   initial: SimState;
   state: SimState;
   compiled: CompiledScenario;
@@ -70,13 +84,15 @@ export function compileScenario(spec: ScenarioSpec): CompiledScenario {
     deploymentRules[name] = d.restart?.succeeds_if !== undefined ? c(d.restart.succeeds_if) : undefined;
   }
   return {
-    objectives: spec.objectives.map((o) => ({ id: o.id, text: o.text, when: c(o.done_when) })),
+    objectives: spec.objectives.map((o) => ({ id: o.id, text: o.text, when: c(o.done_when), procedure: o.procedure === true })),
+    risk: spec.risk ? { base: spec.risk.base, factors: spec.risk.factors.map((f) => ({ id: f.id, text: f.text, add: f.add, when: c(f.when) })) } : null,
     hints: (spec.hints ?? []).map((h) => ({ id: h.id, text: h.text, when: c(h.when) })),
     events: (spec.events ?? []).map((e) => ({
       id: e.id,
       when: c(e.when),
       say: e.say,
       money: e.money ?? 0,
+      karma: e.karma ?? 0,
       reset: e.reset ?? false,
       ...(e.set_flag !== undefined ? { setFlag: e.set_flag } : {}),
     })),
@@ -85,12 +101,13 @@ export function compileScenario(spec: ScenarioSpec): CompiledScenario {
   };
 }
 
-export function createSession(spec: ScenarioSpec, opts: { t: Translate; hintBoost?: number }): Session {
+export function createSession(spec: ScenarioSpec, opts: { t: Translate; hintBoost?: number; skipProcedures?: boolean }): Session {
   const initial = createState(spec);
   return {
     spec,
     t: opts.t,
     hintBoost: opts.hintBoost ?? 0,
+    skipProcedures: opts.skipProcedures ?? false,
     initial,
     state: structuredClone(initial),
     compiled: compileScenario(spec),
@@ -109,6 +126,8 @@ function resetMachine(session: Session, work: SimState): SimState {
   const fresh = structuredClone(session.initial);
   fresh.counters = work.counters;
   fresh.ran = work.ran;
+  fresh.touched = work.touched;
+  fresh.swept = work.swept;
   fresh.firedEvents = work.firedEvents;
   fresh.shownHints = work.shownHints;
   fresh.flags = work.flags;
@@ -152,7 +171,7 @@ function settle(session: Session, work: SimState, out: string[], exit: number, u
     // again, and doing the same damage twice should cost twice.
     if (!e.reset) work.firedEvents.push(e.id);
     if (e.setFlag) work.flags[e.setFlag] = true;
-    events.push({ id: e.id, say: e.say, scope: 'quest', money: e.money, reset: e.reset, ...(e.setFlag ? { setFlag: e.setFlag } : {}) });
+    events.push({ id: e.id, say: e.say, scope: 'quest', money: e.money, karma: e.karma, reset: e.reset, ...(e.setFlag ? { setFlag: e.setFlag } : {}) });
     if (e.reset) {
       work = resetMachine(session, work);
       // If the condition reads something the reset keeps (fails, ran(), flags), it would fire
@@ -167,12 +186,57 @@ function settle(session: Session, work: SimState, out: string[], exit: number, u
     hints.push(h.text);
     break;
   }
-  const objectives = session.compiled.objectives.map((o) => ({ id: o.id, text: o.text, done: test(o.when, env) }));
-  const won = objectives.every((o) => o.done);
+  const objectives = session.compiled.objectives.map((o) => ({
+    id: o.id,
+    text: o.text,
+    done: test(o.when, env),
+    ...(o.procedure ? { procedure: true as const } : {}),
+    ...(o.procedure && session.skipProcedures ? { skipped: true as const } : {}),
+  }));
+  const won = objectives.every((o) => o.done || o.skipped);
   const justWon = won && !session.won;
   session.won ||= won;
   session.state = work;
-  return { out, exit, ...(ui ? { ui } : {}), events, hints, objectives, won, justWon };
+  const risk = riskIn(session, work);
+  return { out, exit, ...(ui ? { ui } : {}), events, hints, objectives, won, justWon, ...(risk ? { risk } : {}) };
+}
+
+function riskIn(session: Session, work: SimState): Risk | null {
+  const r = session.compiled.risk;
+  if (!r) return null;
+  const env = scenarioEnv({ state: () => work, initial: session.initial, spec: session.spec, hintBoost: 0 });
+  const factors = r.factors.filter((f) => test(f.when, env)).map((f) => ({ id: f.id, text: f.text, add: f.add }));
+  // a percentage here; the game caps it (core/karma.ts RISK_CAP) before it rolls
+  return { percent: Math.max(0, Math.min(100, r.base + factors.reduce((sum, f) => sum + f.add, 0))), factors };
+}
+
+/** A hustle's risk of getting caught as the machine stands now; null for a scenario without one. */
+export const riskOf = (session: Session): Risk | null => riskIn(session, session.state);
+
+/** Does a command line's words name a recursive walk (grep -r, du, rm -r)? */
+function recursive(name: string, args: readonly string[]): boolean {
+  if (name === 'du') return true;
+  if (name !== 'grep' && name !== 'rm') return false;
+  return args.some((a) => a === '--recursive' || (/^-[A-Za-z]+$/.test(a) && /[rR]/.test(a)));
+}
+
+/**
+ * Record what a command reached, for the touched() fact: every operand that is an existing
+ * path (relative ones resolved against the working directory), and for a recursive command
+ * the folders it walked. Before the command runs, so rm still sees what it removes.
+ */
+function touch(work: SimState, name: string, args: readonly string[]): void {
+  const deep = recursive(name, args);
+  const operands = args.filter((a) => !a.startsWith('-') || a === '-');
+  // `cd` with no operand goes home; `cd -` goes back
+  if (name === 'cd' && operands.length === 0) operands.push(work.home);
+  for (const a of operands) {
+    const p = a === '-' ? work.oldpwd : resolve(work.cwd, work.home, a);
+    const n = work.fs[p];
+    if (!n) continue;
+    if (!work.touched.includes(p)) work.touched.push(p);
+    if (deep && n.type === 'dir' && !work.swept.includes(p)) work.swept.push(p);
+  }
 }
 
 /** Control characters other than tab and newline: player input never carries escape sequences into xterm. */
@@ -216,6 +280,7 @@ export function run(session: Session, rawLine: string): RunResult {
         continue;
       }
       const cmd = own(COMMANDS, name);
+      if (cmd) touch(work, name, args.slice(1));
       if (!cmd) {
         out.length = 0;
         out.push(t('sh.not_found', { cmd: name }));
@@ -255,6 +320,7 @@ export function run(session: Session, rawLine: string): RunResult {
       say: o?.say ?? DEFAULT_OUTAGE.say,
       scope: o?.say !== undefined ? 'quest' : 'global',
       money: o?.money ?? DEFAULT_OUTAGE.money,
+      karma: 0,
       reset: true,
     });
     work = resetMachine(session, work);
@@ -265,7 +331,9 @@ export function run(session: Session, rawLine: string): RunResult {
 /** The editor's Save. The path comes from the editor ui returned by `edit`. */
 export function saveFile(session: Session, path: string, content: string): RunResult {
   const work = structuredClone(session.state);
-  writeFile(work.fs, normalize(path), stripControl(content.replace(/\r\n?/g, '\n')));
+  const p = normalize(path);
+  writeFile(work.fs, p, stripControl(content.replace(/\r\n?/g, '\n')));
   if (!work.ran.includes('edit')) work.ran.push('edit');
+  if (!work.touched.includes(p)) work.touched.push(p);
   return settle(session, work, [], 0, undefined, []);
 }

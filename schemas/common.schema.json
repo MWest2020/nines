@@ -45,8 +45,8 @@
       "enum": ["linux", "networking", "git", "cicd", "containers", "iac", "observability", "incident", "design", "kubernetes"]
     },
     "path": {
-      "enum": ["swe", "sre", "devops", "platform", "systems"],
-      "description": "a career path (DESIGN.md, Career paths): software, site reliability, DevOps, platform or systems engineer"
+      "enum": ["swe", "sre", "devops", "platform", "systems", "ethical"],
+      "description": "a career path (DESIGN.md, Career paths): software, site reliability, DevOps, platform or systems engineer, or ethical hacker"
     },
     "author": {
       "type": "object",

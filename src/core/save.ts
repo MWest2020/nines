@@ -3,11 +3,12 @@
 // whenever its terminal is opened again.
 
 import type { LocaleId } from '../content/types';
+import { clampKarma } from './karma';
 
 export const SAVE_KEY = 'nines.save';
 /** Unreadable saves are kept as nines.save.unreadable.1, .2, ...: never overwritten. */
 export const BACKUP_PREFIX = 'nines.save.unreadable.';
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 /** AI tokens in a new game, and what a version-2 save is given when it moves to version 3. */
 export const START_TOKENS = 3;
 
@@ -36,6 +37,17 @@ export interface GameState {
   hints: Record<string, string[]>;
   /** the career path chosen at Medior City; null until then */
   path: string | null;
+  /** -100..100, starts at 0 (core/karma.ts): hustles lower it, pentests and community service raise it */
+  karma: number;
+  /** times caught on a hustle since the last community service; two strikes is an arrest */
+  strikes: number;
+  /** times caught on a hustle, ever: with the seed it makes the next risk roll repeatable */
+  caught: number;
+  /** arrested or questioned by the agency: clearance jobs (bank, enterprise) stay shut until
+   *  community service is done */
+  probation: boolean;
+  /** works as an independent contractor: skips procedures, earns more, pays for damage */
+  contractor: boolean;
   player: { map: string; x: number; y: number; facing: 'up' | 'down' | 'left' | 'right' };
 }
 
@@ -61,6 +73,11 @@ export function newGame(locale: LocaleId, seed = 0): GameState {
     tokens: START_TOKENS,
     hints: {},
     path: null,
+    karma: 0,
+    strikes: 0,
+    caught: 0,
+    probation: false,
+    contractor: false,
     player: { map: 'junior-village', x: 7, y: 6, facing: 'down' },
   };
 }
@@ -75,6 +92,9 @@ export const MIGRATIONS: Record<number, (game: Record<string, unknown>) => Recor
   // hint for free so far; they start with the same tokens as a new game and no hint is counted
   // against a quest, done or not. No path is chosen yet (Medior City has no map).
   2: (game) => ({ ...game, tokens: START_TOKENS, hints: {}, path: null }),
+  // 4 (karma, 27 Nov 2026): a version-3 player never did a shady job, so they start where a new
+  // game starts: karma 0, a clean record, and employed (not a contractor).
+  3: (game) => ({ ...game, karma: 0, strikes: 0, caught: 0, probation: false, contractor: false }),
 };
 
 /** A seed derived from text (FNV-1a), for saves that predate the seed: pure and repeatable. */
@@ -129,6 +149,7 @@ export function deserialize(raw: string | null, fallbackLocale: LocaleId): LoadO
   }
   // Fill anything missing from a fresh game, and drop values of the wrong type.
   const base = newGame(fallbackLocale);
+  const count = (v: unknown) => (Number.isInteger(v) && (v as number) >= 0 ? (v as number) : 0);
   const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
   const rec = <T>(v: unknown, ok: (x: unknown) => x is T): Record<string, T> =>
     isObj(v) ? Object.fromEntries(Object.entries(v).filter(([, x]) => ok(x))) as Record<string, T> : {};
@@ -159,6 +180,12 @@ export function deserialize(raw: string | null, fallbackLocale: LocaleId): LoadO
           .filter(([, v]) => v.length > 0),
       ),
       path: typeof game['path'] === 'string' && game['path'] !== '' ? game['path'] : null,
+      // karma is clamped and rounded; a broken value is a clean 0, not a gift or a curse
+      karma: typeof game['karma'] === 'number' && Number.isFinite(game['karma']) ? clampKarma(game['karma']) : 0,
+      strikes: count(game['strikes']),
+      caught: count(game['caught']),
+      probation: game['probation'] === true,
+      contractor: game['contractor'] === true,
       player: {
         map: typeof player['map'] === 'string' ? player['map'] : base.player.map,
         x: num(player['x'], base.player.x),

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { prompt, run, saveFile } from '../../src/sim/session';
+import { scenarioEnv } from '../../src/sim/facts';
+import { createSession, prompt, riskOf, run, saveFile } from '../../src/sim/session';
 import { FIXTURE, session, sh, steps } from '../helpers';
 
 const fresh = () => session(FIXTURE);
@@ -170,7 +171,7 @@ describe('consequences, not blocks', () => {
     const s = fresh();
     sh(s, 'rm /var/log/old.gz');
     const r = run(s, 'sudo rm -rf /');
-    expect(r.events).toEqual([{ id: 'outage', say: 'sh.outage', scope: 'global', money: -100, reset: true }]);
+    expect(r.events).toEqual([{ id: 'outage', say: 'sh.outage', scope: 'global', money: -100, karma: 0, reset: true }]);
     expect(s.state.fs['/var/log/old.gz']).toBeDefined();
     expect(s.state.counters.commands).toBe(2);
   });
@@ -181,7 +182,7 @@ describe('consequences, not blocks', () => {
   it('a scenario event brings its own money and reset', () => {
     const s = fresh();
     const r = run(s, 'rm -r /var/lib/db');
-    expect(r.events).toEqual([{ id: 'db', say: 'event.db', scope: 'quest', money: -50, reset: true }]);
+    expect(r.events).toEqual([{ id: 'db', say: 'event.db', scope: 'quest', money: -50, karma: 0, reset: true }]);
     expect(s.state.fs['/var/lib/db/data']).toBeDefined();
   });
 });
@@ -473,12 +474,122 @@ describe('events, hints and flags', () => {
     const s = session(spec, 3);
     expect(run(s, 'pwd').events).toEqual([]);
     const r = run(s, 'nope');
-    expect(r.events).toEqual([{ id: 'clumsy', say: 'event.clumsy', scope: 'quest', money: 0, reset: false, setFlag: 'was-clumsy' }]);
+    expect(r.events).toEqual([{ id: 'clumsy', say: 'event.clumsy', scope: 'quest', money: 0, karma: 0, reset: false, setFlag: 'was-clumsy' }]);
     expect(s.state.flags['was-clumsy']).toBe(true);
   });
   it('ran() sees the subcommand after leading flags', () => {
     const s = fresh();
     steps(s, 'kubectl -n default get pods');
     expect(s.state.ran).toContain('kubectl get');
+  });
+});
+
+describe('touched(): what a command reached (karma quests: scope, snooping)', () => {
+  const touched = (s: ReturnType<typeof fresh>, p: string) => {
+    const env = scenarioEnv({ state: () => s.state, initial: s.initial, spec: s.spec, hintBoost: 0 });
+    return env.funcs['touched']!(p) as boolean;
+  };
+  it('counts existing paths named as operands, relative ones resolved, and the path below them', () => {
+    const s = fresh();
+    expect(touched(s, '/home/dev/notes.txt')).toBe(false);
+    run(s, 'cat notes.txt');
+    expect(touched(s, '/home/dev/notes.txt')).toBe(true);
+    expect(touched(s, '/home/dev')).toBe(true); // something inside it was reached
+    expect(touched(s, '/var')).toBe(false);
+    run(s, 'ls /var/log');
+    expect(touched(s, '/var/log')).toBe(true);
+    expect(touched(s, '/var/log/app.log')).toBe(false); // listing a folder is not opening its files
+  });
+  it('a recursive grep, du or rm -r sweeps everything below its folder', () => {
+    const s = fresh();
+    run(s, 'grep -rn error /var');
+    expect(touched(s, '/var/lib/db/data')).toBe(true);
+    const d = fresh();
+    run(d, 'du -sh /var/lib');
+    expect(touched(d, '/var/lib/db')).toBe(true);
+    expect(touched(d, '/var/log')).toBe(false);
+    const g = fresh();
+    run(g, 'grep error /var/log/app.log');
+    expect(touched(g, '/var/log/old.gz')).toBe(false);
+  });
+  it('cd, cd with no operand, the editor and a pipe stage all count; a missing path does not', () => {
+    const s = fresh();
+    run(s, 'cd /etc');
+    expect(touched(s, '/etc')).toBe(true);
+    run(s, 'cd');
+    expect(touched(s, '/home/dev')).toBe(true);
+    run(s, 'cat /nope');
+    expect(touched(s, '/nope')).toBe(false);
+    run(s, 'edit /etc/app.conf');
+    expect(touched(s, '/etc/app.conf')).toBe(true);
+    const e = fresh();
+    saveFile(e, '/tmp/new.txt', 'x');
+    expect(touched(e, '/tmp/new.txt')).toBe(true);
+    const p = fresh();
+    run(p, 'cat notes.txt | grep alpha');
+    expect(touched(p, '/home/dev/notes.txt')).toBe(true);
+  });
+  it('survives a reset: what the player did stays done', () => {
+    const s = session({ ...FIXTURE, events: [{ id: 'db', when: 'removed("/var/lib/db/data")', say: 'event.db', money: -50, reset: true }] });
+    run(s, 'cat /etc/app.conf');
+    run(s, 'rm /var/lib/db/data');
+    expect(s.state.fs['/var/lib/db/data']).toBeDefined(); // restored
+    expect(touched(s, '/etc/app.conf')).toBe(true);
+    expect(touched(s, '/var/lib/db/data')).toBe(true);
+  });
+});
+
+describe('procedures and risk (DESIGN.md, Independent contractor; Side hustles)', () => {
+  const spec = {
+    ...FIXTURE,
+    objectives: [
+      { id: 'web', text: 'obj', done_when: 'service("web") == "active"' },
+      { id: 'ticket', text: 'obj.ticket', done_when: 'exists("/tmp/ticket")', procedure: true },
+    ],
+  };
+  it('an employee needs every objective; a contractor skips the procedures', () => {
+    const fix = (s: ReturnType<typeof fresh>) => {
+      saveFile(s, '/etc/app.conf', 'port 8080\n');
+      return run(s, 'systemctl restart web');
+    };
+    const employee = session(spec);
+    const e = fix(employee);
+    expect(e.won).toBe(false);
+    expect(e.objectives).toEqual([
+      { id: 'web', text: 'obj', done: true },
+      { id: 'ticket', text: 'obj.ticket', done: false, procedure: true },
+    ]);
+    expect(saveFile(employee, '/tmp/ticket', 'done').justWon).toBe(true);
+    const contractor = createSession(spec, { t: (k) => k, skipProcedures: true });
+    const c = fix(contractor);
+    expect(c.justWon).toBe(true);
+    expect(c.objectives[1]).toEqual({ id: 'ticket', text: 'obj.ticket', done: false, procedure: true, skipped: true });
+  });
+  it('a scenario with a risk reports it after every step: base plus the factors that hold, 0 to 100', () => {
+    const risky = {
+      ...FIXTURE,
+      risk: {
+        base: 10,
+        factors: [
+          { id: 'snoop', when: 'touched("/var/lib/db")', add: 30, text: 'risk.snoop' },
+          { id: 'tidy', when: 'removed("/var/log/old.gz")', add: -20, text: 'risk.tidy' },
+          { id: 'clumsy', when: 'fails >= 1', add: 90, text: 'risk.clumsy' },
+        ],
+      },
+    };
+    const s = session(risky);
+    expect(run(s, 'pwd').risk).toEqual({ percent: 10, factors: [] });
+    expect(run(s, 'ls /var/lib/db').risk).toEqual({ percent: 40, factors: [{ id: 'snoop', text: 'risk.snoop', add: 30 }] });
+    expect(run(s, 'rm /var/log/old.gz').risk?.percent).toBe(20);
+    expect(run(s, 'nope').risk?.percent).toBe(100);
+    expect(riskOf(s)?.percent).toBe(100);
+    expect(run(fresh(), 'pwd').risk).toBeUndefined();
+    expect(riskOf(fresh())).toBeNull();
+    const calm = session({ ...risky, risk: { base: 0, factors: [{ id: 'tidy', when: 'true', add: -20, text: 'risk.tidy' }] } });
+    expect(run(calm, 'pwd').risk?.percent).toBe(0);
+  });
+  it('an event carries its karma', () => {
+    const s = session({ ...FIXTURE, events: [{ id: 'peek', when: 'touched("/etc")', say: 'event.peek', karma: -5 }] });
+    expect(run(s, 'ls /etc').events).toEqual([{ id: 'peek', say: 'event.peek', scope: 'quest', money: 0, karma: -5, reset: false }]);
   });
 });

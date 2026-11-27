@@ -663,6 +663,24 @@ export function loadContent(contentDir: string, schemaDir: string, options: Load
     // a paid hint is remembered by its locale key (core/tokens.ts), so a quest's hint texts are unique
     const hintTexts = [...(scenario?.hints ?? []), ...(battle?.hints ?? [])].map((h) => h.text);
     if (new Set(hintTexts).size !== hintTexts.length) err(hasScenario ? sFile : bFile, 'hint texts must be unique: a paid hint is remembered by its text key');
+    // karma (DESIGN.md, Karma): a gate is a progress condition without quest() (requires does
+    // that, and a gate that asked about quests could loop); a hustle is a terminal quest with a
+    // risk, and only a hustle has one; procedures are a job's, for contractors to skip
+    const kind = quest.kind ?? 'job';
+    if (quest.available_when !== undefined) {
+      checkExpr(qFile, 'available_when', quest.available_when, PROGRESS_FACTS);
+      try {
+        if (callsIn(compile(quest.available_when, PROGRESS_FACTS).ast).some((c) => c.name === 'quest')) err(qFile, 'available_when may not use quest(): list the quest under requires');
+      } catch {
+        // reported by checkExpr
+      }
+      progressExprs.push({ file: qFile, src: quest.available_when });
+    }
+    if (kind === 'hustle' && !scenario?.risk) err(hasScenario ? sFile : qFile, 'a hustle is a terminal quest whose scenario has a risk (DESIGN.md, Side hustles)');
+    if (kind !== 'hustle' && scenario?.risk) err(sFile, `risk belongs to a hustle; this quest is a ${kind} (quest.yaml kind)`);
+    if (kind !== 'job' && scenario?.objectives.some((o) => o.procedure)) err(sFile, `procedure objectives are a job's (a contractor skips them); this quest is a ${kind}`);
+    if (scenario && scenario.objectives.every((o) => o.procedure)) err(sFile, 'at least one objective must not be a procedure: a contractor still has to do the work');
+    if (kind === 'hustle' && (quest.reward.karma ?? 0) >= 0) err(qFile, 'a hustle costs karma: reward.karma must be negative');
     checkMap(qFile, quest.start.map);
     // a terminal quest starts at a terminal; a battle at a battle object or where its giver stands
     checkObject(qFile, 'start', quest.start.map, quest.start.object, hasScenario ? ['terminal'] : ['battle', 'spawn']);
@@ -686,6 +704,10 @@ export function loadContent(contentDir: string, schemaDir: string, options: Load
         need(sFile, e.say);
         checkExpr(sFile, `events[${i}].when`, e.when, SCENARIO_FACTS);
       });
+      (scenario.risk?.factors ?? []).forEach((f, i) => {
+        need(sFile, f.text);
+        checkExpr(sFile, `risk.factors[${i}].when`, f.when, SCENARIO_FACTS);
+      });
       if (scenario.outage?.say) need(sFile, scenario.outage.say);
       for (const [name, s] of Object.entries(scenario.services ?? {})) {
         if (s.restart?.succeeds_if) checkExpr(sFile, `services.${name}.restart.succeeds_if`, s.restart.succeeds_if, SCENARIO_FACTS);
@@ -693,8 +715,8 @@ export function loadContent(contentDir: string, schemaDir: string, options: Load
       for (const [name, d] of Object.entries(scenario.deployments ?? {})) {
         if (d.restart?.succeeds_if) checkExpr(sFile, `deployments.${name}.restart.succeeds_if`, d.restart.succeeds_if, SCENARIO_FACTS);
       }
-      const ids = [...scenario.objectives, ...(scenario.hints ?? []), ...(scenario.events ?? [])].map((x) => x.id);
-      if (new Set(ids).size !== ids.length) err(sFile, 'objective, hint and event ids must be unique');
+      const ids = [...scenario.objectives, ...(scenario.hints ?? []), ...(scenario.events ?? []), ...(scenario.risk?.factors ?? [])].map((x) => x.id);
+      if (new Set(ids).size !== ids.length) err(sFile, 'objective, hint, event and risk factor ids must be unique');
       // quick commands: lines this terminal can parse, starting with one of its commands
       (scenario.quick ?? []).forEach((line, i) => {
         const parsed = parseLine(line);
@@ -718,6 +740,7 @@ export function loadContent(contentDir: string, schemaDir: string, options: Load
         ...scenario.objectives.map((o) => o.done_when),
         ...(scenario.hints ?? []).map((h) => h.when),
         ...(scenario.events ?? []).map((e) => e.when),
+        ...(scenario.risk?.factors ?? []).map((f) => f.when),
         ...Object.values(scenario.services ?? {}).flatMap((s) => (s.restart?.succeeds_if ? [s.restart.succeeds_if] : [])),
         ...Object.values(scenario.deployments ?? {}).flatMap((d) => (d.restart?.succeeds_if ? [d.restart.succeeds_if] : [])),
       ];

@@ -244,6 +244,10 @@
           },
           "done_when": {
             "$ref": "common.schema.json#/$defs/expr"
+          },
+          "procedure": {
+            "type": "boolean",
+            "description": "a procedure (a change ticket, a review): an independent contractor may skip it (DESIGN.md, Independent contractor)"
           }
         }
       }
@@ -304,6 +308,60 @@
           },
           "set_flag": {
             "$ref": "common.schema.json#/$defs/id"
+          },
+          "karma": {
+            "type": "integer",
+            "minimum": -50,
+            "maximum": 50,
+            "description": "karma change: a loss costs every time, a gain counts once per quest and event"
+          }
+        }
+      }
+    },
+    "risk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "base",
+        "factors"
+      ],
+      "description": "a hustle's chance of getting caught, in percent: base plus every factor whose condition holds when the job is finished, between 0 and 95; a roll seeded by the save decides (DESIGN.md, Side hustles). Only a hustle has one, and a hustle must have one",
+      "properties": {
+        "base": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 95
+        },
+        "factors": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "when",
+              "add",
+              "text"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "common.schema.json#/$defs/id"
+              },
+              "when": {
+                "$ref": "common.schema.json#/$defs/expr"
+              },
+              "add": {
+                "type": "integer",
+                "minimum": -50,
+                "maximum": 95,
+                "description": "percentage points added while the condition holds (negative: careful play lowers the risk)"
+              },
+              "text": {
+                "$ref": "common.schema.json#/$defs/localeKey"
+              }
+            }
           }
         }
       }
@@ -312,7 +370,9 @@
       "type": "array",
       "maxItems": 10,
       "uniqueItems": true,
-      "items": { "$ref": "common.schema.json#/$defs/absPath" },
+      "items": {
+        "$ref": "common.schema.json#/$defs/absPath"
+      },
       "description": "manifests under files that the cluster already runs at the start; kubectl apply -f records more, and applied_contains() reads what was applied"
     },
     "quick": {

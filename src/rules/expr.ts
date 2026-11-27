@@ -12,7 +12,7 @@
 //   cmp     := atom (("==" | "!=" | "<" | "<=" | ">" | ">=") atom)?
 //   atom    := NUMBER | STRING | "true" | "false" | IDENT | IDENT "(" args? ")" | "(" expr ")"
 //   args    := expr ("," expr)*
-//   NUMBER  := digits ("." digits)? ("K" | "M" | "G" | "T")?    sizes in powers of 1024
+//   NUMBER  := "-"? digits ("." digits)? ("K" | "M" | "G" | "T")?   sizes in powers of 1024; "-" only against the digit
 //   STRING  := '"' ... '"' | "'" ... "'"                         escapes: \\ \" \' \n \t
 
 import { has, own } from './own';
@@ -83,7 +83,11 @@ export function tokenize(src: string): Tok[] {
       continue;
     }
     const start = i;
-    if (c >= '0' && c <= '9') {
+    // A minus sign written against a digit is a negative number (karma <= -20). The language has
+    // no subtraction, so there is nothing else a "-" could mean.
+    const negative = c === '-' && /[0-9]/.test(src[i + 1] ?? '');
+    if (negative || (c >= '0' && c <= '9')) {
+      if (negative) i++;
       while (i < src.length && /[0-9]/.test(src[i]!)) i++;
       if (src[i] === '.' && /[0-9]/.test(src[i + 1] ?? '')) {
         i++;

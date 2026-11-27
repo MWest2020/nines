@@ -34,6 +34,16 @@ describe('lexer', () => {
     const toks = tokenize('1 2.5 3K 2G');
     expect(toks.slice(0, 4).map((t) => ('v' in t ? t.v : null))).toEqual([1, 2.5, 3072, 2 * 1024 ** 3]);
   });
+  it('reads a minus written against a digit as a negative number, and nothing else', () => {
+    expect(tokenize('-20 -2.5 -1K').slice(0, 3).map((t) => ('v' in t ? t.v : null))).toEqual([-20, -2.5, -1024]);
+    expect(run('n > -1')).toBe(true);
+    expect(run('n <= -20', env({ n: -20 }))).toBe(true);
+    expect(run('-3 < n')).toBe(true);
+    expect(() => tokenize('- 20')).toThrow(/unexpected character "-"/);
+    expect(() => tokenize('n - 2')).toThrow(/unexpected character "-"/);
+    expect(() => compile('--2 < n', REG)).toThrow(ExprError);
+    expect(() => compile('n > -x', REG)).toThrow(ExprError);
+  });
   it('reads both quote styles and escapes', () => {
     expect(tokenize(`"a\\"b" 'c\\'d' "x\\ny"`).slice(0, 3).map((t) => ('v' in t ? t.v : null))).toEqual(['a"b', "c'd", 'x\ny']);
   });
