@@ -35,7 +35,7 @@ phases:
   - {id: android, name: "Android", summary: "Capacitor project, signed AAB from env vars, portrait and landscape, the three quests completed on a real device (touch controls, the soft keyboard in the terminal, a battle in portrait), PLAY_STORE.md filled in"}
   - id: cameo
     name: "Fourth-quest cameo proof"
-    summary: "a sample guest quest added as one /content folder in its own commit, with no code change, and CONTRIBUTING.md's full worked example"
+    summary: "a sample guest quest added as one /content folder in its own commit, with no code change, and CONTRIBUTING.md's full worked example; done 27 Nov 2026 (#16), ahead of the Android phase"
     done_means:
       - {item: "A terminal cameo needs no map edit: spare cameo racks in the server room, the validator lets a cameo-* object wait for its guest and refuses two quests on one object; tests no longer enumerate all content", status: done, evidence: "https://github.com/MWest2020/nines/pull/16"}
       - {item: "Sample cameo \"It's always DNS\" (content/quests/its-always-dns: quest, scenario, NPC on cameo-1 with a CC0 sprite recorded in npc.yaml, NL/EN) added by one commit that adds only that folder", status: done, evidence: "https://github.com/MWest2020/nines/pull/16"}
@@ -43,7 +43,7 @@ phases:
       - {item: "CONTRIBUTING.md: a full worked example of that folder, file by file: schemas, the validator, the IP and licence rules and the denylist, NL/EN parity, and how a battle cameo differs", status: done, evidence: "https://github.com/MWest2020/nines/pull/16"}
   - id: battles
     name: "More battles"
-    summary: "the system-design battles still to write (nearby places for Junior Village, a URL shortener for Medior City, ticket booking and a collaborative editor for Senior Summit), from docs/content-backlog.md (Mark, 26 Nov 2026)"
+    summary: "the system-design battles from docs/content-backlog.md (Mark, 26 Nov 2026): all four written (#11, #13); the Senior Summit map that makes the two Senior interviews reachable is still to build"
     done_means:
       - {item: "Battle: nearby places search (Junior): geohash with neighbour cells, quadtree, ranking by exact distance", status: done, evidence: "https://github.com/MWest2020/nines/pull/11"}
       - {item: "Battle: URL shortener (Medior): ID generation, base62, caching, 301 vs 302", status: done, evidence: "https://github.com/MWest2020/nines/pull/11"}
