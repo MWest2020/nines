@@ -1,0 +1,93 @@
+# Incident: Amara walks the player through a slow-burning payments API before they join her
+# on-call rotation. Facts checked: a 99.9% SLO over 30 days allows 0.1% of 43,200 minutes =
+# 43.2 minutes of full unavailability; burn rate = observed error rate / (1 - SLO), so 1.44%
+# against 99.9% is 14.4; at 14.4 an untouched 30-day budget lasts 720 / 14.4 = 50 hours (2% an
+# hour); multiwindow multi-burn-rate alerts (14.4x over 1 h and 5 min pages; slower burns such as
+# 6x over 6 h page or ticket, 1x over 3 days tickets: common examples, not laws); alert on what
+# users feel; an error budget policy is an agreement with product, not a punishment.
+schema: 1
+kind: incident
+attacker: attacker
+intro: [intro.1, intro.2]
+trigger: {kind: npc}
+rounds:
+  - id: budget
+    type: estimate
+    prompt: [budget.prompt.1, budget.prompt.2]
+    stakes: 15
+    value: 43.2
+    working: budget.working
+    options:
+      - {id: four, grade: weak, min: 0, max: 5, text: budget.four.text, why: budget.four.why}
+      - {id: quarter, grade: weak, min: 5, max: 20, text: budget.quarter.text, why: budget.quarter.why}
+      - {id: hour, grade: best, min: 20, max: 60, text: budget.hour.text, why: budget.hour.why}
+      - {id: hours, grade: weak, min: 60, max: 600, text: budget.hours.text, why: budget.hours.why}
+      - {id: day, grade: weak, min: 600, text: budget.day.text, why: budget.day.why}
+  - id: burn
+    type: tradeoff
+    prompt: [burn.prompt.1, burn.prompt.2]
+    stakes: 15
+    options:
+      - {id: ratio, grade: best, text: burn.ratio.text, why: burn.ratio.why}
+      - {id: same, grade: weak, text: burn.same.text, why: burn.same.why}
+      - {id: nines, grade: weak, text: burn.nines.text, why: burn.nines.why}
+      - {id: hours, grade: fair, text: burn.hours.text, why: burn.hours.why}
+  - id: runway
+    type: estimate
+    prompt: [runway.prompt.1, runway.prompt.2]
+    stakes: 15
+    value: 50
+    working: runway.working
+    options:
+      - {id: hours, grade: weak, min: 0, max: 6, text: runway.hours.text, why: runway.hours.why}
+      - {id: day, grade: weak, min: 6, max: 24, text: runway.day.text, why: runway.day.why}
+      - {id: days, grade: best, min: 24, max: 72, text: runway.days.text, why: runway.days.why}
+      - {id: week, grade: weak, min: 72, max: 240, text: runway.week.text, why: runway.week.why}
+      - {id: month, grade: weak, min: 240, text: runway.month.text, why: runway.month.why}
+  - id: alert
+    type: tradeoff
+    prompt: [alert.prompt.1, alert.prompt.2]
+    stakes: 20
+    options:
+      - {id: windows, grade: best, text: alert.windows.text, why: alert.windows.why}
+      - {id: every, grade: weak, text: alert.every.text, why: alert.every.why}
+      - {id: threshold, grade: fair, text: alert.threshold.text, why: alert.threshold.why}
+      - {id: spent, grade: weak, text: alert.spent.text, why: alert.spent.why}
+  - id: noise
+    type: flaw
+    prompt: [noise.prompt.1, noise.prompt.2]
+    stakes: 15
+    proposal: [noise.proposal.1, noise.proposal.2, noise.proposal.3]
+    options:
+      - {id: symptoms, grade: best, text: noise.symptoms.text, why: noise.symptoms.why}
+      - {id: cpu, grade: fair, text: noise.cpu.text, why: noise.cpu.why}
+      - {id: tickets, grade: weak, text: noise.tickets.text, why: noise.tickets.why}
+      - {id: client, grade: weak, text: noise.client.text, why: noise.client.why}
+  - id: policy
+    type: tradeoff
+    prompt: [policy.prompt.1, policy.prompt.2]
+    stakes: 20
+    options:
+      - {id: agreed, grade: best, text: policy.agreed.text, why: policy.agreed.why}
+      - {id: freeze, grade: weak, text: policy.freeze.text, why: policy.freeze.why}
+      - {id: days, grade: fair, text: policy.days.text, why: policy.days.why}
+      - {id: lower, grade: weak, text: policy.lower.text, why: policy.lower.why}
+  - id: setup
+    type: order
+    prompt: [setup.prompt.1]
+    stakes: 20
+    items:
+      - {id: journey, text: setup.journey.text, why: setup.journey.why, rank: 1}
+      - {id: target, text: setup.target.text, why: setup.target.why, rank: 2}
+      - {id: policy, text: setup.policy.text, why: setup.policy.why, rank: 3}
+      - {id: alerts, text: setup.alerts.text, why: setup.alerts.why, rank: 3}
+      - {id: review, text: setup.review.text, why: setup.review.why, rank: 4}
+hints:
+  - {id: budget, round: budget, when: 'attempts >= 1', text: hint.budget}
+  - {id: burn, round: burn, when: 'attempts >= 1', text: hint.burn}
+  - {id: alert, round: alert, when: 'attempts >= 1 || misses >= 2', text: hint.alert}
+  - {id: policy, round: policy, when: 'attempts >= 1', text: hint.policy}
+  - {id: calm, when: 'confidence <= 40', text: hint.calm}
+outro:
+  won: [won.1]
+  lost: [lost.1]

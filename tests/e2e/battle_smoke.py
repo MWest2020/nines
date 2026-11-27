@@ -8,8 +8,8 @@ By hand, after `npm run build`, under the memory cap from AGENTS.md:
 
 It serves dist/ itself on 127.0.0.1 for the length of the run (no dev server) and plays:
 
-  1. the rate-limiter interview (talk to Ingrid at the Medior gate) to a win: the reward, the
-     giver's done lines and "Medior City opens later";
+  1. the rate-limiter interview (talk to Ingrid at the Medior gate) to a win: the reward and the
+     giver's done lines (tests/e2e/medior_smoke.py then walks through the opened gate);
   2. the Friday scope talk with Daan to a loss (keyboard, clicks and one drag in the order
      round), then Try again, a hint on the second try, and a win;
   3. the 3 AM pager going off on entering the map (a seed chosen so the roll fires), a few
@@ -323,7 +323,7 @@ def play_interview(browser, origin: str, outside: list) -> list[str]:
     end = page.locator(".nb-end").inner_text()
     check("You held your ground." in end, "won")
     check("+€300" in end, "the reward is on the end screen")
-    check("Medior City itself opens later" in end, "the gate says Medior City opens later")
+    check("opens later" not in end, "Medior City has a map now: no \"opens later\" line")
     check(page.locator(".nb-debrief > li").count() == 8, "the debrief lists every round")
     shots.append(shot(page, "battle-end-won.png"))
     check(page.evaluate("() => document.activeElement.dataset.action") == "close", "Close has the keyboard after a win")

@@ -1,0 +1,91 @@
+# Stakeholder: Lars defends a 900-line pull request (a discount feature, a refactor and a
+# dependency bump in one) and wants it approved today. The good answers ask what the change is
+# for, split it (refactor and bump on their own, the behaviour change separately), block on what
+# matters (an untested money calculation, SQL built from user input) and leave naming as a nit,
+# and find a way to make the demo without a rubber stamp. The review-speed numbers are a team
+# rule of thumb, marked as debatable, not a statistic.
+schema: 1
+kind: stakeholder
+attacker: attacker
+intro: [intro.1, intro.2]
+trigger: {kind: npc}
+rounds:
+  - id: ask
+    type: clarify
+    prompt: [ask.prompt.1]
+    stakes: 15
+    pick: 2
+    options:
+      - {id: goal, grade: best, text: ask.goal.text, why: ask.goal.why}
+      - {id: map, grade: best, text: ask.map.text, why: ask.map.why}
+      - {id: changelog, grade: fair, text: ask.changelog.text, why: ask.changelog.why}
+      - {id: late, grade: weak, text: ask.late.text, why: ask.late.why}
+      - {id: lint, grade: weak, text: ask.lint.text, why: ask.lint.why}
+  - id: split
+    type: tradeoff
+    prompt: [split.prompt.1, split.prompt.2]
+    stakes: 20
+    options:
+      - {id: three, grade: best, text: split.three.text, why: split.three.why}
+      - {id: two, grade: fair, text: split.two.text, why: split.two.why}
+      - {id: commits, grade: fair, text: split.commits.text, why: split.commits.why}
+      - {id: folders, grade: weak, text: split.folders.text, why: split.folders.why}
+  - id: block
+    type: tradeoff
+    prompt: [block.prompt.1, block.prompt.2]
+    stakes: 15
+    options:
+      - {id: both, grade: best, text: block.both.text, why: block.both.why}
+      - {id: all, grade: weak, text: block.all.text, why: block.all.why}
+      - {id: sql, grade: fair, text: block.sql.text, why: block.sql.why}
+      - {id: approve, grade: weak, text: block.approve.text, why: block.approve.why}
+  - id: flag
+    type: flaw
+    prompt: [flag.prompt.1, flag.prompt.2]
+    stakes: 15
+    proposal: [flag.proposal.1, flag.proposal.2]
+    options:
+      - {id: everyone, grade: best, text: flag.everyone.text, why: flag.everyone.why}
+      - {id: debt, grade: fair, text: flag.debt.text, why: flag.debt.why}
+      - {id: money, grade: weak, text: flag.money.text, why: flag.money.why}
+      - {id: bigger, grade: weak, text: flag.bigger.text, why: flag.bigger.why}
+  - id: land
+    type: order
+    prompt: [land.prompt.1]
+    stakes: 20
+    items:
+      - {id: bump, text: land.bump.text, why: land.bump.why, rank: 1}
+      - {id: refactor, text: land.refactor.text, why: land.refactor.why, rank: 1}
+      - {id: feature, text: land.feature.text, why: land.feature.why, rank: 2}
+      - {id: demo, text: land.demo.text, why: land.demo.why, rank: 3}
+      - {id: cleanup, text: land.cleanup.text, why: land.cleanup.why, rank: 4}
+  - id: time
+    type: estimate
+    prompt: [time.prompt.1, time.prompt.2]
+    stakes: 15
+    value: 3
+    working: time.working
+    options:
+      - {id: skim, grade: weak, min: 0, max: 0.5, text: time.skim.text, why: time.skim.why}
+      - {id: hour, grade: weak, min: 0.5, max: 2, text: time.hour.text, why: time.hour.why}
+      - {id: afternoon, grade: best, min: 2, max: 5, text: time.afternoon.text, why: time.afternoon.why}
+      - {id: days, grade: fair, min: 5, max: 16, text: time.days.text, why: time.days.why}
+      - {id: week, grade: weak, min: 16, text: time.week.text, why: time.week.why}
+  - id: demo
+    type: tradeoff
+    prompt: [demo.prompt.1, demo.prompt.2]
+    stakes: 20
+    options:
+      - {id: branch, grade: best, text: demo.branch.text, why: demo.branch.why}
+      - {id: skim, grade: weak, text: demo.skim.text, why: demo.skim.why}
+      - {id: wall, grade: fair, text: demo.wall.text, why: demo.wall.why}
+      - {id: favour, grade: weak, text: demo.favour.text, why: demo.favour.why}
+hints:
+  - {id: ask, round: ask, when: 'attempts >= 1', text: hint.ask}
+  - {id: split, round: split, when: 'attempts >= 1', text: hint.split}
+  - {id: block, round: block, when: 'attempts >= 1', text: hint.block}
+  - {id: land, round: land, when: 'attempts >= 1 || misses >= 2', text: hint.land}
+  - {id: kind, when: 'confidence <= 40', text: hint.kind}
+outro:
+  won: [won.1]
+  lost: [lost.1]

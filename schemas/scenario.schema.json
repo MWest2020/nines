@@ -180,6 +180,12 @@
             "pattern": "^[a-z0-9][a-z0-9./:@_-]{0,120}$",
             "description": "the container image, shown by kubectl describe pod"
           },
+          "readiness_failure": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "description": "what kubectl describe pod prints for a failing readiness probe (a NotReady pod), e.g. 'HTTP probe failed with statuscode: 404'"
+          },
           "config_map": {
             "$ref": "common.schema.json#/$defs/id",
             "description": "the ConfigMap the container takes its environment from (envFrom), shown by kubectl describe pod"
@@ -416,7 +422,8 @@
         "Pending",
         "CrashLoopBackOff",
         "Error",
-        "ImagePullBackOff"
+        "ImagePullBackOff",
+        "NotReady"
       ]
     },
     "restartRule": {

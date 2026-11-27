@@ -274,8 +274,10 @@
                 "enum": [
                   "facing",
                   "to_map",
-                  "to_point"
-                ]
+                  "to_point",
+                  "town"
+                ],
+                "description": "town (doors only): the door is a gate, closed until the road to that town is open (its gate battle won)"
               },
               "type": {
                 "const": "string"

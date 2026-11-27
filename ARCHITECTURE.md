@@ -53,7 +53,8 @@ src/
     persist.ts      the save slot over a key-value storage; never writes over a newer save
     talk.ts         what an NPC says, from the save
   world/          the map as a grid (pure)
-    grid.ts         collision, objects, facing, steps, reachability; the validator uses it too
+    grid.ts         collision, objects, facing, steps, reachability, gates (closedGates, openMaps);
+                    the validator uses it too
   terminal/       the terminal's input line without the DOM (pure)
     history.ts      up/down history with the line being typed kept as a draft
     complete.ts     Tab completion: commands, subcommands, units, deployments, paths
@@ -68,7 +69,8 @@ src/
     api.ts          GameApi: what the world, terminal and battle code call (see below)
     bridge.ts       answers the world's talk, use and enter events through the GameApi
     storage.ts      localStorage, or memory when the browser blocks it
-    ui/             HudScene + DialogueBox, TrailScene, ShopScene, CreditsScene, the pixel font
+    ui/             HudScene + DialogueBox, TrailScene, ShopScene, CreditsScene, CareerScene (the
+                    career coach's screen), the pixel font
     terminal/       TerminalOverlay.ts (DOM + xterm.js), terminal.css, wire.ts (to the GameApi)
     battle/         BattleOverlay.ts (DOM) + battle.css, open.ts (open, record, reward, gate line)
     touch/          layout.ts (pure: where the view and controls go), controls.ts (the D-pad and
@@ -91,6 +93,7 @@ tests/            Vitest: rules, sim, terminal input, quests played end to end, 
   e2e/smoke.py      the browser smoke test: the three quests, the shop and the trail, offline;
                     then touch on emulated phones and a tablet
   e2e/battle_smoke.py  the battles in a browser (PHONE=portrait|landscape: on a phone)
+  e2e/medior_smoke.py  the gate, Medior City, the career coach and one path quest in a browser
 ```
 
 Dependencies point one way: `game → battle, core, sim, rules, terminal, world, content/types`;
@@ -115,10 +118,10 @@ The terminal is not a shell. It is a small simulator of one machine per quest, d
 | Filesystem | `fs: Record<absPath, {type:'dir'} \| {type:'file', size, content?}>` | A flat map. Children of a dir are the keys whose dirname is that dir. Scenarios hold at most a few hundred entries, so linear scans stay simple and obviously correct. A file has a `size` in bytes and optional visible `content`; a 2.4 GB log is `size: 2.4G` plus a few lines of content (its tail). Editing a file sets `size` to the content's byte length. |
 | Mounts | `mounts: {path, device, size, baseUsed}[]` | A path belongs to the longest mount path that contains it. Used = `baseUsed` (space the scenario does not list) + the sizes of the files on that mount. `df` and `disk_usage()` read this, so `rm` and `mv` free space naturally, including moving a file to another mount. |
 | Services | `services: Record<name, {description, state, enabled, logs[]}>` | `state` is `active`, `inactive` or `failed`. `logs` is the journal. A restart evaluates the scenario's `restart.succeeds_if` condition: true makes it `active` and appends success lines, false makes it `failed` and appends failure lines. |
-| Pods | `pods: {name, namespace, deployment, status, restarts, age, logs[]}[]` | Derived from `deployments` in the scenario. `kubectl rollout restart` replaces a deployment's pods with new, deterministically named ones whose status follows `restart.succeeds_if`. `kubectl describe pod` derives the phase, container state, last state, envFrom (`config_map`) and events from the status. |
+| Pods | `pods: {name, namespace, deployment, status, restarts, age, logs[]}[]` | Derived from `deployments` in the scenario. `kubectl rollout restart` replaces a deployment's pods with new, deterministically named ones whose status follows `restart.succeeds_if`. `kubectl describe pod` derives the phase, container state, last state, envFrom (`config_map`) and events from the status. A `NotReady` pod runs but fails its readiness probe: `get pods` shows `Running` with READY `0/1`, `describe` the probe's failure (`readiness_failure`), and `pods_running()` is false. Applying a changed Deployment that the scenario runs (same name and namespace) rolls it out like a restart, as a real cluster does. |
 | Cluster | `cluster: Record<objectKey, content>` | What the cluster runs, per object (`configmap/shop/shop-api-config`: kind, `metadata.namespace` or the `-n` namespace, `metadata.name`): the manifests listed in the scenario's `cluster` at their starting content, then whatever `kubectl apply -f` sent for that object, from any file (a directory applies its `*.yaml`/`*.yml` files). Saving a manifest changes the disk, not the cluster; `applied_value(object, key)` and `applied_contains(object, text)` read the cluster's copy. Apply checks only the shape (`kind`, `metadata.name`, no tab in the indentation), ignores comments and blank lines, and prints `created`, `configured` or `unchanged` with kubectl's resource name (`deployment.apps/x`). |
 | Git | `git: {root, branch, head, index, commits}` | `head` and `index` map repo-relative paths to a content signature. The working tree is the filesystem. `status` diffs the three; `add` copies working tree to index; `commit` copies index to head. |
-| Pipeline | `pipeline: {status: none\|passed\|failed, runs}` | When the scenario names a pipeline file, every commit "runs CI": the committed file goes through the `nines-ci` validator and the result is printed and stored. |
+| Pipeline | `pipeline: {status: none\|passed\|failed, runs}` | When the scenario names a pipeline file, every commit "runs CI": the committed file goes through the `nines-ci` validator and the result is printed and stored. `nines-ci` (`sim/ci.ts`) knows stages, jobs with `stage`, `script`, `needs`, `image`, and since Medior City a `cache` (`key`: a file whose hash keys it, `paths`) and `secrets` (names from the CI's secret store, never values). |
 | Bookkeeping | `cwd`, `oldpwd`, `counters {commands, fails}`, `ran[]`, `restarted[]`, `flags`, `firedEvents[]`, `shownHints[]`, `generation` | What the player did, for hints and conditions. `ran` holds command names and, for systemctl, kubectl and git, "name subcommand" (`git commit`). |
 
 No clocks and no randomness: log timestamps come from a fake clock that moves 7 seconds per
@@ -161,7 +164,7 @@ may change the working copy of the state.
 | `mv` | rename, move into a dir, several sources into a dir |
 | `systemctl` | `status`, `restart` (and `start`) |
 | `journalctl` | `-u unit`, `-n N`, `-xe` accepted, `--no-pager` |
-| `kubectl` | `get pods [-n ns \| -A]`, `describe pod[s] [name or prefix] [-n ns]`, `logs [-f] pod\|deployment/x [--tail N]`, `apply -f file\|dir`, `rollout restart deployment/x` |
+| `kubectl` | `get pods\|deployments [-n ns \| -A]`, `describe pod[s] [name or prefix] [-n ns]`, `logs [-f] pod\|deployment/x [--tail N]`, `apply -f file\|dir`, `rollout restart\|status deployment/x` (status does not wait: it says where the rollout stands) |
 | `git` | `status`, `add <paths> \| . \| -A`, `commit -m msg [-a]` |
 | `edit` (`nano`, `vi`, `vim`) | opens the built-in editor (a UI action); saving calls `saveFile` |
 | `clear`, `exit` | UI actions |
@@ -369,6 +372,7 @@ with the state they read:
 | `has_item(id)`, `flag(name)` | booleans |
 | `karma`, `strikes` | numbers: -100..100, times caught since the last community service |
 | `probation`, `contractor` | booleans |
+| `path_chosen`, `career_path(id)` | booleans: a career path is chosen; it is this one (ids from `roadmap.yaml`) |
 
 | Battle facts (`battle/engine.ts`) | Type |
 | --------------------------------- | ---- |
@@ -466,7 +470,9 @@ name: npc.name
 sprite?: {file: femke.png, frame: 16, source: "drawn by ...", license: CC0-1.0}
 tint?: "#c86848"                   # placeholder sprite colour when there is no sheet
 spawn: {map: junior-village, slot: npc-1, facing: down}
-dialogue: [{when?: '<progress condition>', lines: [..]}]   # first match is spoken
+dialogue: [{when?: '<progress condition>', lines: [..], intro?: true}]   # first match is spoken;
+                                   # an intro entry that holds is also said before a quest offer
+role?: coach                       # the career coach: her lines, then the career screen
 
 # locales/en.yaml (flat; same keys and {placeholders} in nl.yaml)
 title: "Disk full"
@@ -518,7 +524,8 @@ Maps (`content/maps/<id>.json`, schema `map`) are checked too:
 - tileset images: relative to the map, inside the repository but outside `content/`, real PNGs
   of the size the map says, columns and tile count matching, each with a row in ASSETS.md;
 - objects: unique names; types `spawn`, `terminal`, `battle`, `door`, `shop`; only `facing` on
-  spawns and `to_map`, `to_point` (and `facing`) on doors; spawns and doors on open ground; a
+  spawns and `to_map`, `to_point` (and `facing`, `town`) on doors; a door with `town` is a gate,
+  shut until the road to that town is open, and names a town of `roadmap.yaml`; spawns and doors on open ground; a
   door leads to a spawn point of a map that exists; exactly one map has `player-start`;
 - against the content: every NPC's `spawn.slot` is a spawn point of its map; a quest's
   `start.object` exists (a `terminal` for a terminal quest, a `battle` or the giver's spawn for
@@ -535,7 +542,7 @@ use it in `start.map` and `spawn.map`, and everything else about them is checked
 (schema, locales, the battle played both ways, slots unique). The checks against map objects
 wait until the map lands and then apply in full; until then the game cannot reach that content,
 because no map shows the giver. Doors may not lead to a planned map. Any other unknown map is an
-error. The two Senior Summit interviews (`ticket-booking-interview`, `collab-editor-interview`)
+error. The URL shortener waited this way for Medior City until its map landed. The two Senior Summit interviews (`ticket-booking-interview`, `collab-editor-interview`)
 wait this way for the Senior Summit map.
 
 **Content sprites and ASSETS.md.** A guest sprite records its source and licence in its
@@ -801,7 +808,20 @@ City); `karma` (-100..100), `strikes` (times caught since the last community ser
   active and costs nothing. After the overlay closes, the giver's done lines follow. The Medior
   gate is Ingrid herself (she stands on `gate-medior` and her quest's start object is that
   spot); while no map belongs to a gate's town (a map id equal to the town id or starting with
-  it), winning, and talking to her afterwards, says that the town opens later.
+  it), winning, and talking to her afterwards, says that the town opens later. Medior City has
+  its map since its own pull request, so the win opens the road itself (below).
+- **Gates in the world** (`src/world/grid.ts` `closedGates`, `openMaps`): a door with a `town`
+  property is the road to that town. While `townOpen` (core/game.ts) says no, WorldScene counts
+  its tile as occupied (no step, no tap path) and draws the barrier from the `props` layer; the
+  moment the gate battle is won the store change clears the barrier. Junior Village's road east
+  has two such doors at (39,14) and (39,15). A save that stands on a map the player cannot walk to
+  through open doors (hand-edited, say) starts at `player-start` instead, so no save skips a gate.
+- **The career coach** (`src/game/ui/CareerScene.ts`, `core/game.ts` `choosePath` and
+  `changePath`): an NPC with `role: coach` (Petra, `content/npcs/petra`) says her lines, then the
+  bridge opens the career screen: one path per page with its pitch (left and right turn the
+  pages), Choose, and a confirmation. Once a path is chosen the same screen offers a switch for
+  `CAREER_CHANGE_FEE` (€300; issue 24's default), which keeps XP, quests and karma. When the
+  choice changes she speaks again, and her dialogue (keyed on `career_path()`) names the mentor.
 - **TrailScene**, **ShopScene** (one item per page, ‹ › to page), **CreditsScene**: canvas, driven by `roadmap.yaml`,
   `shop.yaml` and the bundle's `credits`. Canvas text uses our own pixel font, drawn from glyph
   rows in `src/game/ui/font.ts` (no font file); a character it lacks shows as `?`, and a test
@@ -825,8 +845,10 @@ City); `karma` (-100..100), `strikes` (times caught since the last community ser
   bought again; a consumable has no other effect and nothing can require it.
 - **Career paths** (`core/game.ts` `choosePath`): six paths in `roadmap.yaml`; a quest lists
   the paths it counts towards in `paths`. The choice is stored in the save (`path`, null until
-  chosen), refused before the road to Medior City opens and once chosen. Nothing reads it yet:
-  Medior City has no map (DESIGN.md, Career paths).
+  chosen), refused before the road to Medior City opens and once chosen; `changePath` switches
+  for a fee. Content reads it through `path_chosen` and `career_path(id)`: the mentors' first
+  quests open with `available_when: 'path_chosen'`, and a mentor's `intro` dialogue greets their
+  own path differently from a side-quester (DESIGN.md, Medior City).
 - **Karma** (`core/karma.ts`, pure; DESIGN.md, Karma): `reward.karma` and event `karma` go through
   `changeKarma` (bounds; a drop below zero reopens community service; a drop to -60 or below off
   probation brings the agency: a fine and probation). A hustle's terminal win calls
@@ -988,3 +1010,10 @@ Pinned exactly, each version published at least two weeks before it was added (c
   runs it after the terminal smoke test, then again with `PHONE=portrait` and `PHONE=landscape`
   on an emulated Pixel 7: the war room fits the screen, transcript, cards and both meters are on
   it, every button is at least 48 CSS px, and in portrait the hints open from the header count.
+- `tests/e2e/medior_smoke.py` (Python Playwright, the helpers of the two scripts above): serves
+  `dist/` under `/nines/` and, in one page, walks into the shut gate (the save stays in Junior
+  Village), wins the gate interview, walks through the gate into Medior City, talks to Petra,
+  finds her career screen from the canvas pixels, pages to Systems Engineer with the arrow keys,
+  chooses it and confirms (the save has the path), walks into The Stack and plays Wim's "One disk
+  left" in the terminal. It fails on any request outside the origin and on any page error. CI
+  runs it after the battle smoke tests.

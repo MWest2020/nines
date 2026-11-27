@@ -1,0 +1,25 @@
+# The enterprise job (Mark: "an enterprise job gated on karma"; DESIGN.md, Karma): Grachtgarant, a
+# fictional insurer, only lets contractors with a clean record near its servers. The internal
+# portal's TLS certificate expires tonight; the renewed certificate and key were delivered, and
+# change CHG-2291 is approved. Point nginx at the new pair, restart it, and do the paperwork
+# (procedures: the change record and the certificate inventory). A contractor skips the
+# procedures, bills 150% and pays three times the damage of deleting the wrong files.
+schema: 1
+id: insurer-cert
+author: {name: "Nines team"}
+title: title
+summary: summary
+stage: medior
+branch: linux
+paths: [sre, systems, devops]
+roadmap_node: linux-tls
+requires: [rate-limiter-interview]
+kind: job
+available_when: 'karma >= 0 && !probation'
+giver: marieke
+start: {map: the-stack, object: stack-rack-portal}
+reward: {money: 500, xp: 50}
+dialogue:
+  offer: [offer.1, offer.2, offer.3, offer.4]
+  active: [active.1]
+  done: [done.1, done.2]

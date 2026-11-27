@@ -17,6 +17,8 @@ branches:
   - {id: incident, title: branch.incident}
   - {id: design, title: branch.design}
   - {id: kubernetes, title: branch.kubernetes}
+  # the ethical hacker's branch, which came with Medior City (DESIGN.md, Karma)
+  - {id: security, title: branch.security}
 # The six career paths, chosen at Medior City (DESIGN.md, Career paths; the sixth, ethical
 # hacker, came with karma on 27 Nov 2026). A quest names the
 # paths it counts towards in its quest.yaml `paths`.
@@ -45,9 +47,18 @@ nodes:
   - {id: k8s-delivery, branch: kubernetes, stage: junior, title: node.k8s.delivery, requires: [k8s-fundamentals]}
   - {id: k8s-architecture, branch: kubernetes, stage: junior, title: node.k8s.architecture, requires: [k8s-fundamentals]}
   - {id: observability-logs, branch: observability, stage: medior, title: node.observability.logs, requires: [incident-first]}
-  - {id: containers-pods, branch: containers, stage: medior, title: node.containers.pods, requires: [linux-services]}
-  - {id: networking-dns, branch: networking, stage: medior, title: node.networking.dns, requires: [linux-files]}
-  - {id: iac-first, branch: iac, stage: medior, title: node.iac.first, requires: [git-basics, cicd-pipeline]}
   - {id: design-url-shortener, branch: design, stage: medior, title: node.design.url_shortener, requires: [design-rate-limiter]}
+  # Medior City (DESIGN.md, Medior City): each path's first quest, the CKAD start, the enterprise
+  # job and the city's side job. The screen holds six branch rows per town, so Medior keeps to
+  # observability, design, cicd, kubernetes, linux and security.
+  - {id: observability-slo, branch: observability, stage: medior, title: node.observability.slo, requires: [incident-first]}
+  - {id: cicd-code-review, branch: cicd, stage: medior, title: node.cicd.code_review, requires: [cicd-pipeline]}
+  - {id: cicd-cache-secrets, branch: cicd, stage: medior, title: node.cicd.cache_secrets, requires: [cicd-pipeline]}
+  - {id: ckad-config-security, branch: kubernetes, stage: medior, title: node.ckad.config_security, requires: [k8s-fundamentals]}
+  - {id: ckad-observability, branch: kubernetes, stage: medior, title: node.ckad.observability, requires: [k8s-fundamentals]}
+  - {id: linux-raid, branch: linux, stage: medior, title: node.linux.raid, requires: [linux-disk]}
+  - {id: linux-tls, branch: linux, stage: medior, title: node.linux.tls, requires: [linux-services]}
+  - {id: security-web-scope, branch: security, stage: medior, title: node.security.web_scope, requires: [linux-files]}
+  - {id: security-defaults, branch: security, stage: medior, title: node.security.defaults, requires: [linux-files]}
   - {id: design-ticket-booking, branch: design, stage: senior, title: node.design.ticket_booking, requires: [design-rate-limiter]}
   - {id: design-collab-editor, branch: design, stage: senior, title: node.design.collab_editor, requires: [design-rate-limiter]}

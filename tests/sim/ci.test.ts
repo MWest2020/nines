@@ -30,3 +30,18 @@ describe('nines-ci validator', () => {
     expect(validateNinesCi('stages: [a]\nstages: [b]\n').ok).toBe(false);
   });
 });
+
+describe('nines-ci cache and secrets (the DevOps quest in Medior City)', () => {
+  const base = 'stages: [build]\nbuild:\n  stage: build\n  script: [npm ci]\n';
+  it('accepts a cache keyed on a file, with folders to keep, and secrets by name', () => {
+    expect(validateNinesCi(`${base}  cache:\n    key: package-lock.json\n    paths: [.npm]\n  secrets: [DEPLOY_TOKEN, NPM_TOKEN]\n`)).toEqual({ ok: true, errors: [] });
+  });
+  it('refuses a cache without a key or paths, unknown cache keys, and secrets that are not names', () => {
+    expect(validateNinesCi(`${base}  cache: .npm\n`).errors).toEqual(['job "build": "cache" must be a mapping with key and paths']);
+    expect(validateNinesCi(`${base}  cache:\n    paths: [.npm]\n    ttl: 7d\n`).errors).toEqual(['job "build": cache: unknown key "ttl"', 'job "build": cache: "key" must name a file']);
+    expect(validateNinesCi(`${base}  cache:\n    key: package-lock.json\n    paths: []\n`).errors).toEqual(['job "build": cache: "paths" must be a non-empty list of folders']);
+    expect(validateNinesCi(`${base}  secrets: DEPLOY_TOKEN\n`).errors).toEqual(['job "build": "secrets" must be a non-empty list of names']);
+    // a value pasted where a name belongs is refused, so a token cannot hide in this list
+    expect(validateNinesCi(`${base}  secrets: [dpl_live_7f3a]\n`).errors).toEqual(['job "build": secret "dpl_live_7f3a" must be an upper-case name like DEPLOY_TOKEN']);
+  });
+});

@@ -1,0 +1,13 @@
+# Mo, in the back alley behind the tower. A placeholder sprite in the palette's slate.
+schema: 1
+id: mo
+author: {name: "Nines team"}
+name: npc.name
+tint: "#485860"
+spawn: {map: medior-city, slot: npc-7, facing: down}
+dialogue:
+  - when: 'quest("parking-garage") == "done"'
+    lines: [npc.after]
+  - when: 'karma > -20'
+    lines: [npc.too_clean]
+  - lines: [npc.idle]

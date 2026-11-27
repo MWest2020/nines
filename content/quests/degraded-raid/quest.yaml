@@ -1,0 +1,23 @@
+# The Systems Engineer's first Medior quest: a mirrored array (RAID 1) lost a disk. The player
+# reads /proc/mdstat and the kernel log, finds the failing disk in its SMART report, checks the
+# backup before anyone touches the array, and writes the request for the data centre's remote
+# hands by serial number, not by device name. Wim stands on the colocation floor of The Stack
+# (npc-4); the file server is the rack at the back (stack-rack-storage).
+schema: 1
+id: degraded-raid
+author: {name: "Nines team"}
+title: title
+summary: summary
+stage: medior
+branch: linux
+paths: [systems]
+roadmap_node: linux-raid
+requires: [rate-limiter-interview]
+available_when: 'path_chosen'
+giver: wim
+start: {map: the-stack, object: stack-rack-storage}
+reward: {money: 450, xp: 50}
+dialogue:
+  offer: [offer.1, offer.2]
+  active: [active.1]
+  done: [done.1, done.2]

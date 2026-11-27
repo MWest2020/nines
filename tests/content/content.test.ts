@@ -275,7 +275,15 @@ describe('the validator checks maps', () => {
     expect(errorsAfterMap('server-room', (m) => (obj(m, 'exit').properties = [{ name: 'to_map', type: 'string', value: 'junior-village' }]))).toMatch(/door "exit" needs the properties to_map and to_point/);
   });
   it('doors lead to a spawn point in a map that exists', () => {
-    expect(errorsAfterMap('server-room', (m) => (obj(m, 'exit').properties[0].value = 'medior-city'))).toMatch(/leads to unknown map "medior-city"/);
+    // a planned map (Senior Summit) is no place to walk to yet
+    expect(errorsAfterMap('server-room', (m) => (obj(m, 'exit').properties[0].value = 'senior-summit'))).toMatch(/leads to unknown map "senior-summit"/);
+    // a gate door names a town of the roadmap
+    expect(errorsAfterMap('junior-village', (m) => (obj(m, 'road-to-medior-1').properties[2].value = 'mediorr'))).toMatch(/door "road-to-medior-1": town "mediorr" is not a town in roadmap.yaml/);
+    expect(errorsAfterMap('server-room', (m) => (obj(m, 'rack-web-01').properties = [{ name: 'town', type: 'string', value: 'medior' }]))).toMatch(/may not have the property "town"/);
+    // a door into Medior City without town: medior would walk around the gate
+    expect(errorsAfterMap('junior-village', (m) => (obj(m, 'road-to-medior-1').properties = obj(m, 'road-to-medior-1').properties.slice(0, 2)))).toMatch(
+      /medior-city can be reached without winning the gate to medior/,
+    );
     expect(errorsAfterMap('server-room', (m) => (obj(m, 'exit').properties[1].value = 'nowhere'))).toMatch(/leads to "nowhere", which is no spawn point/);
   });
   it('npc spawn slots and quest starts exist in the map, with the right type', () => {

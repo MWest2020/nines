@@ -1,0 +1,148 @@
+# jump-02: invoice-api 2.0 is rolled out to the billing namespace, but none of its pods becomes
+# Ready. What it teaches, at CKAD level: READY 0/1 with STATUS Running means the container runs
+# and its readiness probe fails; a pod that is not Ready gets no traffic from its Service (it is
+# left out of the endpoints), while a failing liveness probe would restart it instead; kubectl
+# describe pod shows the probe's failure; the fix belongs in the manifest, and applying a changed
+# pod template rolls the Deployment out by itself (no rollout restart needed). The Deployment uses
+# Recreate (a schema migration), so no old pod is left serving; with the default RollingUpdate a
+# new pod that never becomes Ready would stall the rollout and the old pods would keep serving,
+# which is the other half of what a readiness probe is for (done.2 says so). Deleting the
+# readiness probe also makes the pods Ready, because nothing checks them any more: the second
+# objective asks to keep it.
+schema: 1
+host: jump-02
+user: dev
+home: /home/dev
+motd: motd
+mounts:
+  - {path: /, device: /dev/sda1, size: 20G, base_used: 5G}
+dirs: [/tmp]
+files:
+  /home/dev/handover.txt: |
+    From: Jesse (billing team)
+    - invoice-api 2.0 went out to the namespace "billing" an hour ago. kubectl here talks to it.
+    - The pods start, but the invoice page says "no healthy upstream". 2.0 migrates the invoice
+      tables, so 1.9 and 2.0 cannot run side by side: the Deployment uses Recreate, which stops
+      every old pod first. The 1.9 pods are gone.
+    - Manifests: ~/invoice-k8s. Release notes: ~/invoice-k8s/CHANGELOG.md.
+    - The files are the truth: change them, then kubectl apply.
+  /home/dev/invoice-k8s/CHANGELOG.md: |
+    # invoice-api changelog
+
+    ## 2.0.0
+    - PDF invoices are rendered by the new template engine.
+    - Health checks split in two: /livez (the process is alive) and /readyz (the database
+      and the PDF renderer are reachable, so the pod can take traffic). /healthz is gone.
+    - Minimum memory request is now 256Mi.
+
+    ## 1.9.2
+    - Fixed rounding of VAT on credit notes.
+  /home/dev/invoice-k8s/deployment.yaml: |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: invoice-api
+      namespace: billing
+    spec:
+      replicas: 3
+      # 2.0 migrates the schema: no 1.9 pod may run next to a 2.0 pod
+      strategy:
+        type: Recreate
+      selector:
+        matchLabels:
+          app: invoice-api
+      template:
+        metadata:
+          labels:
+            app: invoice-api
+        spec:
+          containers:
+            - name: invoice-api
+              image: registry.example.test/invoice-api:2.0.0
+              ports:
+                - containerPort: 8080
+              readinessProbe:
+                httpGet:
+                  path: /healthz
+                  port: 8080
+                periodSeconds: 5
+              livenessProbe:
+                httpGet:
+                  path: /livez
+                  port: 8080
+                initialDelaySeconds: 10
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+  /home/dev/invoice-k8s/service.yaml: |
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: invoice-api
+      namespace: billing
+    spec:
+      selector:
+        app: invoice-api
+      ports:
+        - port: 80
+          targetPort: 8080
+cluster: [/home/dev/invoice-k8s/deployment.yaml, /home/dev/invoice-k8s/service.yaml]
+deployments:
+  invoice-api:
+    namespace: billing
+    replicas: 3
+    status: NotReady
+    image: registry.example.test/invoice-api:2.0.0
+    readiness_failure: "HTTP probe failed with statuscode: 404"
+    logs:
+      - "2026-11-28T10:12:03Z INFO  invoice-api 2.0.0 starting"
+      - "2026-11-28T10:12:03Z INFO  health: liveness on /livez, readiness on /readyz"
+      - "2026-11-28T10:12:04Z INFO  database billing-db.billing.svc.cluster.local:5432 reachable"
+      - "2026-11-28T10:12:04Z INFO  listening on :8080"
+      - "2026-11-28T10:12:09Z WARN  GET /healthz 404 not found (kube-probe/1.37)"
+      - "2026-11-28T10:12:14Z INFO  GET /livez 200 (kube-probe/1.37)"
+      - "2026-11-28T10:12:14Z WARN  GET /healthz 404 not found (kube-probe/1.37)"
+    restart:
+      # The readiness probe is the first path in the container (the manifest lists it first). New
+      # pods are Ready when it asks an endpoint 2.0 serves, or when there is no readiness probe.
+      succeeds_if: >-
+        applied_value("deployment/billing/invoice-api", "path") == "/readyz"
+        || applied_value("deployment/billing/invoice-api", "path") == "/livez"
+        || !applied_contains("deployment/billing/invoice-api", "readinessProbe")
+      status_on_failure: NotReady
+      logs_on_success:
+        - "2026-11-28T11:02:31Z INFO  invoice-api 2.0.0 starting"
+        - "2026-11-28T11:02:31Z INFO  health: liveness on /livez, readiness on /readyz"
+        - "2026-11-28T11:02:32Z INFO  listening on :8080"
+        - "2026-11-28T11:02:37Z INFO  GET /readyz 200 (kube-probe/1.37)"
+      logs_on_failure:
+        - "2026-11-28T11:02:31Z INFO  invoice-api 2.0.0 starting"
+        - "2026-11-28T11:02:31Z INFO  health: liveness on /livez, readiness on /readyz"
+        - "2026-11-28T11:02:32Z INFO  listening on :8080"
+        - "2026-11-28T11:02:37Z WARN  GET /health 404 not found (kube-probe/1.37)"
+quick:
+  - "cat ~/handover.txt"
+  - kubectl get pods -n billing
+  - kubectl describe pods -n billing
+  - kubectl logs deployment/invoice-api -n billing
+  - kubectl get deploy -n billing
+  - "ls ~/invoice-k8s"
+objectives:
+  - {id: ready, text: obj.ready, done_when: 'pods_running("invoice-api")'}
+  - id: probe
+    text: obj.probe
+    done_when: 'applied_contains("deployment/billing/invoice-api", "readinessProbe") && applied_value("deployment/billing/invoice-api", "path") == "/readyz"'
+hints:
+  - {id: start, when: 'commands >= 3 && !ran("kubectl")', text: hint.start}
+  - {id: not-ready, when: 'ran("kubectl get") && !ran("kubectl describe") && (fails >= 1 || commands >= 6)', text: hint.ready}
+  - {id: path, when: 'ran("kubectl describe") && !ran("edit") && (fails >= 2 || commands >= 9)', text: hint.path}
+  - {id: apply, when: 'ran("edit") && !ran("kubectl apply") && commands >= 12', text: hint.apply}
+events:
+  - id: manifest-gone
+    when: 'removed("/home/dev/invoice-k8s/deployment.yaml")'
+    say: event.manifest_gone
+    reset: true
+  - id: probe-removed
+    when: '!applied_contains("deployment/billing/invoice-api", "readinessProbe")'
+    say: event.probe_removed

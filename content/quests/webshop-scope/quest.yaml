@@ -1,0 +1,25 @@
+# The ethical hacker's Medior engagement (DESIGN.md, Ethical hacker): an authorised assessment of
+# a fictional webshop's STAGING site, with a signed scope. The finding is a misconfiguration read
+# from config and logs: debug mode left on, and the nginx route to its diagnostics page opened to
+# everyone, so anyone could read the app's environment (a payment test key, the database
+# password). The player proves it without opening the secrets, stays out of production, changes
+# nothing, and writes finding-01. Esra gives it to anyone who chose a career path and has a clean
+# record: her mentees on the ethical path, everyone else as a side quest.
+schema: 1
+id: webshop-scope
+author: {name: "Nines team"}
+title: title
+summary: summary
+stage: medior
+branch: security
+paths: [ethical]
+roadmap_node: security-web-scope
+requires: [rate-limiter-interview]
+available_when: 'path_chosen && karma >= 0 && !probation'
+giver: esra
+start: {map: the-stack, object: stack-desk-pentest}
+reward: {money: 450, xp: 50, karma: 10}
+dialogue:
+  offer: [offer.1, offer.2, offer.3, offer.4]
+  active: [active.1]
+  done: [done.1, done.2]

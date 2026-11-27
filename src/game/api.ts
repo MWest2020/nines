@@ -44,6 +44,8 @@ export interface GameApi {
   openShop(): Promise<void>;
   openTrail(): Promise<void>;
   openCredits(): Promise<void>;
+  /** The career coach's screen: choose a path, or change it for a fee. */
+  openCareer(): Promise<void>;
   /** A short line over the world, such as "+€150". */
   toast(key: string, params?: Params): void;
 

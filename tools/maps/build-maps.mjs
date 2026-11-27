@@ -172,11 +172,13 @@ function juniorVillage() {
   m.put('detail', 23, 16, U(270), true); // bench
   m.put('detail', 13, 16, U(271), true);
 
-  // the road to Medior City is closed until the interview
+  // the road to Medior City is closed until the interview: the two barriers on the road itself
+  // are the gate (doors with town: medior), drawn on the props layer, which the world clears
+  // once the road is open (WorldScene, src/world/grid.ts closedGates)
   for (const y of [13, 16]) m.put('detail', 38, y, U(221), true);
   m.put('detail', 39, 13, U(222), true);
-  m.put('detail', 39, 14, U(222), true);
-  m.put('detail', 39, 15, U(222), true);
+  m.put('props', 39, 14, U(222));
+  m.put('props', 39, 15, U(222));
   m.put('detail', 39, 16, U(222), true);
 
   // south side: paths from the street
@@ -238,6 +240,9 @@ function juniorVillage() {
   m.object('npc-7', 'spawn', 15, 14); // Sanne, the pentester, in front of the office
   m.object('npc-8', 'spawn', 24, 25); // Henk, at the Repair Café stall
   m.object('server-room-exit', 'spawn', 7, 13, { facing: 'down' });
+  m.object('medior-road-exit', 'spawn', 38, 15, { facing: 'left' }); // back from Medior City
+  m.object('road-to-medior-1', 'door', 39, 14, { to_map: 'medior-city', to_point: 'village-road', town: 'medior' });
+  m.object('road-to-medior-2', 'door', 39, 15, { to_map: 'medior-city', to_point: 'village-road', town: 'medior' });
   m.object('server-room-door', 'door', 7, 12, { to_map: 'server-room', to_point: 'entrance' });
   m.object('ravi-laptop', 'terminal', 9, 21);
   m.object('back-alley-laptop', 'terminal', 20, 4);
@@ -297,7 +302,242 @@ function serverRoom() {
   return m;
 }
 
-export const MAPS = { 'junior-village': juniorVillage, 'server-room': serverRoom };
+/** A tower: a flat roof over `floors` rows of brick wall with windows, the bottom row the street front. */
+function tower(m, x0, y0, w, roofRows, floors, roof) {
+  m.blob('ground', x0, y0, w, roofRows, roof, true);
+  const rows = [[17, 18, 19], ...Array.from({ length: floors - 2 }, (_, i) => (i === 0 ? [44, 45, 46] : [71, 72, 73])), [98, 99, 100]];
+  rows.forEach((tiles, r) => {
+    const y = y0 + roofRows + r;
+    for (let x = x0; x < x0 + w; x++) {
+      const i = x === x0 ? 0 : x === x0 + w - 1 ? 2 : 1;
+      m.put('ground', x, y, U(tiles[i]), true);
+      // windows on every floor but the street front, every other column
+      if (r > 0 && r < rows.length - 1 && x > x0 && x < x0 + w - 1 && (x - x0) % 2 === 1) m.put('detail', x, y, U(362));
+    }
+  });
+}
+
+/** A parked car seen from the side: two tiles wide, solid. */
+function taxi(m, x, y) {
+  m.put('detail', x, y, U(420), true);
+  m.put('detail', x + 1, y, U(421), true);
+}
+
+// ---- Medior City: 44 x 34, a bigger, busier town east of the village (DESIGN.md, Medior City)
+function mediorCity() {
+  const W = 44;
+  const H = 34;
+  const m = mapBuilder(W, H);
+  const PAVE = SIDEWALK[4];
+  m.fill('ground', 0, 0, W, H, PAVE);
+
+  // the edge of town: trees to the north, south and east; the road west to Junior Village open
+  for (let x = 0; x < W; x++) {
+    m.put('detail', x, 0, x % 2 ? TT(4) : TT(3), true);
+    tree(m, x, 1, x % 3 === 0 ? 'orange' : 'green');
+    tree(m, x, H - 1, x % 4 === 1 ? 'orange' : 'green');
+  }
+  for (let y = 2; y < H - 1; y++) {
+    if (y < 13 || y > 16) tree(m, 0, y, y % 3 === 0 ? 'orange' : 'green');
+    tree(m, W - 1, y, y % 4 === 2 ? 'orange' : 'green');
+  }
+  // the back alley behind the buildings (y 2 and 3) is paved; the north trees close it off
+  for (let x = 1; x < W - 1; x++) m.put('ground', x, 1, TT(0));
+
+  // the boulevard: three lanes of asphalt west to east, sidewalks on both sides
+  m.fill('ground', 0, 14, W, 3, U(406));
+  for (let x = 1; x < W - 1; x += 2) m.put('ground', x, 15, U(433)); // the centre line
+  for (const x of [15, 16]) for (let y = 14; y <= 16; y++) m.put('ground', x, y, U(432)); // a zebra crossing
+  for (const x of [33, 34]) for (let y = 14; y <= 16; y++) m.put('ground', x, y, U(432));
+  m.fill('ground', 1, 13, W - 2, 1, SIDEWALK[7]);
+  m.fill('ground', 1, 17, W - 2, 1, SIDEWALK[1]);
+  taxi(m, 22, 16);
+  taxi(m, 37, 14);
+  m.put('detail', 8, 16, U(426), true); // a van, nose first
+  // the road to Senior Summit is closed: no gate for it yet
+  m.put('detail', W - 2, 14, U(221), true);
+  m.put('detail', W - 2, 15, U(222), true);
+  m.put('detail', W - 2, 16, U(221), true);
+  m.put('detail', W - 3, 13, TT(83), true); // a signpost: Senior Summit, later
+
+  // north side, west to east: the Career Office, The Stack (co-working and colocation), the
+  // Grachtgarant tower, the Byte Bakery
+  building(m, 3, 5, 8, 4, ROOF_SAND, WALLS.clay);
+  for (let x = 3; x < 11; x++) m.put('detail', x, 9, x === 3 ? U(328) : x === 10 ? U(332) : U(329)); // awning
+  m.put('detail', 4, 10, U(386));
+  m.put('detail', 5, 10, U(387));
+  m.put('detail', 6, 10, U(284), true); // the Career Office's door (no interior)
+  m.put('detail', 7, 10, U(284), true);
+  m.put('detail', 8, 10, U(387));
+  m.put('detail', 9, 10, U(388));
+
+  building(m, 12, 4, 11, 5, ROOF_SLATE, WALLS.brick);
+  for (const x of [13, 15, 19, 21]) m.put('detail', x, 9, U(362));
+  for (const x of [13, 14, 15]) m.put('detail', x, 10, U(359 + (x - 13)));
+  for (const x of [19, 20, 21]) m.put('detail', x, 10, U(359 + (x - 19)));
+  m.put('detail', 17, 10, U(285)); // The Stack's glass door
+  m.solid(17, 10, false);
+  m.put('above', 14, 4, U(333)); // rooftop units
+  m.put('above', 20, 5, U(334));
+  m.put('detail', 18, 10, N(14)); // a status screen in the window
+
+  tower(m, 25, 4, 8, 2, 5, ROOF_SLATE);
+  m.put('detail', 28, 10, U(285), true); // the insurer's lobby (no interior)
+  m.put('detail', 29, 10, U(285), true);
+  m.put('detail', 26, 10, U(305), true); // mailbox
+
+  building(m, 35, 6, 6, 3, ROOF_SAND, WALLS.brick);
+  for (let x = 35; x < 41; x++) m.put('detail', x, 9, x === 35 ? U(328) : x === 40 ? U(332) : U(330));
+  m.put('detail', 36, 10, U(386));
+  m.put('detail', 37, 10, U(283), true); // the bakery door
+  m.put('detail', 38, 10, U(387));
+  m.put('detail', 39, 10, U(388));
+
+  // the gap between The Stack and the tower leads to the back alley
+  m.put('detail', 23, 3, U(280), true); // bins in the alley
+  m.put('detail', 24, 2, U(279), true);
+  m.put('detail', 11, 3, U(278), true);
+  // Mo's corner, behind the tower: a crate with a laptop
+  m.put('detail', 31, 2, U(250), true);
+
+  // street furniture on the north sidewalk
+  for (const x of [2, 11, 24, 34, 41]) lamp(m, x, 12);
+  m.put('detail', 14, 12, U(270), true); // bench
+  m.put('detail', 32, 12, U(301), true); // planter
+  m.put('detail', 22, 12, U(166), true); // a bus stop sign
+
+  // south side: the plaza with its fountain, west
+  m.blob('ground', 2, 19, 20, 12, SIDEWALK);
+  m.blob('ground', 9, 23, 5, 4, WATER, true);
+  for (const [x, y] of [[4, 20], [19, 20], [4, 29], [19, 29]]) tree(m, x, y, (x + y) % 2 ? 'green' : 'orange');
+  m.put('detail', 11, 22, U(270), true); // benches round the fountain
+  m.put('detail', 11, 27, U(271), true);
+  m.put('detail', 8, 24, U(381), true);
+  m.put('detail', 14, 24, U(381), true);
+  // the café terrace on the plaza, where Lars reviews code
+  for (const [x, y] of [[6, 21], [16, 21]]) m.put('detail', x, y, IN(7), true);
+  m.put('props', 6, 21, N(5));
+  m.put('detail', 16, 21, IN(7), true);
+  m.put('detail', 7, 21, IN(83), true);
+  m.put('detail', 17, 21, IN(82), true);
+  // Hugo's whiteboard on the plaza
+  m.put('detail', 6, 28, N(10), true);
+  m.put('detail', 16, 28, U(291), true); // potted trees
+  m.put('detail', 3, 25, U(292), true);
+
+  // trees and a bench along the south sidewalk
+  for (const x of [3, 12, 26, 38]) lamp(m, x, 18);
+  m.put('detail', 22, 18, U(270), true);
+  m.put('detail', 9, 18, U(302), true);
+  m.put('detail', 30, 18, U(301), true);
+
+  // the car park, south-east, with its pay station
+  m.blob('ground', 24, 19, 18, 7, SIDEWALK);
+  for (let x = 26; x < 40; x += 2) {
+    m.put('ground', x, 20, U(437));
+    m.put('ground', x + 1, 20, U(438));
+  }
+  m.put('detail', 25, 20, U(442), true); // P
+  taxi(m, 28, 20);
+  m.put('detail', 34, 20, U(427), true); // a van, from behind
+  m.put('detail', 33, 23, U(412), true); // the pay station
+  m.put('props', 33, 23, N(5));
+
+  // the park, south-east: grass and trees
+  m.fill('ground', 23, 27, 20, 6, TT(0));
+  for (let y = 27; y < 33; y++) for (let x = 23; x < 43; x++) {
+    const h = (x * 31 + y * 17) % 13;
+    if (h === 0) m.put('ground', x, y, TT(1));
+    else if (h === 6) m.put('ground', x, y, TT(2));
+  }
+  for (const [x, y] of [[25, 29], [29, 31], [36, 28], [40, 31], [33, 30]]) tree(m, x, y, (x + y) % 3 ? 'green' : 'orange');
+  m.put('detail', 38, 29, TT(5), true);
+  m.put('detail', 27, 28, U(381), true);
+
+  // spawn points and objects
+  m.object('village-road', 'spawn', 2, 15, { facing: 'right' });
+  m.object('back-to-village-1', 'door', 0, 14, { to_map: 'junior-village', to_point: 'medior-road-exit' });
+  m.object('back-to-village-2', 'door', 0, 15, { to_map: 'junior-village', to_point: 'medior-road-exit' });
+  m.object('stack-exit', 'spawn', 17, 11, { facing: 'down' });
+  m.object('stack-door', 'door', 17, 10, { to_map: 'the-stack', to_point: 'entrance' });
+  m.object('npc-1', 'spawn', 8, 12); // Petra, the career coach, at the Career Office
+  m.object('npc-2', 'spawn', 6, 22); // Lars, at the café terrace
+  m.object('npc-3', 'spawn', 17, 24); // Amara, by the fountain
+  m.object('npc-4', 'spawn', 20, 26); // Kim, on the plaza
+  m.object('npc-5', 'spawn', 7, 28); // Hugo, at his whiteboard
+  m.object('npc-6', 'spawn', 30, 12); // Marieke, in front of the Grachtgarant tower
+  m.object('npc-7', 'spawn', 30, 2); // Mo, in the back alley
+  m.object('cameo-1', 'spawn', 38, 12);
+  m.object('cameo-2', 'spawn', 31, 29);
+  m.object('garage-pay-station', 'terminal', 33, 23);
+  return m;
+}
+
+// ---- The Stack: co-working desks on the left, a small colocation floor on the right. 20 x 12
+function theStack() {
+  const W = 20;
+  const H = 12;
+  const m = mapBuilder(W, H);
+  // wooden boards under the desks, the raised floor of the colocation room on the right
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) m.put('ground', x, y, x >= 13 ? ((x + y) % 5 === 0 ? N(7) : N(6)) : IN(24));
+  for (let x = 0; x < W; x++) {
+    m.put('ground', x, 0, N(8), true);
+    m.put('ground', x, 1, N(9), true);
+    m.put('ground', x, H - 1, N(11), true);
+  }
+  for (let y = 0; y < H; y++) {
+    m.put('ground', 0, y, N(11), true);
+    m.put('ground', W - 1, y, N(11), true);
+  }
+  // the glass wall of the colocation floor, with a door gap
+  for (let y = 2; y < H - 1; y++) if (y !== 6) m.put('ground', 12, y, N(11), true);
+  m.put('ground', 9, H - 1, N(13)); // the way out
+  m.solid(9, H - 1, false);
+  m.put('detail', 3, 0, N(10)); // a whiteboard
+  m.put('detail', 8, 1, N(14)); // a dashboard
+
+  // desks: a table with a laptop, a chair
+  const desk = (x, y, laptop = true) => {
+    m.put('detail', x, y, IN(7), true);
+    if (laptop) m.put('props', x, y, N(5));
+  };
+  desk(3, 3);
+  desk(7, 3);
+  desk(3, 7);
+  desk(7, 7);
+  desk(10, 4, false);
+  m.put('detail', 4, 3, IN(83), true);
+  m.put('detail', 8, 3, IN(83), true);
+  m.put('detail', 4, 7, IN(83), true);
+  m.put('detail', 1, 9, IN(16), true); // plants
+  m.put('detail', 11, 9, IN(17), true);
+  m.put('detail', 1, 2, IN(16), true);
+
+  // the colocation floor: two rows of racks
+  const rack = (x, y) => {
+    m.put('detail', x, y, N(1), true);
+    m.put('detail', x, y + 1, N(3), true);
+  };
+  for (const x of [14, 15, 16, 17]) rack(x, 3);
+  for (const x of [14, 15, 17]) rack(x, 7);
+  m.put('detail', 18, 10, IN(16), true);
+
+  m.object('entrance', 'spawn', 9, 10, { facing: 'up' });
+  m.object('exit', 'door', 9, 11, { to_map: 'medior-city', to_point: 'stack-exit' });
+  m.object('npc-1', 'spawn', 6, 4); // Ruben, DevOps
+  m.object('npc-2', 'spawn', 2, 7); // Esra, the pentester
+  m.object('npc-3', 'spawn', 9, 6); // Jesse, the app team lead
+  m.object('npc-4', 'spawn', 16, 6); // Wim, systems, on the colocation floor
+  m.object('stack-desk-ci', 'terminal', 7, 3); // Ruben's pipeline
+  m.object('stack-desk-pentest', 'terminal', 3, 7); // the assessment laptop
+  m.object('stack-jump-k8s', 'terminal', 7, 7); // the Kubernetes jump host
+  m.object('stack-rack-storage', 'terminal', 15, 4); // the file server with the RAID
+  m.object('stack-rack-portal', 'terminal', 17, 8); // Grachtgarant's portal, colocated
+  m.object('cameo-desk-1', 'terminal', 3, 3); // a spare desk for a terminal cameo
+  return m;
+}
+
+export const MAPS = { 'junior-village': juniorVillage, 'server-room': serverRoom, 'medior-city': mediorCity, 'the-stack': theStack };
 
 function toTiled(m) {
   const names = ['ground', 'detail', 'props', 'above', 'collision'];

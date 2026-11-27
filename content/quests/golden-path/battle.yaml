@@ -1,0 +1,102 @@
+# Design: Kim and the player design a golden-path template that gives a team a namespace and a
+# Deployment. CKAD domain "Application Environment, Configuration and Security", in our own
+# questions. Facts checked: with a ResourceQuota on requests.cpu/memory, pods without those
+# requests are rejected unless a LimitRange supplies defaults; over the memory limit a container
+# is OOMKilled, over the CPU limit it is throttled; runAsNonRoot makes the kubelet refuse a
+# container that would run as UID 0; allowPrivilegeEscalation is not false by default; Secrets
+# are base64-encoded, not encrypted (unless encryption at rest is configured); namespaces do not
+# isolate network traffic, NetworkPolicies do (with a CNI that enforces them); a pod naming a
+# ServiceAccount that does not exist is refused. Paved road vs mandate is debatable, and says so.
+schema: 1
+kind: design
+attacker: attacker
+intro: [intro.1, intro.2]
+trigger: {kind: npc}
+rounds:
+  - id: ask
+    type: clarify
+    prompt: [ask.prompt.1]
+    stakes: 15
+    pick: 2
+    options:
+      - {id: pain, grade: best, text: ask.pain.text, why: ask.pain.why}
+      - {id: rules, grade: best, text: ask.rules.text, why: ask.rules.why}
+      - {id: tool, grade: fair, text: ask.tool.text, why: ask.tool.why}
+      - {id: force, grade: weak, text: ask.force.text, why: ask.force.why}
+      - {id: worst, grade: weak, text: ask.worst.text, why: ask.worst.why}
+  - id: quota
+    type: flaw
+    prompt: [quota.prompt.1]
+    stakes: 15
+    proposal: [quota.proposal.1, quota.proposal.2, quota.proposal.3]
+    options:
+      - {id: rejected, grade: best, text: quota.rejected.text, why: quota.rejected.why}
+      - {id: limits, grade: fair, text: quota.limits.text, why: quota.limits.why}
+      - {id: pods, grade: weak, text: quota.pods.text, why: quota.pods.why}
+      - {id: cluster, grade: weak, text: quota.cluster.text, why: quota.cluster.why}
+  - id: limits
+    type: tradeoff
+    prompt: [limits.prompt.1, limits.prompt.2]
+    stakes: 15
+    options:
+      - {id: oom, grade: best, text: limits.oom.text, why: limits.oom.why}
+      - {id: evict, grade: weak, text: limits.evict.text, why: limits.evict.why}
+      - {id: swapped, grade: weak, text: limits.swapped.text, why: limits.swapped.why}
+      - {id: both, grade: fair, text: limits.both.text, why: limits.both.why}
+  - id: security
+    type: tradeoff
+    prompt: [security.prompt.1]
+    stakes: 15
+    options:
+      - {id: nonroot, grade: best, text: security.nonroot.text, why: security.nonroot.why}
+      - {id: privileged, grade: weak, text: security.privileged.text, why: security.privileged.why}
+      - {id: half, grade: fair, text: security.half.text, why: security.half.why}
+      - {id: teams, grade: weak, text: security.teams.text, why: security.teams.why}
+  - id: network
+    type: tradeoff
+    prompt: [network.prompt.1, network.prompt.2]
+    stakes: 15
+    options:
+      - {id: deny, grade: best, text: network.deny.text, why: network.deny.why}
+      - {id: namespaces, grade: weak, text: network.namespaces.text, why: network.namespaces.why}
+      - {id: tickets, grade: fair, text: network.tickets.text, why: network.tickets.why}
+      - {id: inside, grade: weak, text: network.inside.text, why: network.inside.why}
+  - id: secrets
+    type: flaw
+    prompt: [secrets.prompt.1]
+    stakes: 15
+    proposal: [secrets.proposal.1, secrets.proposal.2, secrets.proposal.3]
+    options:
+      - {id: base64, grade: best, text: secrets.base64.text, why: secrets.base64.why}
+      - {id: etcd, grade: fair, text: secrets.etcd.text, why: secrets.etcd.why}
+      - {id: env, grade: weak, text: secrets.env.text, why: secrets.env.why}
+      - {id: private, grade: weak, text: secrets.private.text, why: secrets.private.why}
+  - id: road
+    type: tradeoff
+    prompt: [road.prompt.1, road.prompt.2]
+    stakes: 15
+    options:
+      - {id: paved, grade: best, text: road.paved.text, why: road.paved.why}
+      - {id: mandate, grade: weak, text: road.mandate.text, why: road.mandate.why}
+      - {id: explain, grade: fair, text: road.explain.text, why: road.explain.why}
+      - {id: loose, grade: weak, text: road.loose.text, why: road.loose.why}
+  - id: apply
+    type: order
+    prompt: [apply.prompt.1]
+    stakes: 15
+    items:
+      - {id: namespace, text: apply.namespace.text, why: apply.namespace.why, rank: 1}
+      - {id: quota, text: apply.quota.text, why: apply.quota.why, rank: 2}
+      - {id: account, text: apply.account.text, why: apply.account.why, rank: 2}
+      - {id: policy, text: apply.policy.text, why: apply.policy.why, rank: 2}
+      - {id: deployment, text: apply.deployment.text, why: apply.deployment.why, rank: 3}
+      - {id: check, text: apply.check.text, why: apply.check.why, rank: 4}
+hints:
+  - {id: ask, round: ask, when: 'attempts >= 1', text: hint.ask}
+  - {id: quota, round: quota, when: 'attempts >= 1', text: hint.quota}
+  - {id: secrets, round: secrets, when: 'attempts >= 1', text: hint.secrets}
+  - {id: apply, round: apply, when: 'attempts >= 1 || misses >= 2', text: hint.apply}
+  - {id: road, when: 'confidence <= 40', text: hint.road}
+outro:
+  won: [won.1]
+  lost: [lost.1]

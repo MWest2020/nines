@@ -1,0 +1,23 @@
+# The CKAD start of the Kubernetes learning path (DESIGN.md, Kubernetes learning path): Medior,
+# domain "Application Observability and Maintenance" (probes and health checks). invoice-api 2.0
+# moved its readiness endpoint; the manifest's readiness probe still asks the old path, so the
+# pods run but never become Ready and the Service sends them no traffic. Jesse stands in The Stack
+# (npc-3); the jump host is the desk by the window (stack-jump-k8s).
+schema: 1
+id: readiness-probe
+author: {name: "Nines team"}
+title: title
+summary: summary
+stage: medior
+branch: kubernetes
+paths: [platform, sre, devops]
+roadmap_node: ckad-observability
+requires: [rate-limiter-interview]
+available_when: 'path_chosen'
+giver: jesse
+start: {map: the-stack, object: stack-jump-k8s}
+reward: {money: 450, xp: 50}
+dialogue:
+  offer: [offer.1, offer.2]
+  active: [active.1]
+  done: [done.1, done.2]

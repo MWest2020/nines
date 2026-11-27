@@ -138,6 +138,44 @@ export function doorTiles(w: WorldMap): Set<string> {
 }
 
 /**
+ * Gate doors that are still shut, as "x,y" keys: a door with a `town` property is the road to that
+ * town and stays closed (a wall, for walking and for tap paths) until `open(town)` says the road
+ * is open, which is when its gate battle has been won (core/game.ts townOpen).
+ */
+export function closedGates(w: WorldMap, open: (town: string) => boolean): Set<string> {
+  const out = new Set<string>();
+  for (const o of w.objects) {
+    const town = o.type === 'door' ? own(o.props, 'town') : undefined;
+    if (town !== undefined && !open(town)) out.add(key(o.x, o.y));
+  }
+  return out;
+}
+
+/**
+ * The maps the player can walk to: from the map with `player-start`, through every door except
+ * shut gates. A save that stands on a map outside this set (hand-edited, or from a newer game)
+ * is put back at the start, so no save skips a gate.
+ */
+export function openMaps(worlds: readonly WorldMap[], open: (town: string) => boolean): Set<string> {
+  const start = worlds.find((w) => w.objects.some((o) => o.name === 'player-start'));
+  const seen = new Set<string>(start ? [start.id] : []);
+  const queue = start ? [start] : [];
+  while (queue.length > 0) {
+    const w = queue.shift()!;
+    const shut = closedGates(w, open);
+    for (const o of w.objects) {
+      const to = o.type === 'door' && !shut.has(key(o.x, o.y)) ? own(o.props, 'to_map') : undefined;
+      const next = to !== undefined && !seen.has(to) ? worlds.find((x) => x.id === to) : undefined;
+      if (next) {
+        seen.add(next.id);
+        queue.push(next);
+      }
+    }
+  }
+  return seen;
+}
+
+/**
  * The shortest walk from one tile to another (tap to walk): the steps to take, [] when already
  * there, null when it cannot be reached. Breadth-first over the four directions, so it is
  * deterministic. Tiles in `occupied` (NPCs) never take a step; tiles in `avoid` (doors) only

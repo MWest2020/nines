@@ -58,8 +58,11 @@ describe('the battles in content', () => {
   it('cover the three encounter kinds and the three ways to start', () => {
     const bs = battles();
     expect(bs.map((b) => [b.id, b.spec.kind, b.spec.trigger.kind, b.quest.stage])).toEqual([
+      ['code-review', 'stakeholder', 'npc', 'medior'],
       ['collab-editor-interview', 'design', 'npc', 'senior'],
+      ['error-budget', 'incident', 'npc', 'medior'],
       ['friday-scope', 'stakeholder', 'npc', 'junior'],
+      ['golden-path', 'design', 'npc', 'medior'],
       ['nearby-places', 'design', 'npc', 'junior'],
       ['night-pager', 'incident', 'pager', 'junior'],
       ['rate-limiter-interview', 'design', 'gate', 'junior'],
@@ -87,16 +90,40 @@ describe('the battles in content', () => {
     expect(conversation(save({ 'broken-pipeline': 'done' }), content(), 'ravi')).toMatchObject({ offer: 'nearby-places', battle: 'nearby-places' });
     expect(conversation(save({ 'broken-pipeline': 'active' }), content(), 'ravi')?.battle).toBeUndefined();
   });
-  it('URL shortener: Medior, asked by Ingrid at the gate once her gate interview is won (Medior City has no map yet)', () => {
+  it('URL shortener: Medior, asked by Hugo at his whiteboard in Medior City once the gate interview is won', () => {
     const q = content().quests.find((x) => x.id === 'url-shortener')!.quest;
-    expect([q.stage, q.giver, q.requires, q.start]).toEqual(['medior', 'ingrid', ['rate-limiter-interview'], { map: 'junior-village', object: 'gate-medior' }]);
+    expect([q.stage, q.giver, q.requires, q.start]).toEqual(['medior', 'hugo', ['rate-limiter-interview'], { map: 'medior-city', object: 'npc-5' }]);
     const specs = content().quests.map((x) => x.quest);
     expect(questState(save({ 'disk-full': 'done', 'service-down': 'done', 'broken-pipeline': 'done' }), specs, 'url-shortener')).toBe('locked');
     expect(questState(save({ 'rate-limiter-interview': 'done' }), specs, 'url-shortener')).toBe('available');
-    // Talking to Ingrid offers it once the gate is won, and the talk opens the battle.
-    expect(conversation(save({ 'rate-limiter-interview': 'done' }), content(), 'ingrid')).toMatchObject({ offer: 'url-shortener', battle: 'url-shortener' });
+    // Talking to Hugo offers it once the gate is won, and the talk opens the battle; Ingrid at the gate no longer does.
+    expect(conversation(save({ 'rate-limiter-interview': 'done' }), content(), 'hugo')).toMatchObject({ offer: 'url-shortener', battle: 'url-shortener' });
+    expect(conversation(save({ 'rate-limiter-interview': 'done' }), content(), 'ingrid')?.offer).toBeUndefined();
+    const npc = content().quests.find((x) => x.id === 'url-shortener')!.npc!;
+    expect(npc.spawn).toMatchObject({ map: 'medior-city', slot: 'npc-5' });
     const node = content().roadmap.nodes.find((n) => n.id === q.roadmap_node)!;
     expect([node.stage, node.branch]).toEqual(['medior', 'design']);
+  });
+  it('the mentors\' battles in Medior City open once a path is chosen, and greet their own path differently', () => {
+    const won = { ...save({ 'rate-limiter-interview': 'done' }) };
+    for (const [id, giver, path, other] of [
+      ['code-review', 'lars', 'swe', 'sre'],
+      ['error-budget', 'amara', 'sre', 'swe'],
+      ['golden-path', 'kim', 'platform', 'swe'],
+    ] as const) {
+      const q = content().quests.find((x) => x.id === id)!;
+      expect([q.quest.stage, q.quest.giver, q.quest.paths, q.quest.start.map], id).toEqual(['medior', giver, [path], 'medior-city']);
+      expect(q.npc?.spawn.slot, id).toBe(q.quest.start.object);
+      const specs = content().quests.map((x) => x.quest);
+      expect(questState(won, specs, id), id).toBe('locked');
+      const mine = conversation({ ...won, path }, content(), giver)!;
+      const theirs = conversation({ ...won, path: other }, content(), giver)!;
+      expect(mine).toMatchObject({ offer: id, battle: id });
+      expect(theirs).toMatchObject({ offer: id, battle: id });
+      // the mentor's greeting comes before the offer, and differs by path
+      expect(mine.lines[0], id).not.toBe(theirs.lines[0]);
+      expect(mine.lines.at(-1)).toBe(theirs.lines.at(-1));
+    }
   });
   it('the Senior Summit interviews are started by their giver, who stands on the map roadmap.yaml plans for the town', () => {
     const { roadmap, quests } = content();

@@ -1,0 +1,11 @@
+# Hugo, principal engineer, at his whiteboard on the Medior City plaza.
+schema: 1
+id: hugo
+author: {name: "Nines team"}
+name: npc.name
+tint: "#2860a0"
+spawn: {map: medior-city, slot: npc-5, facing: down}
+dialogue:
+  - when: 'quest("url-shortener") == "done"'
+    lines: [npc.after]
+  - lines: [npc.idle]

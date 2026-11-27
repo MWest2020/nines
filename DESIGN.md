@@ -57,7 +57,7 @@ nothing to download or license.
 | Character frame | 16 x 16 (cameos may use 32 x 32) |
 | Character sheet | 3 columns (step, stand, step) x 4 rows (down, left, right, up): 48 x 64 px, or 96 x 128 px with 32 px frames. The validator enforces this. |
 | Walk | 4 frames per tile step at 8 fps (step, stand, step, stand); one tile per 250 ms |
-| Map | Junior Village 40 x 30 tiles; server room 15 x 10 (one screen) |
+| Map | Junior Village 40 x 30 tiles; server room 15 x 10 (one screen); Medior City 44 x 34; The Stack 20 x 12 |
 | Canvas text | 8 px pixel font, 10 px line height |
 | Touch targets | at least 48 x 48 CSS px for every DOM control (the touch controls, the terminal and battle overlays); D-pad 144 x 144 (48 px arms), use 64, back 56, menu and Career Trail 48. Buttons drawn on the canvas (the menu, shop and trail) scale with the view and are smaller on a phone: the D-pad moves their focus and the use button presses them |
 | Dialogue box | 232 x 48 px at the bottom of the view, 4 px margin, 3 lines of text |
@@ -301,8 +301,9 @@ What a path unlocks:
 - a path item in the Homelab Store (ideas in docs/content-backlog.md, Career paths),
 - its name on the Career Trail and the credits.
 
-Quests of other paths stay playable as side quests: nothing locks a player out for good. Until
-Medior City has a map the choice exists only in the rules and the save.
+Quests of other paths stay playable as side quests: nothing locks a player out for good. The
+choice happens in play since Medior City has its map (below); a switch later costs €300 at the
+same coach (https://github.com/MWest2020/nines/issues/24, default 2).
 
 **Existing content, tagged.**
 
@@ -321,10 +322,66 @@ Medior City has a map the choice exists only in the rules and the save.
 | vending-prices | terminal (hustle) | ethical, systems: same skills, other side of the law |
 | bakery-hotfix | terminal (contractor variant) | devops, sre, swe |
 | repair-cafe | terminal (community service) | all six |
+| code-review | battle (stakeholder), Medior | swe |
+| error-budget | battle (incident), Medior | sre |
+| pipeline-secrets | terminal, Medior | devops |
+| golden-path | battle (design), Medior | platform |
+| degraded-raid | terminal, Medior | systems |
+| webshop-scope | terminal (pentest), Medior | ethical |
+| readiness-probe | terminal (Kubernetes, CKAD), Medior | platform, sre, devops |
+| insurer-cert | terminal (enterprise job, procedures), Medior | sre, systems, devops |
+| parking-garage | terminal (hustle), Medior | ethical, systems |
 
 **The sixth slot.** Ethical hacker takes the sixth path. Kubernetes stays a branch every path can
 walk, as the default of https://github.com/MWest2020/nines/issues/23 says. If Mark wants a
 Kubernetes path after all, it would be a seventh.
+
+### Medior City
+
+Mark, 27 Nov 2026: "is city er al? want als die ok is, dan richting google play." The second
+town, east of Junior Village along the same road: bigger and busier than the village, built from
+the same CC0 Kenney sheets (no new sheets) and our own tiles by `tools/maps/build-maps.mjs`.
+
+**The map** (44 x 34). A three-lane boulevard runs west to east with zebra crossings, parked taxis
+and a van. North of it, west to east: the Career Office (Petra stands in front), The Stack
+(co-working and colocation, the one interior), the Grachtgarant tower (a fictional insurer;
+Marieke in front) and the Byte Bakery. A back alley behind the buildings, reached through the gap
+between The Stack and the tower, is where Mo waits. South: the plaza with a fountain, a café
+terrace (Lars), Hugo's whiteboard, Amara by the fountain and Kim on the plaza; the car park with
+its pay station; a small park. The road east to Senior Summit is closed with barriers and a sign:
+no gate for it yet.
+
+**The Stack** (20 x 12): desks on wooden boards on the left (Ruben's pipeline, Esra's assessment
+laptop, Jesse's Kubernetes jump host, a spare desk for a terminal cameo), a colocation room on
+raised floor behind a glass wall on the right (Wim's file server, Grachtgarant's portal).
+
+**The gate.** Junior Village's road east ends in two barriers on the road itself. They are doors
+with `town: medior`: shut and drawn while the rate-limiter interview is not won, gone the moment
+it is. The road back is the city's west edge, which leads to the spot next to the gate.
+
+**The career coach.** Petra introduces the six paths and opens her screen: one path per page,
+its title and pitch, "Choose this path", and a confirmation that says the mentor waits in town,
+other paths stay open as side quests and a switch costs €300 later. After the choice she names
+the mentor and where to find them. Our own screen: the ink panel and gold rule of every Nines
+screen, words on buttons, no cursor triangle.
+
+**Each path's mentor and first quest** (open once a path is chosen; anyone may take another
+path's quest as a side quest, and the mentor greets their own path differently):
+
+| Path | Mentor, where | First quest | What it teaches |
+| ---- | ------------- | ----------- | --------------- |
+| swe | Lars, café terrace | Code review (battle, stakeholder) | split a 900-line PR, what to block on, landing order |
+| sre | Amara, by the fountain | Error budget (battle, incident) | 43.2 minutes a month at 99.9%, burn rate 14.4, multi-window alerts, an error budget policy |
+| devops | Ruben, The Stack | Slow and leaky (terminal) | a secret moved to the CI's store and revoked, a cache keyed on the lockfile |
+| platform | Kim, on the plaza | Golden path (battle, design) | namespace, quota and LimitRange, limits, non-root, default-deny, paved road vs mandate |
+| systems | Wim, The Stack's colocation room | One disk left (terminal) | /proc/mdstat, SMART, check the backup, name the disk by serial |
+| ethical | Esra, The Stack | Webshop staging assessment (terminal) | stay in scope, prove a debug page from config and logs, report don't fix |
+
+**Also in town.** Hugo asks the URL shortener interview at his whiteboard (it moved from Ingrid
+at the gate). Jesse's readiness probe is the CKAD start of the Kubernetes path. Marieke's
+certificate renewal at Grachtgarant is the enterprise job: it needs a clean record (`karma >= 0
+&& !probation`) and has procedures a contractor skips. Mo's car-park job is the city's side
+hustle, only for players at karma -20 or below.
 
 ### Kubernetes learning path
 
@@ -377,6 +434,13 @@ to 14 px for that row. Each node's quest is listed in docs/content-backlog.md.
 battles (an interviewer on pods vs Deployments, Services, namespaces, the control plane) as
 well as short terminal quests. CKAD, CKA and CKS are hands-on, so they suit terminal quests;
 the simulator's kubectl grows with them (the backlog lists the commands each needs).
+
+**Medior, the first CKAD piece: Not ready** (`content/quests/readiness-probe`, lights
+`ckad-observability`). Jesse's invoice-api 2.0 moved its readiness endpoint to /readyz; the
+manifest's probe still asks /healthz, so the pods run with READY 0/1, describe shows the 404, and
+the Service sends them nothing. The fix is in the manifest; applying a changed pod template rolls
+the Deployment out by itself. Deleting the probe makes the pods Ready too, which the game says is
+not the fix. Kim's golden-path battle lights `ckad-config-security`.
 
 **Written so far: CrashLoopBackOff** (`content/quests/crashloop-config`, Junior, lights
 `k8s-fundamentals`). Mila from the platform team stands on the square; the jump host is the

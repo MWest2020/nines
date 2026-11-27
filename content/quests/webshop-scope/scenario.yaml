@@ -1,0 +1,209 @@
+# shop-stg-01: Klompz's staging webshop (a fictional company). Engagement KZ-2026-12 is signed and
+# scoped in ~/engagement/scope.txt. The misconfiguration: the app runs with debug on
+# (/srv/staging/app/settings.ini), which serves a diagnostics page at /_debug/env that prints the
+# process environment, and nginx's /_debug/ route has its allow/deny commented out, so the whole
+# internet reaches it. The access log shows outside addresses fetching it; the app log names the
+# variables it printed (PAYMENT_API_KEY, DB_PASSWORD), so the .env never has to be opened.
+#
+# Out of scope: /srv/releases/prod (production's release, staged here by the deploy pipeline; a
+# recursive grep over /srv walks into it) and changing anything. Opening the staging .env costs
+# karma: a recursive grep over /srv/staging opens it too, as the scope warns.
+#
+# finding-01 is checked on a few key tokens, so wording is free (case matters where shown):
+#   where:    "/_debug" and one of "debug = true", "debug=true", "settings.ini", "debug mode",
+#             "debugmodus"
+#   what:     one of "KEY", "key", "PASSWORD", "password", "wachtwoord", "secret", "SECRET",
+#             "geheim"
+#   severity: "Severity: high" (or High, critical, Critical, hoog, Hoog)
+#   close:    one of "false", "deny", "remov", "disabl", "verwijder", "uitzet", "afscherm"
+#   rotate:   one of "rotat", "roteer", "roteren", "revoke", "intrek", "new key", "nieuwe"
+schema: 1
+host: shop-stg-01
+user: pentest
+home: /home/pentest
+motd: motd
+mounts:
+  - {path: /, device: /dev/sda1, size: 40G, base_used: 7G}
+dirs: [/tmp, /run/klompz]
+files:
+  /home/pentest/engagement/scope.txt: |
+    KLOMPZ B.V.: AUTHORISATION FOR SECURITY TESTING
+    Engagement KZ-2026-12, web application assessment
+    Signed: J. Visser, CTO, Klompz B.V.
+    Signed: E. Yilmaz, Duinwacht Security
+    Tester: you, medior consultant, with Esra
+    Window: 26 Nov, 09:00 to 17:00
+
+    IN SCOPE
+    - the STAGING webshop, staging.klompz.example.test, on
+      this machine (shop-stg-01):
+      its configuration in /etc and /srv/staging,
+      its logs in /var/log
+    - reading files to find misconfigurations
+
+    OUT OF SCOPE: do not touch
+    - production: www.klompz.example.test, and its release
+      in /srv/releases/prod (the deploy pipeline stages it
+      on this machine). Not yours, not even to read.
+    - secrets you come across: note WHERE they are exposed,
+      do not open them. A recursive grep opens every file
+      it walks, secrets included.
+    - changing or deleting anything: report, don't fix
+    - other machines, denial of service, social engineering
+
+    Write it up in ~/engagement/finding-01.txt: where (the
+    setting and the web path), what it exposes, a severity
+    (low, medium, high or critical) and the fix.
+  /home/pentest/engagement/finding-01.txt: |
+    FINDING 01 (KZ-2026-12)
+    Title: ?
+    Where: ?
+    What anyone on the internet could read: ?
+    Evidence: ?
+    Severity: ?
+    Recommendation: ?
+  /etc/hosts: |
+    127.0.0.1   localhost
+    127.0.1.1   shop-stg-01 staging.klompz.example.test
+    10.30.0.5   shop-prod-01 www.klompz.example.test
+    10.30.0.9   db-stg-01.klompz.example.test
+  /etc/nginx/nginx.conf: |
+    user www-data;
+    events {}
+    http {
+      access_log /var/log/nginx/access.log;
+      include /etc/nginx/sites-enabled/*;
+    }
+  /etc/nginx/sites-enabled/staging: |
+    server {
+      listen 443 ssl;
+      server_name staging.klompz.example.test;
+      ssl_certificate     /etc/nginx/tls/staging.fullchain.pem;
+      ssl_certificate_key /etc/nginx/tls/staging.key;
+      access_log /var/log/nginx/staging-access.log;
+
+      location / {
+        include uwsgi_params;
+        uwsgi_pass unix:/run/klompz/staging.sock;
+      }
+
+      # diagnostics, office network only (Bas, 14 Oct)
+      location /_debug/ {
+        # allow 10.20.0.0/16;   # off for the payment demo, back on after
+        # deny all;
+        include uwsgi_params;
+        uwsgi_pass unix:/run/klompz/staging.sock;
+      }
+    }
+  /etc/nginx/tls/staging.fullchain.pem: |
+    -----BEGIN CERTIFICATE-----
+    MIIC9zCCAd+gAwIBAgIUStagingKlompzExampleTestOnlyNotARealCertA
+    -----END CERTIFICATE-----
+  /etc/nginx/tls/staging.key: {size: 241}
+  /srv/staging/app/settings.ini: |
+    ; Klompz webshop: staging
+    [app]
+    env = staging
+    ; on for the payment integration demo (Bas, 14 Oct). Off again after!
+    debug = true
+    ; with debug on, the app serves diagnostics at /_debug/env:
+    ; the request, the settings and the full process environment
+    env_file = /srv/staging/app/.env
+
+    [payments]
+    provider = Betaalbaar (sandbox)
+    api_key = ${PAYMENT_API_KEY}
+
+    [database]
+    host = db-stg-01.klompz.example.test
+    user = shop
+    password = ${DB_PASSWORD}
+  /srv/staging/app/.env: |
+    PAYMENT_API_KEY=bb_test_7Hq2v8QxRzT0mW3nP7cY4aLk
+    DB_PASSWORD=Gr0ene-Klomp-Staging-26
+    SESSION_SECRET=4c1f9e0a7b2d6e3f8a5c1b9d0e7f2a6c
+  /srv/staging/app/shop.py: |
+    # Klompz webshop (staging build 2026.11.3)
+    # the code is not part of this engagement: configuration and logs are
+  /srv/staging/www/index.html: |
+    <h1>Klompz staging</h1>
+  /srv/releases/prod/settings.ini: |
+    ; Klompz webshop: production
+    [app]
+    env = production
+    debug = false
+    env_file = /srv/releases/prod/.env
+  /srv/releases/prod/.env: |
+    PAYMENT_API_KEY=bb_live_Kx9mR2pQ7vT4wZ8nL3cY6hJs
+    DB_PASSWORD=Klompz-Prod-Do-Not-Share
+  /var/log/nginx/access.log: |
+    127.0.0.1 - - [26/Nov/2026:06:00:01 +0100] "GET /nginx_status HTTP/1.1" 404 153
+  /var/log/nginx/staging-access.log: |
+    198.51.100.23 - - [26/Nov/2026:03:14:55 +0100] "GET /_debug/env HTTP/1.1" 200 3391 "-" "curl/8.5.0"
+    203.0.113.9 - - [26/Nov/2026:05:41:12 +0100] "GET /_debug/ HTTP/1.1" 200 812 "-" "Mozilla/5.0"
+    203.0.113.9 - - [26/Nov/2026:05:41:13 +0100] "GET /_debug/env HTTP/1.1" 200 3391 "-" "Mozilla/5.0"
+    10.20.4.11 - - [26/Nov/2026:08:02:13 +0100] "GET / HTTP/1.1" 200 5120 "-" "Mozilla/5.0"
+    10.20.4.11 - - [26/Nov/2026:08:02:40 +0100] "GET /checkout HTTP/1.1" 200 7340 "-" "Mozilla/5.0"
+  /var/log/klompz/staging-app.log: |
+    2026-11-25 22:10:04 WARNING debug mode is ON (env=staging): diagnostics served at /_debug/
+    2026-11-26 03:14:55 INFO /_debug/env rendered for 198.51.100.23: request, settings, environment (31 variables, incl. PAYMENT_API_KEY, DB_PASSWORD, SESSION_SECRET)
+    2026-11-26 05:41:13 INFO /_debug/env rendered for 203.0.113.9: request, settings, environment (31 variables, incl. PAYMENT_API_KEY, DB_PASSWORD, SESSION_SECRET)
+    2026-11-26 08:02:40 INFO checkout: order 2026-11-0071 paid (sandbox)
+services:
+  nginx:
+    description: A high performance web server and a reverse proxy server
+    state: active
+    logs:
+      - "Nov 26 06:00:02 shop-stg-01 systemd[1]: Started nginx.service - A high performance web server and a reverse proxy server."
+  klompz-staging:
+    description: Klompz webshop (staging)
+    state: active
+    logs:
+      - "Nov 25 22:10:04 shop-stg-01 klompz-staging[702]: WARNING debug mode is ON (env=staging)"
+      - "Nov 25 22:10:04 shop-stg-01 systemd[1]: Started klompz-staging.service - Klompz webshop (staging)."
+quick:
+  - "cat ~/engagement/scope.txt"
+  - ls /etc/nginx/sites-enabled
+  - "edit ~/engagement/finding-01.txt"
+  - help
+objectives:
+  - {id: scope, text: obj.scope, done_when: 'touched("/home/pentest/engagement/scope.txt")'}
+  - id: where
+    text: obj.where
+    done_when: 'file_contains("/home/pentest/engagement/finding-01.txt", "/_debug") && (file_contains("/home/pentest/engagement/finding-01.txt", "debug = true") || file_contains("/home/pentest/engagement/finding-01.txt", "debug=true") || file_contains("/home/pentest/engagement/finding-01.txt", "settings.ini") || file_contains("/home/pentest/engagement/finding-01.txt", "debug mode") || file_contains("/home/pentest/engagement/finding-01.txt", "debugmodus"))'
+  - id: what
+    text: obj.what
+    done_when: 'file_contains("/home/pentest/engagement/finding-01.txt", "KEY") || file_contains("/home/pentest/engagement/finding-01.txt", "key") || file_contains("/home/pentest/engagement/finding-01.txt", "PASSWORD") || file_contains("/home/pentest/engagement/finding-01.txt", "password") || file_contains("/home/pentest/engagement/finding-01.txt", "wachtwoord") || file_contains("/home/pentest/engagement/finding-01.txt", "secret") || file_contains("/home/pentest/engagement/finding-01.txt", "geheim")'
+  - id: severity
+    text: obj.severity
+    done_when: 'file_contains("/home/pentest/engagement/finding-01.txt", "Severity: high") || file_contains("/home/pentest/engagement/finding-01.txt", "Severity: High") || file_contains("/home/pentest/engagement/finding-01.txt", "Severity: critical") || file_contains("/home/pentest/engagement/finding-01.txt", "Severity: Critical") || file_contains("/home/pentest/engagement/finding-01.txt", "Severity: hoog") || file_contains("/home/pentest/engagement/finding-01.txt", "Severity: Hoog")'
+  - id: close
+    text: obj.close
+    done_when: 'file_contains("/home/pentest/engagement/finding-01.txt", "false") || file_contains("/home/pentest/engagement/finding-01.txt", "deny") || file_contains("/home/pentest/engagement/finding-01.txt", "remov") || file_contains("/home/pentest/engagement/finding-01.txt", "disabl") || file_contains("/home/pentest/engagement/finding-01.txt", "verwijder") || file_contains("/home/pentest/engagement/finding-01.txt", "uitzet") || file_contains("/home/pentest/engagement/finding-01.txt", "afscherm")'
+  - id: rotate
+    text: obj.rotate
+    done_when: 'file_contains("/home/pentest/engagement/finding-01.txt", "rotat") || file_contains("/home/pentest/engagement/finding-01.txt", "roteer") || file_contains("/home/pentest/engagement/finding-01.txt", "roteren") || file_contains("/home/pentest/engagement/finding-01.txt", "revoke") || file_contains("/home/pentest/engagement/finding-01.txt", "intrek") || file_contains("/home/pentest/engagement/finding-01.txt", "new key") || file_contains("/home/pentest/engagement/finding-01.txt", "nieuwe")'
+hints:
+  - {id: read-scope, when: 'commands >= 2 && !touched("/home/pentest/engagement/scope.txt")', text: hint.scope}
+  - {id: config, when: 'touched("/home/pentest/engagement/scope.txt") && !touched("/etc/nginx/sites-enabled/staging") && !touched("/srv/staging/app/settings.ini") && commands >= 5', text: hint.config}
+  - {id: route, when: '(touched("/etc/nginx/sites-enabled/staging") || touched("/srv/staging/app/settings.ini")) && !touched("/var/log/nginx/staging-access.log") && commands >= 7', text: hint.route}
+  - {id: exposed, when: 'touched("/var/log/nginx/staging-access.log") && !touched("/var/log/klompz/staging-app.log") && commands >= 9', text: hint.exposed}
+  - {id: write, when: 'touched("/var/log/klompz/staging-app.log") && commands >= 11', text: hint.write}
+events:
+  - id: scope-first
+    when: '!touched("/home/pentest/engagement/scope.txt") && (touched("/etc") || touched("/srv") || touched("/var/log"))'
+    say: event.scope_first
+  - id: production
+    when: 'touched("/srv/releases/prod")'
+    say: event.production
+    money: -150
+    karma: -10
+  - id: opened-secrets
+    when: 'opened("/srv/staging/app/.env")'
+    say: event.opened_secrets
+    karma: -5
+  - id: fixed-it
+    when: '!file_contains("/srv/staging/app/settings.ini", "debug = true") || !file_contains("/etc/nginx/sites-enabled/staging", "# deny all;") || removed("/srv/staging/app/.env") || removed("/var/log/nginx/staging-access.log") || removed("/var/log/klompz/staging-app.log")'
+    say: event.fixed_it
+    money: -75
+    reset: true

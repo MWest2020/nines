@@ -31,7 +31,7 @@ import {
   type TiledMap,
   type TiledTileLayer,
 } from '../../src/content/types';
-import { GID_MASK, isFacing, isNpcSlot, objectTile, reachable, readMap, tileLayer, type WorldMap } from '../../src/world/grid';
+import { GID_MASK, isFacing, isNpcSlot, objectTile, openMaps, reachable, readMap, tileLayer, type WorldMap } from '../../src/world/grid';
 import { compile, type Node, type Registry } from '../../src/rules/expr';
 import { has } from '../../src/rules/own';
 import { COMMANDS } from '../../src/sim/shell/commands';
@@ -106,7 +106,7 @@ const isCameoObject = (name: string): boolean => /^cameo-[a-z0-9]+(-[a-z0-9]+)*$
 const CONTROL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/;
 
 /** Functions whose first argument names something; it must be a literal so it can be checked. */
-const NAME_ARGS = new Set(['service', 'pods_running', 'restarted', 'flag', 'ran', 'quest', 'has_item', 'xp']);
+const NAME_ARGS = new Set(['service', 'pods_running', 'restarted', 'flag', 'ran', 'quest', 'has_item', 'xp', 'career_path']);
 
 function callsIn(node: Node, out: { name: string; first: Node | undefined }[] = []) {
   switch (node.kind) {
@@ -415,10 +415,12 @@ export function loadContent(contentDir: string, schemaDir: string, options: Load
       const at = objectTile(o);
       if (at.x >= map.width || at.y >= map.height) err(file, `object "${o.name}" lies outside the map`);
       const props = new Map((o.properties ?? []).map((x) => [x.name, x.value]));
-      const allowed = o.type === 'spawn' ? ['facing'] : o.type === 'door' ? ['to_map', 'to_point', 'facing'] : [];
+      const allowed = o.type === 'spawn' ? ['facing'] : o.type === 'door' ? ['to_map', 'to_point', 'facing', 'town'] : [];
       for (const k of props.keys()) if (!allowed.includes(k)) err(file, `object "${o.name}" (${o.type}) may not have the property "${k}"`);
       if (props.has('facing') && !isFacing(props.get('facing'))) err(file, `object "${o.name}": facing must be up, down, left or right`);
       if (o.type === 'door' && (!props.has('to_map') || !props.has('to_point'))) err(file, `door "${o.name}" needs the properties to_map and to_point`);
+      // a gated door (town: medior) stays shut until the road to that town is open
+      if (props.has('town') && !(roadmap?.towns ?? []).some((t) => t.id === props.get('town'))) err(file, `door "${o.name}": town "${String(props.get('town'))}" is not a town in roadmap.yaml`);
     }
     if (errors.length === before) {
       maps.push({ id, map });
@@ -800,6 +802,7 @@ export function loadContent(contentDir: string, schemaDir: string, options: Load
       if (name === 'quest' && !questIds.includes(arg)) return 'no such quest';
       if (name === 'has_item' && !shopIds.includes(arg)) return 'no such shop item';
       if (name === 'xp' && !branchIds.includes(arg)) return 'no such branch';
+      if (name === 'career_path' && !(roadmap?.paths ?? []).some((p) => p.id === arg)) return 'no such career path';
       if (name === 'flag' && !progressFlags.has(arg)) return 'no event sets that flag';
       return null;
     });
@@ -835,6 +838,8 @@ export function loadContent(contentDir: string, schemaDir: string, options: Load
   // ---- cross-folder checks
   const npcIds = npcs.map((n) => n.npc.id);
   for (const id of new Set(npcIds)) if (npcIds.filter((x) => x === id).length > 1) errors.push(`content: npc id "${id}" is used twice`);
+  const coaches = npcs.filter((n) => n.npc.role === 'coach').map((n) => n.npc.id);
+  if (coaches.length > 1) errors.push(`content: only one career coach, found ${coaches.join(', ')}`);
   const slots = npcs.map((n) => `${n.npc.spawn.map}/${n.npc.spawn.slot}`);
   for (const s of new Set(slots)) if (slots.filter((x) => x === s).length > 1) errors.push(`content: spawn slot ${s} is taken twice`);
   for (const q of quests) {
@@ -870,6 +875,15 @@ export function loadContent(contentDir: string, schemaDir: string, options: Load
       const standOn = (o.type === 'spawn' && !isNpcSlot(o.name)) || o.type === 'door';
       const ok = standOn ? at(o.x, o.y) : at(o.x, o.y - 1) || at(o.x, o.y + 1) || at(o.x - 1, o.y) || at(o.x + 1, o.y);
       if (!ok) err(file, `${o.type} "${o.name}" at (${o.x},${o.y}) cannot be reached on foot`);
+    }
+  }
+  // a gated town's map is out of reach while every gate is shut: no door around the gate
+  if (worlds.size > 0 && roadmap) {
+    const shut = openMaps([...worlds.values()], () => false);
+    for (const q of quests) {
+      const t = q.battle?.trigger;
+      const town = t?.kind === 'gate' ? roadmap.towns.find((x) => x.id === t.town) : undefined;
+      if (town?.map && shut.has(town.map)) errors.push(`content/maps: ${town.map} can be reached without winning the gate to ${town.id} (a door into it has no town: ${town.id})`);
     }
   }
   for (const q of quests) {

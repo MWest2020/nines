@@ -254,8 +254,10 @@ describe('a gate into a town without a map', () => {
     expect(townNotBuilt({ kind: 'npc' }, maps)).toBeNull();
     expect(townNotBuilt(undefined, maps)).toBeNull();
   });
-  it('holds for the shipped content: Medior City opens later', () => {
+  it('holds for the shipped content: Medior City has its map now, so the gate opens a real road', () => {
     const gate = content().quests.find((q) => q.battle?.trigger.kind === 'gate')!;
-    expect(townNotBuilt(gate.battle!.trigger, content().maps)).toBe('medior');
+    expect(townNotBuilt(gate.battle!.trigger, content().maps)).toBeNull();
+    // Senior Summit is still planned: a gate to it would say "opens later"
+    expect(townNotBuilt({ kind: 'gate', town: 'senior' }, content().maps)).toBe('senior');
   });
 });

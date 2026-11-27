@@ -1,0 +1,66 @@
+# pay-03: the car park's pay station. A technician left its maintenance session open (the
+# vendor's factory default never signs out). The job: put the client's plate on the exit list
+# (~/exits/allow.txt). What gives the player away: the camera over the station, which records
+# while its config says so (switching it off is noticed too, but less than a face on tape), going
+# through the payment log (other people's plates and card endings: that costs karma), failed
+# commands (the station beeps), dawdling, and leaving the maintenance session open afterwards.
+schema: 1
+host: pay-03
+user: service
+home: /home/service
+motd: motd
+mounts:
+  - {path: /, device: /dev/mmcblk0p2, size: 8G, base_used: 2G}
+dirs: [/tmp]
+files:
+  /home/service/README.txt: |
+    ParkPal 3000 pay station, maintenance mode.
+    Factory default: the maintenance session stays open until the technician signs out.
+    Exit list: ~/exits/allow.txt (one plate per line; the barrier opens for these plates).
+    Payment log: ~/log/payments.log
+    Camera: ~/camera/settings.txt
+  /home/service/exits/allow.txt: |
+    # plates allowed out without a ticket (deliveries, staff)
+    GT-114-K
+  /home/service/log/payments.log: |
+    2026-11-28 08:02 plate 7-KLX-21 paid 4.50 card ****1182
+    2026-11-28 08:17 plate HV-902-P paid 9.00 card ****5530
+    2026-11-28 08:40 plate 1-TZZ-07 paid 2.25 card ****0041
+  /home/service/camera/settings.txt: |
+    recording: on
+    view: pay station and barrier
+  /home/service/.session/technician.txt: |
+    Maintenance session of technician R. Bakker, open since Tuesday.
+    Remove this file to sign out.
+  /home/service/job.txt: |
+    From: Mo
+    Plate: MO-554-X. Put it on the exit list. That's all.
+    The camera over the station watches whoever stands there. Sign out when you're done.
+quick:
+  - "cat ~/job.txt"
+  - "cat ~/README.txt"
+  - "edit ~/exits/allow.txt"
+  - help
+objectives:
+  - {id: plate, text: obj.plate, done_when: 'file_contains("/home/service/exits/allow.txt", "MO-554-X")'}
+hints:
+  - {id: readme, when: 'commands >= 3 && !opened("/home/service/README.txt")', text: hint.readme}
+  - {id: list, when: 'opened("/home/service/README.txt") && !file_contains("/home/service/exits/allow.txt", "MO-554-X") && commands >= 6', text: hint.list}
+events:
+  - id: payments
+    when: 'opened("/home/service/log/payments.log")'
+    say: event.payments
+    karma: -5
+  - id: list-gone
+    when: 'removed("/home/service/exits/allow.txt")'
+    say: event.list_gone
+    reset: true
+risk:
+  base: 10
+  factors:
+    - {id: camera, when: 'file_contains("/home/service/camera/settings.txt", "recording: on")', add: 25, text: risk.camera}
+    - {id: camera-off, when: 'file_contains("/home/service/camera/settings.txt", "recording: off")', add: 20, text: risk.camera_off}
+    - {id: snooped, when: 'opened("/home/service/log/payments.log")', add: 20, text: risk.snooped}
+    - {id: beeping, when: 'fails >= 3', add: 15, text: risk.beeping}
+    - {id: dawdling, when: 'commands >= 15', add: 15, text: risk.dawdling}
+    - {id: session, when: '!removed("/home/service/.session/technician.txt")', add: 15, text: risk.session}

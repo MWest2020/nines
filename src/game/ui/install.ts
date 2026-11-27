@@ -13,6 +13,7 @@ import { type Conversation, findNpc } from '../../core/talk';
 import type { FiredEvent } from '../../sim/session';
 import { type DialogueLine, type GameApi, setGameApi } from '../api';
 import type { GameStore } from '../store';
+import { CareerScene } from './CareerScene';
 import { CreditsScene } from './CreditsScene';
 import { pagesOf } from './DialogueBox';
 import { HudScene } from './HudScene';
@@ -20,7 +21,7 @@ import { ShopScene } from './ShopScene';
 import { TrailScene } from './TrailScene';
 
 /** The UI scenes, in drawing order. They go after the world scenes in the game config. */
-export const UI_SCENES = [HudScene, TrailScene, ShopScene, CreditsScene];
+export const UI_SCENES = [HudScene, TrailScene, ShopScene, CreditsScene, CareerScene];
 
 export class GameUi implements GameApi {
   private busy = 0;
@@ -119,6 +120,10 @@ export class GameUi implements GameApi {
 
   openCredits(): Promise<void> {
     return this.openScreen('credits');
+  }
+
+  openCareer(): Promise<void> {
+    return this.openScreen('career');
   }
 
   toast(key: string, params?: Params): void {

@@ -2,7 +2,9 @@
 //
 // Quests come first: a quest this NPC gives that is active repeats its "active" lines; one
 // that is available makes its offer. Otherwise the NPC's own dialogue speaks: the first entry
-// whose progress condition holds (an entry without `when` always holds).
+// whose progress condition holds (an entry without `when` always holds). An entry marked
+// `intro: true` is also said before a quest's offer when it holds: how a mentor greets you
+// differently on their own path than on another.
 // A battle quest started by talking (trigger npc or gate) also names the battle to open.
 
 import { type ContentBundle, type NpcSpec, npcKey, questKey } from '../content/types';
@@ -44,9 +46,15 @@ export function conversation(game: GameState, content: TalkContent, npcId: strin
   const battleOf = (id: string) => (talkable.find((q) => q.id === id)?.battle ? { battle: id } : {});
   const active = talkable.find((q) => stateOf(game, content, q.id) === 'active');
   if (active) return { speaker, lines: active.quest.dialogue.active.map((k) => questKey(active.id, k)), ...battleOf(active.id) };
-  const offer = talkable.find((q) => stateOf(game, content, q.id) === 'available');
-  if (offer) return { speaker, lines: offer.quest.dialogue.offer.map((k) => questKey(offer.id, k)), offer: offer.id, ...battleOf(offer.id) };
   const env = progressEnv(game, content.quests.map((q) => q.quest));
-  const entry = npc.spec.dialogue.find((d) => d.when === undefined || test(compile(d.when, PROGRESS_FACTS), env));
+  const holds = (d: { when?: string }) => d.when === undefined || test(compile(d.when, PROGRESS_FACTS), env);
+  const offer = talkable.find((q) => stateOf(game, content, q.id) === 'available');
+  if (offer) {
+    // the first `intro` entry that holds is said before the offer (a mentor greeting their mentee)
+    const intro = npc.spec.dialogue.find((d) => d.intro === true && holds(d));
+    const lines = [...(intro?.lines ?? []).map(npc.key), ...offer.quest.dialogue.offer.map((k) => questKey(offer.id, k))];
+    return { speaker, lines, offer: offer.id, ...battleOf(offer.id) };
+  }
+  const entry = npc.spec.dialogue.find(holds);
   return { speaker, lines: (entry?.lines ?? []).map(npc.key) };
 }

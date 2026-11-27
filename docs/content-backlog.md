@@ -11,6 +11,13 @@ DESIGN.md, Career paths. Each path gets a mentor in Medior City, a quest line, i
 interview into Senior Summit and a homelab item. Ideas to start from; tag every quest with its
 `paths`.
 
+**Done with the Medior City map** (DESIGN.md, Medior City): every mentor and one first quest
+each: `code-review` (swe, the 900-line PR battle below), `error-budget` (sre, a battle on SLOs and
+burn rates instead of the alert-rewrite quest), `pipeline-secrets` (devops: a cache and a leaked
+secret), `golden-path` (platform, as a design battle), `degraded-raid` (systems: a RAID 1 down a
+disk), `webshop-scope` (ethical: the web app assessment below). Still to write per path: two to
+four more quests, the gate interview into Senior Summit and the homelab item.
+
 - **Software Engineer (swe).** Quest: a flaky test that only fails on CI (a time zone, test
   order or a shared temp dir), found with git bisect in the terminal. Battle: a code review
   where a colleague defends a 900-line pull request (split it, what to ask, what to block on).
@@ -47,8 +54,9 @@ responsible disclosure).
   - *Report it instead* (the vending job's other ending, `kind: job`): the same open share, but
     the player writes to Munchr's security contact (a `security.txt` in the share) and gets a
     small bug bounty and karma +15. Vince is disappointed. Needs no new engine.
-  - *The parking garage* (`karma <= -20`): a garage's ticket machine prints "admin password: see
-    sticker". Get a free exit for a client. Heat: the camera log, how long you stand there.
+  - *The parking garage* (`karma <= -20`): done as `parking-garage`, Mo in Medior City's back
+    alley. Written without the password sticker: a technician's maintenance session left open
+    (the vendor's default) is the open door, so no credential is ever used.
   - *The fake reviews* (stakeholder battle, not a terminal): a restaurant owner wants 50 five-star
     reviews. A conversation about why that is fraud, and what to do for the restaurant instead.
 - **Contractor quests (`procedure` objectives).**
@@ -62,7 +70,8 @@ responsible disclosure).
   Junior trail keeps its six rows.
   - Junior, more: *the CTF night* (Thursdays, Sanne): three small flags on a practice box (a
     world-readable config, a forgotten debug page, a weak file permission), each written up.
-  - Medior: *a web app assessment* with a scope that excludes production; *responsible
+  - Medior: *a web app assessment* with a scope that excludes production (done:
+    `webshop-scope`); *responsible
     disclosure* as a battle (the vendor stalls; deadlines, CVE, coordinated publication); the gate
     into Senior Summit: a red team versus blue team debrief.
   - Item: a lock-picking practice set for the homelab shelf (cosmetic; the CTF crowd will get it).
@@ -92,6 +101,11 @@ own scenarios and questions; never exam dumps or official question text. Done: C
   containers".
 
 ### Medior: CKAD (hands-on)
+
+Done: *Not ready* (`content/quests/readiness-probe`, Observability and Maintenance: a readiness
+probe on a path the app no longer serves) and the golden-path battle (Environment, Configuration
+and Security). The simulator gained `kubectl get deployments`, `rollout status`, NotReady pods
+and rollouts on apply.
 
 Domains: Application Design and Build 20%, Application Deployment 20%, Application
 Observability and Maintenance 15%, Application Environment, Configuration and Security 25%,

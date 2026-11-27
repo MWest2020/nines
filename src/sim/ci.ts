@@ -8,6 +8,11 @@
 //     script: [npm test]           required: a non-empty list of commands
 //     needs: [build]               optional: other jobs that must run first
 //     image: node:22               optional
+//     cache:                       optional: kept between runs while the key file is unchanged
+//       key: package-lock.json       a file in the repository; its hash is the cache key
+//       paths: [.npm]                folders to keep
+//     secrets: [DEPLOY_TOKEN]      optional: names from the CI's secret store, given to the job
+//                                  as environment variables and masked in its log
 //
 // Messages are English on purpose: they imitate a real CI system's output.
 
@@ -18,7 +23,8 @@ export interface CiResult {
   errors: string[];
 }
 
-const JOB_KEYS = ['stage', 'script', 'needs', 'image'];
+const JOB_KEYS = ['stage', 'script', 'needs', 'image', 'cache', 'secrets'];
+const SECRET_NAME = /^[A-Z][A-Z0-9_]*$/;
 
 const isPlainObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -63,6 +69,23 @@ export function validateNinesCi(text: string): CiResult {
     const script = job['script'];
     if (!Array.isArray(script) || script.length === 0 || !script.every((x) => typeof x === 'string')) {
       errors.push(`job "${name}": "script" must be a non-empty list of commands`);
+    }
+    const cache = job['cache'];
+    if (cache !== undefined) {
+      if (!isPlainObject(cache)) errors.push(`job "${name}": "cache" must be a mapping with key and paths`);
+      else {
+        for (const k of Object.keys(cache)) if (k !== 'key' && k !== 'paths') errors.push(`job "${name}": cache: unknown key "${k}"`);
+        if (typeof cache['key'] !== 'string' || cache['key'].trim() === '') errors.push(`job "${name}": cache: "key" must name a file`);
+        const paths = cache['paths'];
+        if (!Array.isArray(paths) || paths.length === 0 || !paths.every((x) => typeof x === 'string' && x.trim() !== '')) {
+          errors.push(`job "${name}": cache: "paths" must be a non-empty list of folders`);
+        }
+      }
+    }
+    const secrets = job['secrets'];
+    if (secrets !== undefined) {
+      if (!Array.isArray(secrets) || secrets.length === 0) errors.push(`job "${name}": "secrets" must be a non-empty list of names`);
+      else for (const x of secrets) if (typeof x !== 'string' || !SECRET_NAME.test(x)) errors.push(`job "${name}": secret "${String(x)}" must be an upper-case name like DEPLOY_TOKEN`);
     }
     const needs = job['needs'];
     if (needs !== undefined) {

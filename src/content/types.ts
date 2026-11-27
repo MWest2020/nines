@@ -69,7 +69,8 @@ export interface ServiceSpec {
   restart?: RestartRule;
 }
 
-export type PodStatus = 'Running' | 'Pending' | 'CrashLoopBackOff' | 'Error' | 'ImagePullBackOff';
+/** NotReady: the container runs but its readiness probe fails (kubectl shows Running, READY 0/1). */
+export type PodStatus = 'Running' | 'Pending' | 'CrashLoopBackOff' | 'Error' | 'ImagePullBackOff' | 'NotReady';
 
 export interface DeploymentSpec {
   namespace?: string;
@@ -82,6 +83,8 @@ export interface DeploymentSpec {
   image?: string;
   /** the ConfigMap the container reads its environment from (envFrom), for kubectl describe */
   config_map?: string;
+  /** what kubectl describe pod says about a failing readiness probe (a NotReady pod) */
+  readiness_failure?: string;
 }
 
 export interface ScenarioEventSpec {
@@ -137,7 +140,10 @@ export interface NpcSpec {
   sprite?: { file: string; frame: 16 | 32; source: string; license: 'CC0-1.0' };
   tint?: string;
   spawn: { map: string; slot: string; facing?: 'up' | 'down' | 'left' | 'right' };
-  dialogue: { when?: string; lines: string[] }[];
+  /** intro: also said before a quest's offer, when it holds (src/core/talk.ts) */
+  dialogue: { when?: string; lines: string[]; intro?: boolean }[];
+  /** coach: talking opens the career coach's screen after the lines (DESIGN.md, Career paths) */
+  role?: 'coach';
   /** Set by the build for a world npc with a sheet: a same-origin URL in dist/. */
   spriteUrl?: string;
 }
