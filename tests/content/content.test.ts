@@ -284,6 +284,17 @@ describe('the validator checks maps', () => {
     expect(errorsAfterMap('server-room', (m) => (layer(m, 'objects').objects as Json[]).push({ name: 'rack-db-01', type: 'terminal', x: 88, y: 88 }))).toMatch(/terminal "rack-db-01" starts no quest/);
     expect(errorsAfterMap('junior-village', (m) => (obj(m, 'gate-medior').name = 'gate-medior-city'))).toMatch(/no map has the object "gate-medior"/);
   });
+  it('a spare cameo-* terminal may wait for its guest; any other terminal starts exactly one quest', () => {
+    // the server room keeps spare racks for terminal cameos: unclaimed, they are fine
+    expect(errorsAfterMap('server-room', () => undefined)).toBe('');
+    // the same rack under an ordinary name must start a quest
+    expect(errorsAfterMap('server-room', (m) => (obj(m, 'cameo-rack-2').name = 'rack-db-01'))).toMatch(/terminal "rack-db-01" starts no quest/);
+    // two quests on one machine: the second could never be opened
+    copy();
+    const q = join(dir, 'quests', 'service-down', 'quest.yaml');
+    writeFileSync(q, readFileSync(q, 'utf8').replace('object: rack-app-01', 'object: rack-web-01'));
+    expect(loadContent(dir, SCHEMA_DIR, { root: ROOT }).errors.join('\n')).toMatch(/terminal "rack-web-01" is the start of more than one quest \(disk-full, service-down\)/);
+  });
   it('everything can be reached on foot', () => {
     // wall the rack row in: the tiles in front of rack-web-01 and its neighbours become solid
     const solid = (m: Json) => (m.tilesets as Json[]).find((t) => t.name === 'nines-tiles')!.firstgid as number;

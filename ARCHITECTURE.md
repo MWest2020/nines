@@ -488,8 +488,9 @@ Maps (`content/maps/<id>.json`, schema `map`) are checked too:
   door leads to a spawn point of a map that exists; exactly one map has `player-start`;
 - against the content: every NPC's `spawn.slot` is a spawn point of its map; a quest's
   `start.object` exists (a `terminal` for a terminal quest, a `battle` or the giver's spawn for
-  a battle); every terminal and battle object starts a quest; a gate battle's `gate-<town>`
-  exists;
+  a battle); every terminal and battle object starts exactly one quest, except that a spare
+  `cameo-*` object may start none until a guest quest claims it (so a terminal cameo needs no map
+  edit); a gate battle's `gate-<town>` exists;
 - on foot: from `player-start` and every door's arrival point, every spawn and door can be
   walked to, and every NPC slot, terminal, battle and shop has a reachable neighbour (NPC slots
   count as occupied).
@@ -629,8 +630,10 @@ the one-off event bonuses already paid (`<quest>/<event>`).
   `collides: true`), plus an object layer `objects` with named objects: spawn points
   (`type: spawn`: `player-start`, `npc-1..n`, `cameo-1..n` as free slots for guest NPCs,
   `gate-<town>`, and where doors arrive), terminals (`type: terminal`, named as a terminal
-  quest's `start.object`), battle starts (`type: battle`), doors (`type: door`, properties
-  `to_map`, `to_point`) and the shop counter (`type: shop`). Tilesets are embedded in the map
+  quest's `start.object`; the server room keeps two spare racks, `cameo-rack-1` and
+  `cameo-rack-2`, for terminal cameos, which do nothing until a quest claims one), battle
+  starts (`type: battle`), doors (`type: door`, properties `to_map`, `to_point`) and the shop
+  counter (`type: shop`). Tilesets are embedded in the map
   JSON. Grid movement on 16 px tiles, four directions: a tap turns, holding walks, one tile per
   250 ms; NPCs block their tile. Keyboard: arrows or WASD, Enter or Space to use or talk, Escape
   to close. Stepping onto a door fades to its map. The rack LEDs blink by swapping two tiles.
